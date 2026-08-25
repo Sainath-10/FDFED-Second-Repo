@@ -232,7 +232,8 @@ if (createCompForm) {
     const endDate     = endDateEl?.value || '';
     const maxTeams    = parseInt(maxTeamsEl?.value);
     const maxPlayers  = parseInt(maxPlayersEl?.value);
-    const entryFee    = parseFloat(entryFeeEl?.value || '0');
+    const entryFeeRaw = (entryFeeEl?.value || '').trim();
+    const entryFee    = entryFeeRaw !== '' ? parseFloat(entryFeeRaw) : 0;
 
     const p1 = parseInt(document.getElementById('prize-1')?.value) || 0;
     const p2 = parseInt(document.getElementById('prize-2')?.value) || 0;
@@ -301,8 +302,8 @@ if (createCompForm) {
       if (!firstErrorField) firstErrorField = maxPlayersEl;
     }
 
-    // ── QA Rule 8: Entry Fee ──
-    if (isNaN(entryFee) || entryFee < 0) {
+    // ── QA Rule 8: Entry Fee (Optional, cannot be negative) ──
+    if (entryFeeRaw !== '' && (isNaN(entryFee) || entryFee < 0)) {
       showFieldError('entry-fee', 'Entry fee cannot be negative.');
       if (!firstErrorField) firstErrorField = entryFeeEl;
     }
@@ -384,7 +385,7 @@ if (createCompForm) {
         { place: '2nd Place', amount: `₹${p2.toLocaleString('en-IN')}` },
         { place: '3rd Place', amount: `₹${p3.toLocaleString('en-IN')}` },
       ],
-      entryFee: entryFee ? `₹${entryFee}` : 'Free',
+      entryFee: entryFee > 0 ? `₹${entryFee.toLocaleString('en-IN')}` : 'Free',
       status: 'upcoming',
       img: bannerImg,
       participants: 0,
@@ -408,7 +409,7 @@ if (createCompForm) {
     }
 
     if (typeof showToast === 'function') {
-      showToast(`Tournament "${name}" created with ${organizersList.length} organizer(s) (Live)!`);
+      showToast('Tournament Created!');
     }
     setTimeout(() => window.location.href = 'my-activity.html', 1200);
   });
