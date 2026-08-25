@@ -125,6 +125,8 @@ function toggleCheck(el) {
   el.classList.toggle('checked');
 }
 
+let userUploadedBanner = false;
+
 function previewBanner(e) {
   const file = e.target.files[0];
   if (!file) return;
@@ -134,10 +136,30 @@ function previewBanner(e) {
     if (img) {
       img.src = ev.target.result;
       img.style.display = 'block';
+      userUploadedBanner = true;
     }
   };
   reader.readAsDataURL(file);
 }
+
+function updateDefaultBannerPreview() {
+  if (userUploadedBanner) return;
+  const gameSelect = document.getElementById('comp-game');
+  const game = gameSelect ? gameSelect.value : 'Valorant';
+  const img = document.getElementById('banner-preview');
+  if (img) {
+    img.src = getDefaultBanner(game);
+    img.style.display = 'block';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const gameSelect = document.getElementById('comp-game');
+  if (gameSelect) {
+    gameSelect.addEventListener('change', updateDefaultBannerPreview);
+    updateDefaultBannerPreview();
+  }
+});
 
 // ── Form submit ──────────────────────────────────────────────
 const createCompForm = document.getElementById('create-comp-form');
@@ -296,14 +318,6 @@ function addOrganizerInputRow(initialValue = '', shouldFocus = false) {
     if (input) input.focus();
   }
 }
-
-document.addEventListener('DOMContentLoaded', () => {
-  // Spawn 1 empty co-organizer row by default without auto-focusing
-  const container = document.getElementById('co-organizers-container');
-  if (container && container.children.length === 0) {
-    addOrganizerInputRow('', false);
-  }
-});
 
 // Global exposure for inline onclicks
 window.addOrganizerInputRow = addOrganizerInputRow;

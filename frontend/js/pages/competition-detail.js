@@ -37,7 +37,12 @@ function renderHero(comp) {
   document.title = `NEXUS ESPORTS — ${comp.name}`;
 
   const hero = document.getElementById('comp-hero');
-  hero.style.background = `linear-gradient(135deg, ${comp.bannerColor || '#1a2e1a'} 0%, #0a0a0a 70%)`;
+  const bannerImg = comp.img || getDefaultBanner(comp.game);
+  if (bannerImg) {
+    hero.style.background = `linear-gradient(rgba(10, 15, 20, 0.75), rgba(10, 15, 20, 0.95)), url('${bannerImg}') center/cover no-repeat`;
+  } else {
+    hero.style.background = `linear-gradient(135deg, ${comp.bannerColor || '#1a2e1a'} 0%, #0a0a0a 70%)`;
+  }
 
   const statusColors = { ongoing: '#c6ff33', completed: '#9aa4b2', upcoming: '#60a5fa' };
   const statusLabels = { ongoing: 'ONGOING', completed: 'COMPLETED', upcoming: 'UPCOMING' };
@@ -555,6 +560,24 @@ function submitRemoveOrganizer(orgId) {
   }
 }
 
+function getDefaultBanner(gameName) {
+  const g = String(gameName || '').toLowerCase();
+  if (g.includes('valorant')) {
+    return '../assets/8764f3a5ce7a0eb0275743600c60fb0c727893c8.png';
+  }
+  if (g.includes('counter-strike') || g.includes('cs2') || g.includes('cs:go') || g.includes('csgo')) {
+    return '../assets/c4f97eccde97e10ac89b61ec5fb36fdce0ab2477.png';
+  }
+  if (g.includes('league of legends') || g.includes('lol')) {
+    return '../assets/95bc0921c86340a2cee9e0a2d7ecd20b15a26143.png';
+  }
+  if (g.includes('apex')) {
+    return '../assets/f03e2b11537e425d8544ee3ca732bf73af5137c0.png';
+  }
+  return '../assets/b890c61489a080992ad7e99adabb1145e6d59606.png';
+}
+
+window.getDefaultBanner = getDefaultBanner;
 window.openOrganizersModal = openOrganizersModal;
 window.closeOrganizersModal = closeOrganizersModal;
 window.submitAddOrganizer = submitAddOrganizer;
