@@ -148,7 +148,7 @@ function openCompDetails(compId) {
       <p><strong>Max Teams:</strong> ${comp.maxTeams || '—'}</p>
       <p><strong>Prize Pool:</strong> ${comp.prizePool || '—'}</p>
       <p><strong>Location:</strong> ${comp.location || 'Online'}</p>
-      <p><strong>Status:</strong> <span style="color:#c6ff33;font-weight:700">Auto-Approved (Live)</span></p>
+      <p><strong>Status:</strong> <span style="color:#c6ff33;font-weight:700">Active &amp; Live</span></p>
     </div>
     <div class="admin-detail-desc"><strong>Description:</strong><br>${comp.description || 'No description provided.'}</div>
   `;

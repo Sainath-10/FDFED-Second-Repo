@@ -563,12 +563,11 @@ function getTeamSidebar(activePage, activeTab, base = '../../') {
 }
 
 /**
- * Admin sidebar: Home, Disputes, Profile
+ * Admin sidebar: Home, Users, Profile
  */
 function getAdminSidebar(activePage, base = '../../') {
   const items = [
     { id: 'home', label: 'Home', href: base + 'pages/admin/dashboard.html', icon: homeIcon() },
-    { id: 'disputes', label: 'Disputes', href: base + 'pages/admin/disputes.html', icon: shieldIcon() },
     { id: 'users', label: 'Users', href: base + 'pages/admin/users.html', icon: usersIcon() },
     { id: 'profile', label: 'Profile', href: base + 'pages/admin/admin-profile.html', icon: profileIcon() },
   ];
@@ -581,13 +580,13 @@ function getAdminSidebar(activePage, base = '../../') {
       <div class="logo-sub">ESPORTS</div>
     </div>
     <nav class="sidebar-nav">
-      ${items.slice(0, 3).map(item => `
+      ${items.slice(0, 2).map(item => `
         <a href="${item.href}" class="nav-item ${activePage === item.id ? 'active' : ''}">
           ${item.icon}<span>${item.label}</span>
         </a>`).join('')}
     </nav>
     <div class="sidebar-nav-bottom">
-      ${items.slice(3).map(item => `
+      ${items.slice(2).map(item => `
         <a href="${item.href}" class="nav-item ${activePage === item.id ? 'active' : ''}">
           ${item.icon}<span>${item.label}</span>
         </a>`).join('')}
