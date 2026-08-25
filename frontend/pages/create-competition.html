@@ -79,13 +79,20 @@
             </div>
 
             <!-- Co-Organizers -->
-            <div class="form-section-title">Co-Organizers (Optional)</div>
+            <div class="form-section-title">Tournament Co-Organizers</div>
             <div class="form-group">
-              <label class="form-label" for="comp-coorganizers">Add Co-Organizers</label>
-              <input class="form-input" type="text" id="comp-coorganizers"
-                placeholder="e.g. organizer_2, mod_user (comma separated usernames/IDs)">
-              <p style="font-size:11px;color:var(--text-muted);margin-top:4px;">
-                Co-organizers can manage brackets, accept teams, and review/resolve disputes for this tournament.
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <label class="form-label" style="margin:0;">Co-Organizers (Assign Multiple)</label>
+                <button type="button" class="btn-table-secondary" id="btn-add-coorganizer" onclick="addOrganizerInputRow()" style="padding:6px 14px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(198,255,51,0.3);color:#c6ff33;cursor:pointer;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  + Add Co-Organizer
+                </button>
+              </div>
+              
+              <div id="co-organizers-container" style="display:flex;flex-direction:column;gap:10px;"></div>
+              
+              <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">
+                Click <strong>+ Add Co-Organizer</strong> to assign multiple organizers. Co-organizers can manage brackets, approve teams, and resolve disputes for this tournament.
               </p>
             </div>
 

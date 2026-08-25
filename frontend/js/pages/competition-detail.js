@@ -95,6 +95,10 @@ function renderHero(comp) {
        MANAGE MATCHES
      </a>
      ${standingsAction}
+     <button type="button" class="hero-btn hero-btn-secondary" onclick="openOrganizersModal()" style="border-color:rgba(198,255,51,0.4);color:#c6ff33;cursor:pointer;">
+       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+       + ADD / MANAGE ORGANIZERS (${Array.isArray(comp.organizers) && comp.organizers.length > 0 ? comp.organizers.length : 1})
+     </button>
      <a href="comp-dispute-review.html?id=${comp.id}" class="hero-btn hero-btn-secondary" style="border-color:rgba(239,68,68,0.4);color:#fca5a5;">
        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
        DISPUTES (${(comp.disputes || []).filter(d => d.status !== 'resolved').length})
@@ -427,3 +431,131 @@ function renderEmptyComp(id) {
   document.getElementById('comp-hero-title').textContent = 'Competition Not Found';
   document.getElementById('comp-hero-tags').innerHTML = `<span class="hero-tag">Unknown</span>`;
 }
+
+// ─── Organizers Modal Handlers ───────────────────────────────
+function openOrganizersModal() {
+  const modal = document.getElementById('organizers-modal');
+  if (!modal) return;
+  renderModalOrganizersList();
+  modal.style.display = 'flex';
+  const input = document.getElementById('modal-new-organizer');
+  if (input) {
+    input.value = '';
+    setTimeout(() => input.focus(), 100);
+  }
+}
+
+function closeOrganizersModal() {
+  const modal = document.getElementById('organizers-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function renderModalOrganizersList() {
+  const listEl = document.getElementById('modal-organizers-list');
+  if (!listEl) return;
+
+  const currentComp = window.NexusData ? window.NexusData.getCompetitionById(currentCompId) : null;
+  if (!currentComp) return;
+
+  const creator = currentComp.createdBy || currentComp.organizerId || 'Primary Organizer';
+  const orgs = Array.isArray(currentComp.organizers) && currentComp.organizers.length > 0
+    ? Array.from(new Set([creator, ...currentComp.organizers]))
+    : [creator];
+
+  listEl.innerHTML = orgs.map(org => {
+    const isOwner = org === creator;
+    return `
+      <div style="display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px 14px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:16px;">👤</span>
+          <div>
+            <div style="font-size:14px;color:#fff;font-weight:700;">@${org}</div>
+            <div style="font-size:11px;color:${isOwner ? '#c6ff33' : 'var(--text-muted)'};font-weight:${isOwner ? '700' : '400'};">
+              ${isOwner ? 'Primary Creator / Owner' : 'Co-Organizer'}
+            </div>
+          </div>
+        </div>
+        ${!isOwner ? `
+          <button type="button" onclick="submitRemoveOrganizer('${org}')" style="background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);color:#ef4444;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;" title="Remove co-organizer">
+            Remove
+          </button>
+        ` : '<span style="font-size:11px;color:var(--text-muted);">Protected</span>'}
+      </div>
+    `;
+  }).join('');
+}
+
+function submitAddOrganizer() {
+  const input = document.getElementById('modal-new-organizer');
+  if (!input) return;
+  const newOrg = input.value.trim().replace(/^@/, '');
+  if (!newOrg) {
+    if (typeof showToast === 'function') showToast('Please enter an organizer username or ID.', 'error');
+    return;
+  }
+
+  if (window.NexusData && typeof window.NexusData.addCoOrganizer === 'function') {
+    const res = window.NexusData.addCoOrganizer(currentCompId, newOrg);
+    if (!res.ok) {
+      if (typeof showToast === 'function') showToast(res.error || 'Unable to add organizer.', 'error');
+      return;
+    }
+  }
+
+  // Call backend API in background
+  try {
+    fetch(`http://localhost:3000/competitions/${currentCompId}/organizers`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-role': 'team_lead'
+      },
+      body: JSON.stringify({ organizerId: newOrg })
+    }).catch(() => {});
+  } catch(e) {}
+
+  input.value = '';
+  renderModalOrganizersList();
+
+  // Reload competition header to reflect updated count
+  const updatedComp = window.NexusData.getCompetitionById(currentCompId);
+  if (updatedComp) renderHero(updatedComp);
+
+  if (typeof showToast === 'function') {
+    showToast(`Co-Organizer @${newOrg} added successfully to this tournament!`);
+  }
+}
+
+function submitRemoveOrganizer(orgId) {
+  if (window.NexusData && typeof window.NexusData.removeCoOrganizer === 'function') {
+    const res = window.NexusData.removeCoOrganizer(currentCompId, orgId);
+    if (!res.ok) {
+      if (typeof showToast === 'function') showToast(res.error || 'Unable to remove organizer.', 'error');
+      return;
+    }
+  }
+
+  // Call backend API in background
+  try {
+    fetch(`http://localhost:3000/competitions/${currentCompId}/organizers/${orgId}`, {
+      method: 'DELETE',
+      headers: {
+        'x-user-role': 'team_lead'
+      }
+    }).catch(() => {});
+  } catch(e) {}
+
+  renderModalOrganizersList();
+
+  const updatedComp = window.NexusData.getCompetitionById(currentCompId);
+  if (updatedComp) renderHero(updatedComp);
+
+  if (typeof showToast === 'function') {
+    showToast(`Co-Organizer @${orgId} removed from this tournament.`);
+  }
+}
+
+window.openOrganizersModal = openOrganizersModal;
+window.closeOrganizersModal = closeOrganizersModal;
+window.submitAddOrganizer = submitAddOrganizer;
+window.submitRemoveOrganizer = submitRemoveOrganizer;

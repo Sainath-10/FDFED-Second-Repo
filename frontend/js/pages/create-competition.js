@@ -170,11 +170,9 @@ if (createCompForm) {
     const p3 = parseInt(document.getElementById('prize-3').value) || 0;
     const totalPrize = p1 + p2 + p3;
 
-    // Parse co-organizers
-    const coOrganizersInput = document.getElementById('comp-coorganizers')?.value || '';
-    const coOrganizers = coOrganizersInput
-      .split(',')
-      .map(s => s.trim())
+    // Collect all dynamic co-organizer inputs
+    const coOrganizers = Array.from(document.querySelectorAll('.co-organizer-input'))
+      .map(input => input.value.trim().replace(/^@/, ''))
       .filter(Boolean);
 
     // ── Validation: Basic fields ──
@@ -202,7 +200,7 @@ if (createCompForm) {
 
     const prizePoolStr = `₹${totalPrize.toLocaleString('en-IN')}`;
 
-    // Combine primary creator and co-organizers
+    // Combine primary creator and co-organizers without duplicates
     const organizersList = Array.from(new Set([session.username, ...coOrganizers]));
 
     const newComp = {
@@ -249,13 +247,47 @@ if (createCompForm) {
     }
 
     if (typeof showToast === 'function') {
-      showToast(`Tournament "${name}" created and auto-approved (Live)!`);
+      showToast(`Tournament "${name}" created with ${organizersList.length} organizer(s) (Live)!`);
     }
     setTimeout(() => window.location.href = 'my-activity.html', 1200);
   });
 }
 
+// ── Co-Organizer Dynamic Inputs ─────────────────────────────
+function addOrganizerInputRow(initialValue = '') {
+  const container = document.getElementById('co-organizers-container');
+  if (!container) return;
+
+  const rowId = 'org-row-' + Math.random().toString(36).slice(2, 9);
+  const row = document.createElement('div');
+  row.id = rowId;
+  row.className = 'co-organizer-row';
+  row.style.cssText = 'display:flex;gap:8px;align-items:center;animation:fadeIn 0.2s ease-in-out;';
+
+  row.innerHTML = `
+    <div style="position:relative;flex:1;">
+      <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:13px;font-weight:700;">@</span>
+      <input type="text" class="form-input co-organizer-input" placeholder="e.g. co_organizer_username or ID" value="${initialValue}" style="padding-left:28px;width:100%;" required>
+    </div>
+    <button type="button" class="btn-table-danger" onclick="document.getElementById('${rowId}').remove()" style="padding:10px 14px;font-size:13px;cursor:pointer;border-radius:6px;background:rgba(239,68,68,0.12);color:#ef4444;border:1px solid rgba(239,68,68,0.3);" title="Remove co-organizer">
+      ✕
+    </button>
+  `;
+  container.appendChild(row);
+  const input = row.querySelector('input');
+  if (input && !initialValue) input.focus();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  // Spawn 1 empty co-organizer row by default if container is empty
+  const container = document.getElementById('co-organizers-container');
+  if (container && container.children.length === 0) {
+    addOrganizerInputRow();
+  }
+});
+
 // Global exposure for inline onclicks
+window.addOrganizerInputRow = addOrganizerInputRow;
 window.updateSummary = updateSummary;
 window.updatePrizeTotal = updatePrizeTotal;
 window.toggleCheck = toggleCheck;

@@ -64,7 +64,44 @@
       </div>
     </div>
 
+    <!-- Manage Organizers Modal -->
+    <div id="organizers-modal" class="custom-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;align-items:center;justify-content:center;backdrop-filter:blur(4px);">
+      <div style="background:#131b24;border:1px solid rgba(255,255,255,0.12);border-radius:14px;padding:26px;max-width:500px;width:90%;box-shadow:0 12px 36px rgba(0,0,0,0.6);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:1px solid rgba(255,255,255,0.08);padding-bottom:12px;">
+          <div>
+            <h3 style="color:#fff;margin:0;font-size:18px;display:flex;align-items:center;gap:8px;">
+              <span>👥</span> Tournament Organizers
+            </h3>
+            <p style="color:var(--text-muted);font-size:12px;margin:4px 0 0 0;">Add and manage co-organizers for this tournament.</p>
+          </div>
+          <button onclick="closeOrganizersModal()" style="background:none;border:none;color:#9aa4b2;font-size:22px;cursor:pointer;line-height:1;">&times;</button>
+        </div>
 
+        <div style="margin-bottom:18px;">
+          <label style="display:block;font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;">Add Co-Organizer</label>
+          <div style="display:flex;gap:8px;">
+            <div style="position:relative;flex:1;">
+              <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:13px;font-weight:700;">@</span>
+              <input type="text" id="modal-new-organizer" class="form-input" placeholder="Enter username or User ID" style="padding-left:28px;width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:8px;padding-top:8px;padding-bottom:8px;">
+            </div>
+            <button class="btn-table-primary" onclick="submitAddOrganizer()" style="padding:8px 16px;font-size:12px;font-weight:700;background:#c6ff33;color:#000;border:none;border-radius:8px;cursor:pointer;">
+              + Add
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Current Organizers</label>
+          <div id="modal-organizers-list" style="display:flex;flex-direction:column;gap:8px;max-height:220px;overflow-y:auto;">
+            <!-- Dynamically rendered -->
+          </div>
+        </div>
+
+        <div style="margin-top:20px;text-align:right;">
+          <button class="btn-table-secondary" onclick="closeOrganizersModal()" style="padding:8px 18px;font-size:13px;border-radius:8px;">Done</button>
+        </div>
+      </div>
+    </div>
 
   </main>
 </div>

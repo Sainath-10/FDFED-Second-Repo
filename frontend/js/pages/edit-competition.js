@@ -45,6 +45,22 @@ function populateForm(comp) {
   setSelectVal('ef-format', comp.format);
   setSelectVal('ef-status', comp.status);
 
+  // Populate Co-Organizers
+  const coOrgsContainer = document.getElementById('edit-coorganizers-container');
+  if (coOrgsContainer) {
+    coOrgsContainer.innerHTML = '';
+    const creator = comp.createdBy || comp.organizerId;
+    const coOrgs = Array.isArray(comp.organizers)
+      ? comp.organizers.filter(u => u !== creator)
+      : [];
+
+    if (coOrgs.length > 0) {
+      coOrgs.forEach(org => addEditOrganizerRow(org));
+    } else {
+      addEditOrganizerRow(); // default 1 row
+    }
+  }
+
   // Parse dates from "Month DD–DD, YYYY" into ISO for date inputs
   if (comp.startDate) setVal('ef-startdate', comp.startDate);
   else if (comp.dates) {
@@ -55,6 +71,31 @@ function populateForm(comp) {
   if (comp.endDate) setVal('ef-enddate', comp.endDate);
   if (comp.regDeadline) setVal('ef-regdeadline', comp.regDeadline);
 }
+
+function addEditOrganizerRow(initialValue = '') {
+  const container = document.getElementById('edit-coorganizers-container');
+  if (!container) return;
+
+  const rowId = 'edit-org-row-' + Math.random().toString(36).slice(2, 9);
+  const row = document.createElement('div');
+  row.id = rowId;
+  row.className = 'edit-coorganizer-row';
+  row.style.cssText = 'display:flex;gap:8px;align-items:center;animation:fadeIn 0.2s ease-in-out;';
+
+  row.innerHTML = `
+    <div style="position:relative;flex:1;">
+      <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:13px;font-weight:700;">@</span>
+      <input type="text" class="edit-input edit-coorganizer-input" placeholder="e.g. co_organizer_username or ID" value="${initialValue}" style="padding-left:28px;width:100%;" required>
+    </div>
+    <button type="button" class="btn-table-danger" onclick="document.getElementById('${rowId}').remove()" style="padding:10px 14px;font-size:13px;cursor:pointer;border-radius:6px;background:rgba(239,68,68,0.12);color:#ef4444;border:1px solid rgba(239,68,68,0.3);" title="Remove co-organizer">
+      ✕
+    </button>
+  `;
+  container.appendChild(row);
+  const input = row.querySelector('input');
+  if (input && !initialValue) input.focus();
+}
+window.addEditOrganizerRow = addEditOrganizerRow;
 
 /* ── Status panel ── */
 function setupStatusPanel(comp) {
@@ -284,6 +325,14 @@ function saveChanges(id) {
     dates = formatDateDisplay(startDate, endDate) || dates;
   }
 
+  // Collect dynamic co-organizers
+  const coOrganizers = Array.from(document.querySelectorAll('.edit-coorganizer-input'))
+    .map(input => input.value.trim().replace(/^@/, ''))
+    .filter(Boolean);
+
+  const creator = editComp.createdBy || editComp.organizerId || 'organizer';
+  const organizersList = Array.from(new Set([creator, ...coOrganizers]));
+
   const updated = {
     ...editComp,
     name,
@@ -300,6 +349,7 @@ function saveChanges(id) {
     startDate:         startDate   || editComp.startDate,
     endDate:           endDate     || editComp.endDate,
     regDeadline:       document.getElementById('ef-regdeadline').value || editComp.regDeadline,
+    organizers:        organizersList
   };
 
   window.NexusData.updateCompetition(updated);

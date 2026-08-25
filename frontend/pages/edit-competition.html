@@ -152,6 +152,29 @@
             </div>
           </div>
 
+          <!-- Co-Organizers Management -->
+          <div class="edit-panel">
+            <div class="edit-panel-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C6FF33" stroke-width="2" stroke-linecap="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+              </svg>
+              Tournament Co-Organizers
+            </div>
+            
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+              <span style="font-size:13px;color:var(--text-muted);">Co-organizers share tournament management and dispute resolution permissions.</span>
+              <button type="button" class="btn-table-secondary" id="btn-edit-add-coorganizer" onclick="addEditOrganizerRow()" style="padding:6px 14px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(198,255,51,0.3);color:#c6ff33;cursor:pointer;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                + Add Co-Organizer
+              </button>
+            </div>
+            
+            <div id="edit-coorganizers-container" style="display:flex;flex-direction:column;gap:10px;"></div>
+          </div>
+
           <!-- Competition Banner -->
           <div class="edit-panel">
             <div class="edit-panel-title">
