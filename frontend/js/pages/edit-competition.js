@@ -187,31 +187,35 @@ function forceDeleteCompetitionById(id) {
   return deleted;
 }
 
+let isDeletingComp = false;
+
 function confirmDeleteCompetition() {
+  if (isDeletingComp) return;
+  isDeletingComp = true;
+
   const targetId = (editComp && editComp.id) || currentCompId || (window.NexusData && window.NexusData.getCompIdFromUrl && window.NexusData.getCompIdFromUrl());
   const deleted = forceDeleteCompetitionById(targetId);
 
   if (!deleted) {
+    isDeletingComp = false;
     showEditToast('Unable to delete competition.', 'error');
     return;
   }
 
   closeDeleteModal();
-  showEditToast('Competition deleted.', 'error');
-  setTimeout(() => window.location.href = 'my-activity.html', 1200);
+  showEditToast('Competition deleted.');
+  setTimeout(() => window.location.href = 'my-activity.html', 1000);
 }
 
 /* ── Wire all buttons ── */
 function setupEvents(id) {
-  // Save (top + side)
-  ['btn-save-top', 'btn-save-main'].forEach(btnId => {
-    const btn = document.getElementById(btnId);
-    if (btn) btn.addEventListener('click', () => saveChanges(id));
-  });
+  // Save
+  const saveBtn = document.getElementById('btn-save-main');
+  if (saveBtn) saveBtn.addEventListener('click', () => saveChanges(id));
 
-  // Discard
-  ['btn-discard', 'btn-discard-2'].forEach(btnId => {
-    const btn = document.getElementById(btnId);
+  // Discard buttons
+  ['btn-discard-1', 'btn-discard-2'].forEach(bId => {
+    const btn = document.getElementById(bId);
     if (btn) btn.addEventListener('click', () => {
       window.location.href = `competition-detail.html?id=${id}`;
     });
@@ -220,9 +224,6 @@ function setupEvents(id) {
   // Delete
   const deleteBtn = document.getElementById('btn-delete-comp');
   if (deleteBtn) deleteBtn.addEventListener('click', openDeleteModal);
-
-  const confirmBtn = document.getElementById('btn-confirm-delete');
-  if (confirmBtn) confirmBtn.addEventListener('click', confirmDeleteCompetition);
 
   // Update status dot live when dropdown changes
   document.getElementById('ef-status').addEventListener('change', e => {
