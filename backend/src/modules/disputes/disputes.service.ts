@@ -1,16 +1,35 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { DisputeRepository } from './repositories/dispute.repository';
+import { CompetitionRepository } from '../competitions/repositories/competition.repository';
 import { CreateDisputeDto, UpdateDisputeDto } from './dto/dispute.dto';
 import { IDispute } from '@/common/interfaces';
 
 @Injectable()
 export class DisputesService {
-  constructor(private disputeRepository: DisputeRepository) {}
+  constructor(
+    private disputeRepository: DisputeRepository,
+    private competitionRepository: CompetitionRepository,
+  ) {}
 
-  async createDispute(createDisputeDto: CreateDisputeDto): Promise<IDispute> {
+  async createDispute(
+    createDisputeDto: CreateDisputeDto,
+    reportedBy: string = 'system',
+  ): Promise<IDispute> {
     const { competitionId, teamId, description } = createDisputeDto;
 
-    return this.disputeRepository.create(competitionId, teamId, description);
+    // Look up competition to get primary organizer and all co-organizers
+    const comp = await this.competitionRepository.findById(competitionId);
+    const organizers = (comp && comp.organizers && comp.organizers.length > 0)
+      ? comp.organizers
+      : (comp && comp.createdBy ? [comp.createdBy] : ['organizer']);
+
+    return this.disputeRepository.create(
+      competitionId,
+      teamId,
+      description,
+      reportedBy,
+      organizers,
+    );
   }
 
   async getDisputeById(id: string): Promise<IDispute> {
@@ -29,6 +48,10 @@ export class DisputesService {
     return this.disputeRepository.findByCompetition(competitionId);
   }
 
+  async getDisputesByOrganizer(organizerId: string): Promise<IDispute[]> {
+    return this.disputeRepository.findByOrganizer(organizerId);
+  }
+
   async getDisputesByTeam(teamId: string): Promise<IDispute[]> {
     return this.disputeRepository.findByTeam(teamId);
   }
@@ -39,11 +62,17 @@ export class DisputesService {
     return this.disputeRepository.findByStatus(status);
   }
 
-  async updateDispute(id: string, updateDisputeDto: UpdateDisputeDto): Promise<IDispute> {
+  async updateDispute(
+    id: string,
+    updateDisputeDto: UpdateDisputeDto,
+    resolvedBy?: string,
+  ): Promise<IDispute> {
     const updates: Partial<IDispute> = {};
 
     if (updateDisputeDto.status) updates.status = updateDisputeDto.status;
     if (updateDisputeDto.description) updates.description = updateDisputeDto.description;
+    if (updateDisputeDto.resolutionNotes) updates.resolutionNotes = updateDisputeDto.resolutionNotes;
+    if (resolvedBy) updates.resolvedBy = resolvedBy;
 
     return this.disputeRepository.update(id, updates);
   }

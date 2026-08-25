@@ -30,11 +30,11 @@ export class DisputesController {
   @HttpCode(201)
   @ApiOperation({
     summary: 'Create a new dispute/report',
-    description: 'Create a dispute or report for a team in a competition',
+    description: 'Create a dispute or report for a team in a competition. Automatically routes dispute to event organizers.',
   })
   @ApiResponse({
     status: 201,
-    description: 'Dispute successfully created',
+    description: 'Dispute successfully created and routed to event organizers',
     type: DisputeResponseDto,
   })
   @ApiResponse({
@@ -43,8 +43,10 @@ export class DisputesController {
   })
   async createDispute(
     @Body() createDisputeDto: CreateDisputeDto,
+    @CurrentUser() user?: any,
   ): Promise<DisputeResponseDto> {
-    return this.disputesService.createDispute(createDisputeDto);
+    const reporter = user?.username || user?.id || 'reporter';
+    return this.disputesService.createDispute(createDisputeDto, reporter);
   }
 
   @Get()
@@ -65,6 +67,23 @@ export class DisputesController {
       return this.disputesService.getDisputesByStatus(status);
     }
     return this.disputesService.getAllDisputes();
+  }
+
+  @Get('organizer/:organizerId')
+  @UseGuards(HeaderAuthGuard)
+  @ApiOperation({
+    summary: 'Get disputes routed to an organizer or co-organizer',
+    description: 'Retrieve all disputes assigned to competitions organized by this user',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'List of disputes assigned to organizer',
+    type: [DisputeResponseDto],
+  })
+  async getDisputesByOrganizer(
+    @Param('organizerId') organizerId: string,
+  ): Promise<DisputeResponseDto[]> {
+    return this.disputesService.getDisputesByOrganizer(organizerId);
   }
 
   @Get('open')
@@ -140,10 +159,10 @@ export class DisputesController {
 
   @Patch(':id')
   @UseGuards(HeaderAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({
-    summary: 'Update dispute status',
-    description: 'Update dispute status or add resolution notes (Admin/Super Admin only)',
+    summary: 'Update dispute status and add resolution notes',
+    description: 'Allows event organizers or admins to review, update status, and resolve disputes',
   })
   @ApiResponse({
     status: 200,
@@ -156,13 +175,15 @@ export class DisputesController {
   })
   @ApiResponse({
     status: 403,
-    description: 'Forbidden - Admin role required',
+    description: 'Forbidden - Organizer or Admin role required',
   })
   async updateDispute(
     @Param('id') id: string,
     @Body() updateDisputeDto: UpdateDisputeDto,
+    @CurrentUser() user?: any,
   ): Promise<DisputeResponseDto> {
-    return this.disputesService.updateDispute(id, updateDisputeDto);
+    const resolver = user?.username || user?.id || 'organizer';
+    return this.disputesService.updateDispute(id, updateDisputeDto, resolver);
   }
 
   @Delete(':id')

@@ -36,12 +36,21 @@ export class UpdateDisputeDto {
   status?: 'open' | 'under_review' | 'resolved' | 'escalated';
 
   @ApiProperty({
-    description: 'Additional description or resolution notes',
+    description: 'Additional description',
     required: false,
   })
   @IsString()
   @IsOptional()
   description?: string;
+
+  @ApiProperty({
+    description: 'Resolution notes or verdict from organizer/admin',
+    required: false,
+    example: 'Proof reviewed. Match round replay ordered.',
+  })
+  @IsString()
+  @IsOptional()
+  resolutionNotes?: string;
 }
 
 export class DisputeResponseDto {
@@ -57,11 +66,20 @@ export class DisputeResponseDto {
   @ApiProperty()
   reportedBy: string;
 
+  @ApiProperty({ example: ['organizer_1', 'co_organizer_2'] })
+  organizers: string[];
+
   @ApiProperty()
   description: string;
 
   @ApiProperty()
   status: 'open' | 'under_review' | 'resolved' | 'escalated';
+
+  @ApiProperty({ required: false })
+  resolutionNotes?: string;
+
+  @ApiProperty({ required: false })
+  resolvedBy?: string;
 
   @ApiProperty()
   createdAt: Date;

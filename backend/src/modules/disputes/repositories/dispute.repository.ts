@@ -11,6 +11,8 @@ export class DisputeRepository {
     competitionId: string,
     teamId: string,
     description: string,
+    reportedBy: string = 'system',
+    organizers: string[] = ['organizer'],
   ): Promise<IDispute> {
     const id = String(this.nextId++);
 
@@ -18,7 +20,8 @@ export class DisputeRepository {
       id,
       competitionId,
       teamId,
-      reportedBy: 'system',
+      reportedBy,
+      organizers,
       description,
       status: 'open',
       createdAt: new Date(),
@@ -54,6 +57,12 @@ export class DisputeRepository {
     return Array.from(this.disputes.values()).filter((dispute) => dispute.teamId === teamId);
   }
 
+  async findByOrganizer(organizerId: string): Promise<IDispute[]> {
+    return Array.from(this.disputes.values()).filter(
+      (dispute) => dispute.organizers && dispute.organizers.includes(organizerId),
+    );
+  }
+
   async findByStatus(status: 'open' | 'under_review' | 'resolved' | 'escalated'): Promise<IDispute[]> {
     return Array.from(this.disputes.values()).filter((dispute) => dispute.status === status);
   }
@@ -70,6 +79,9 @@ export class DisputeRepository {
       id: dispute.id,
       competitionId: dispute.competitionId,
       reportedBy: dispute.reportedBy,
+      organizers: updates.organizers || dispute.organizers || ['organizer'],
+      resolutionNotes: updates.resolutionNotes !== undefined ? updates.resolutionNotes : dispute.resolutionNotes,
+      resolvedBy: updates.resolvedBy !== undefined ? updates.resolvedBy : dispute.resolvedBy,
       createdAt: dispute.createdAt,
     };
 
