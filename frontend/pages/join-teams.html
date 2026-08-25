@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Join Teams</title>
+  <link rel="stylesheet" href="../css/styles.css">
+  <link rel="stylesheet" href="../css/pages/join-teams.css">
+</head>
+
+<body>
+
+  <!-- Sidebar -->
+  <div id="sidebar-mount"></div>
+
+  <div class="page-with-sidebar">
+    <main class="join-page">
+
+      <!-- Back -->
+      <a href="comp-info.html" class="back-btn">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+          stroke-linecap="round">
+          <path d="M12 8H4M4 8L8 12M4 8L8 4" />
+        </svg>
+        Back to Competition
+      </a>
+
+      <!-- Competition Context -->
+      <div class="comp-context">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#c6ff33" stroke-width="1.7" stroke-linecap="round"
+          stroke-linejoin="round">
+          <path
+            d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6m12 5h1.5a2.5 2.5 0 0 0 0-5H18m-6-2v2m0 14v-2M9 9h6m-6 6h6M5 9v6a7 7 0 0 0 14 0V9" />
+        </svg>
+        <div>
+          <div class="comp-name" id="comp-context-name">World Championship 2026 — Counter-Strike 2</div>
+          <div class="comp-sub">Select a team to join or create a new team for this tournament</div>
+        </div>
+      </div>
+
+      <!-- Header -->
+      <div class="join-header-row">
+        <div>
+          <h1>Request to Join & Play</h1>
+          <p>Browse open teams looking for players, or create your own squad.</p>
+        </div>
+        <a href="create-team.html" class="create-team-cta">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round">
+            <line x1="7" y1="1" x2="7" y2="13" />
+            <line x1="1" y1="7" x2="13" y2="7" />
+          </svg>
+          Create Team
+        </a>
+      </div>
+
+      <!-- Open Requests -->
+      <div class="section-label" style="margin-top:20px;">Open Teams Looking for Players</div>
+
+      <div id="team-list">
+        <!-- Team Card 1 -->
+        <div class="request-card" data-region="Asia" data-slots="1" data-name="Storm Riders">
+          <div class="request-card-left">
+            <div class="team-icon">⚡</div>
+            <div>
+              <div class="team-name">Storm Riders</div>
+              <div class="team-info">
+                4/5 Players filled
+                <span>1 slot open</span>
+              </div>
+              <div class="wanted-roles">
+                <span>Looking for:</span>
+                <span class="role-badge awper">AWPer</span>
+              </div>
+            </div>
+          </div>
+          <div class="request-card-actions">
+            <button class="btn-view-team">View Team</button>
+            <button class="btn-join" onclick="handleJoin('Storm Riders')">Request to Join</button>
+          </div>
+        </div>
+
+        <!-- Team Card 2 -->
+        <div class="request-card" data-region="Europe" data-slots="2" data-name="Inferno Squad">
+          <div class="request-card-left">
+            <div class="team-icon">🔥</div>
+            <div>
+              <div class="team-name">Inferno Squad</div>
+              <div class="team-info">
+                3/5 Players filled
+                <span>2 slots open</span>
+              </div>
+              <div class="wanted-roles">
+                <span>Looking for:</span>
+                <span class="role-badge igl">IGL</span>
+                <span class="role-badge support">Support</span>
+              </div>
+            </div>
+          </div>
+          <div class="request-card-actions">
+            <button class="btn-view-team">View Team</button>
+            <button class="btn-join" onclick="handleJoin('Inferno Squad')">Request to Join</button>
+          </div>
+        </div>
+
+        <!-- Team Card 3 -->
+        <div class="request-card" data-region="Asia" data-slots="3" data-name="Tidal Wave">
+          <div class="request-card-left">
+            <div class="team-icon">🌊</div>
+            <div>
+              <div class="team-name">Tidal Wave</div>
+              <div class="team-info">
+                2/5 Players filled
+                <span>3 slots open</span>
+              </div>
+              <div class="wanted-roles">
+                <span>Looking for:</span>
+                <span class="role-badge fragger">Fragger</span>
+                <span class="role-badge igl">IGL</span>
+                <span class="role-badge support">Support</span>
+              </div>
+            </div>
+          </div>
+          <div class="request-card-actions">
+            <button class="btn-view-team">View Team</button>
+            <button class="btn-join" onclick="handleJoin('Tidal Wave')">Request to Join</button>
+          </div>
+        </div>
+
+        <!-- Team Card 4 -->
+        <div class="request-card" data-region="Asia" data-slots="1" data-name="Apex Predators">
+          <div class="request-card-left">
+            <div class="team-icon">🎯</div>
+            <div>
+              <div class="team-name">Apex Predators</div>
+              <div class="team-info">
+                4/5 Players filled
+                <span>1 slot open</span>
+              </div>
+              <div class="wanted-roles">
+                <span>Looking for:</span>
+                <span class="role-badge fragger">Entry Fragger</span>
+              </div>
+            </div>
+          </div>
+          <div class="request-card-actions">
+            <button class="btn-view-team">View Team</button>
+            <button class="btn-join" onclick="handleJoin('Apex Predators')">Request to Join</button>
+          </div>
+        </div>
+
+        <!-- Team Card 5 -->
+        <div class="request-card" data-region="NA" data-slots="4" data-name="Lone Wolves">
+          <div class="request-card-left">
+            <div class="team-icon">🐺</div>
+            <div>
+              <div class="team-name">Lone Wolves</div>
+              <div class="team-info">
+                1/5 Players filled
+                <span>4 slots open</span>
+              </div>
+              <div class="wanted-roles">
+                <span>Looking for:</span>
+                <span class="role-badge fragger">Fragger</span>
+                <span class="role-badge fragger">Fragger</span>
+                <span class="role-badge awper">AWPer</span>
+                <span class="role-badge igl">IGL</span>
+              </div>
+            </div>
+          </div>
+          <div class="request-card-actions">
+            <button class="btn-view-team">View Team</button>
+            <button class="btn-join" onclick="handleJoin('Lone Wolves')">Request to Join</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pending Requests Section -->
+      <div class="pending-requests-section">
+        <div class="pending-header">
+          <svg class="clock-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+          <span>PENDING REQUESTS</span>
+          <span class="pending-badge">2</span>
+        </div>
+
+        <div class="pending-list">
+          <div class="pending-card">
+            <div class="pending-content">
+              <div class="team-icon">🐺</div>
+              <div class="pending-info">
+                <div class="pending-team-name">SHADOW WOLVES</div>
+                <div class="pending-time">Sent 2 days ago</div>
+              </div>
+            </div>
+            <button class="btn-cancel-request" onclick="cancelRequest(this, 'SHADOW WOLVES')">Cancel request</button>
+          </div>
+
+          <div class="pending-card">
+            <div class="pending-content">
+              <div class="team-icon">🔥</div>
+              <div class="pending-info">
+                <div class="pending-team-name">DRAGON FACE</div>
+                <div class="pending-time">Sent 1 days ago</div>
+              </div>
+            </div>
+            <button class="btn-cancel-request" onclick="cancelRequest(this, 'DRAGON FACE')">Cancel request</button>
+          </div>
+        </div>
+      </div>
+
+    </main>
+
+
+    </main>
+
+    <!-- Footer -->
+    <div id="footer-mount"></div>
+
+  </div>
+
+  <script src="../js/script.js"></script>
+  <script src="../js/pages/competitions-data.js"></script>
+  <script src="../js/pages/team/team-workflow.js"></script>
+  <script src="../js/pages/join-teams.js"></script>
+
+</body>
+
+</html>

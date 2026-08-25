@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Admin Dashboard</title>
+  <link rel="stylesheet" href="../../css/styles.css">
+  <link rel="stylesheet" href="../../css/pages/admin/dashboard.css">
+</head>
+<body>
+<div id="sidebar-mount"></div>
+<div class="page-with-sidebar">
+  <main class="admin-page">
+
+    <div class="admin-header-block">
+      <h1 class="admin-title-xl">Admin Dashboard</h1>
+      <p class="admin-subtitle-muted">Manage tournaments and administrative tasks.</p>
+    </div>
+
+    <div class="dash-stats">
+      <div class="dash-stat-card">
+        <div class="dash-stat-icon dash-stat-icon-wrap">🏆</div>
+        <div><div class="dash-stat-num" id="stat-total">0</div><div class="dash-stat-lbl">Total Tournaments</div></div>
+      </div>
+      <div class="dash-stat-card">
+        <div class="dash-stat-icon dash-stat-icon-info">📅</div>
+        <div><div class="dash-stat-num" id="stat-pending">0</div><div class="dash-stat-lbl">Pending Approval</div></div>
+      </div>
+      <div class="dash-stat-card">
+        <div class="dash-stat-icon dash-stat-icon-success">▶️</div>
+        <div><div class="dash-stat-num" id="stat-approved">0</div><div class="dash-stat-lbl">Approved</div></div>
+      </div>
+      <div class="dash-stat-card">
+        <div class="dash-stat-icon dash-stat-icon-warn">⏳</div>
+        <div><div class="dash-stat-num" id="stat-rejected">0</div><div class="dash-stat-lbl">Rejected</div></div>
+      </div>
+    </div>
+
+    <!-- All Tournaments as Cards -->
+    <div class="tournaments-section">
+      <div class="tournaments-section-header">
+        <h2 class="table-title-md">All Tournaments</h2>
+        <div class="search-bar table-search-wrap">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>
+          <input type="text" placeholder="Search tournaments by name, game, or location..." oninput="filterCards(this.value)">
+        </div>
+      </div>
+
+      <div class="approval-tabs" id="approval-tabs">
+        <button class="approval-tab active" data-filter="pending" onclick="setApprovalFilter('pending', this)">Pending</button>
+        <button class="approval-tab" data-filter="approved" onclick="setApprovalFilter('approved', this)">Approved</button>
+        <button class="approval-tab" data-filter="rejected" onclick="setApprovalFilter('rejected', this)">Rejected</button>
+      </div>
+
+      <div class="tournament-cards-grid" id="tournament-cards">
+        <p class="act-empty" id="admin-empty" style="display:none;grid-column:1/-1;">No competitions in this status.</p>
+      </div>
+    </div>
+
+    <div id="comp-detail-modal" class="admin-modal-overlay" style="display:none;">
+      <div class="admin-modal-box">
+        <button class="admin-modal-close" onclick="closeCompDetails()">×</button>
+        <h3 id="admin-modal-title" class="table-title-md" style="font-size:20px;">Competition Details</h3>
+        <div id="admin-modal-body" class="admin-modal-content"></div>
+      </div>
+    </div>
+
+  </main>
+  <div id="footer-mount"></div>
+</div>
+<script src="../../js/script.js"></script>
+<script src="../../js/pages/competitions-data.js"></script>
+<script src="../../js/pages/admin/dashboard.js"></script>
+</body>
+</html>

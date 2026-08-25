@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Create Account</title>
+  <link rel="stylesheet" href="../css/styles.css">
+  <link rel="stylesheet" href="../css/pages/signup.css">
+</head>
+<body>
+
+<div class="auth-page">
+
+  <!-- Header -->
+  <header class="top-header">
+    <a href="../index.html" class="header-logo-link">
+      <div class="header-icon-btn">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M14 8H2M2 8L8 14M2 8L8 2" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="header-logo-text">
+        <span class="brand">Back</span>
+      </div>
+    </a>
+  </header>
+
+  <!-- Body -->
+  <div class="auth-body">
+    <div class="auth-card">
+
+      <!-- Logo -->
+      <div class="auth-logo">
+        <img src="../assets/f03e2b11537e425d8544ee3ca732bf73af5137c0.png" alt="Nexus Logo">
+        <div class="auth-logo-text">
+          <span class="brand">NEXUS</span>
+          <span class="sub">ESPORTS</span>
+        </div>
+      </div>
+
+      <!-- Heading -->
+      <div class="auth-heading">
+        <h1>Create Account</h1>
+        <p>Join the platform to manage competitions</p>
+      </div>
+
+      <!-- Signup Form -->
+      <form class="auth-form" id="signup-form">
+        <div class="form-group">
+          <label class="form-label" for="username">User Name</label>
+          <div class="form-input-wrap">
+            <input
+              class="form-input"
+              type="text"
+              id="username"
+              name="username"
+              placeholder="johndoe.11"
+              autocomplete="username"
+              required
+            >
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="email">Email Address</label>
+          <div class="form-input-wrap">
+            <input
+              class="form-input"
+              type="email"
+              id="email"
+              name="email"
+              placeholder="name@example.com"
+              autocomplete="email"
+              required
+            >
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="password">Password</label>
+          <div class="form-input-wrap">
+            <input
+              class="form-input form-input-pwd"
+              type="password"
+              id="password"
+              name="password"
+              placeholder="••••••••"
+              autocomplete="new-password"
+              required
+            >
+            <button type="button" class="pwd-toggle" data-pwd-toggle="password" aria-label="Toggle password">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#A1A1AA" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 10s3.5-7 9-7 9 7 9 7-3.5 7-9 7-9-7-9-7z"/>
+                <circle cx="10" cy="10" r="3"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="confirm-password">Confirm Password</label>
+          <div class="form-input-wrap">
+            <input
+              class="form-input form-input-pwd"
+              type="password"
+              id="confirm-password"
+              name="confirm-password"
+              placeholder="••••••••"
+              autocomplete="new-password"
+              required
+            >
+            <button type="button" class="pwd-toggle" data-pwd-toggle="confirm-password" aria-label="Toggle confirm password">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#A1A1AA" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 10s3.5-7 9-7 9 7 9 7-3.5 7-9 7-9-7-9-7z"/>
+                <circle cx="10" cy="10" r="3"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-auth-submit">Create Account</button>
+      </form>
+
+      <!-- Divider -->
+      <div class="auth-divider">
+        <span>or</span>
+      </div>
+
+      <!-- Google sign-up -->
+      <button class="btn-social" type="button">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <path d="M18.77 10.204c0-.638-.057-1.252-.164-1.84H10v3.48h4.928a4.208 4.208 0 0 1-1.826 2.761v2.295h2.957c1.728-1.592 2.725-3.938 2.725-6.696z" fill="white" opacity="0.9"/>
+          <path d="M10 19c2.475 0 4.552-.82 6.069-2.22l-2.957-2.296c-.82.55-1.867.875-3.112.875-2.394 0-4.42-1.617-5.144-3.787H1.806v2.37A9.998 9.998 0 0 0 10 19z" fill="white" opacity="0.7"/>
+          <path d="M4.856 11.572A6.012 6.012 0 0 1 4.542 10c0-.547.094-1.08.314-1.572V6.06H1.806A9.998 9.998 0 0 0 0 10c0 1.614.386 3.14 1.806 3.94l3.05-2.368z" fill="white" opacity="0.8"/>
+          <path d="M10 3.958c1.35 0 2.561.464 3.514 1.375l2.635-2.635C14.548 1.19 12.474.2 10 .2A9.998 9.998 0 0 0 1.806 6.06l3.05 2.368C5.58 5.575 7.606 3.958 10 3.958z" fill="white"/>
+        </svg>
+        Sign up with Google
+      </button>
+
+      <!-- Switch link -->
+      <p class="auth-switch">
+        Already have an account? <a href="login.html">Log In</a>
+      </p>
+
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div id="footer-mount"></div>
+
+</div>
+
+<script src="../js/api.js"></script>
+  <script src="../js/script.js"></script>
+<script src="../js/data/auth-accounts.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/pages/signup.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Reports &amp; Disputes</title>
+  <link rel="stylesheet" href="../css/styles.css">
+  <link rel="stylesheet" href="../css/pages/comp-participant.css">
+</head>
+<body>
+<div id="sidebar-mount"></div>
+<div class="page-with-sidebar">
+  <main class="part-main">
+
+    <!-- Page Header -->
+    <div class="sub-page-header-plain">
+      <div>
+        <h1 class="part-subpage-title">Reports &amp; Disputes</h1>
+        <p class="part-subpage-subtitle">Submit a report related to this competition. Fields marked with <span style="color:var(--accent)">*</span> are mandatory.</p>
+      </div>
+      <a class="btn-back-plain" id="btn-back">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="10" y1="3" x2="4" y2="8"/><line x1="4" y1="8" x2="10" y2="13"/></svg>
+        Back
+      </a>
+    </div>
+
+    <!-- Submit a Report panel -->
+    <div class="part-section">
+      <div class="part-panel-header" style="margin-bottom:8px">
+        <div class="part-panel-title-row">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <span>Submit a Report</span>
+        </div>
+      </div>
+
+      <div class="report-form-grid">
+        <div class="report-form-row-2">
+          <div class="report-form-group">
+            <label class="report-label">COMPETITION</label>
+            <input type="text" class="report-input" id="report-match" readonly style="background: rgba(255,255,255,0.05); cursor: not-allowed; border-color: rgba(255,255,255,0.1);">
+          </div>
+          <div class="report-form-group">
+            <label class="report-label">REPORT TYPE <span style="color:var(--accent)">*</span></label>
+            <select class="report-select" id="report-type">
+              <option value="">Select type</option>
+              <option value="score">Incorrect Score Submission</option>
+              <option value="cheating">Cheating / Hacking</option>
+              <option value="disconnect">Server Disconnect</option>
+              <option value="conduct">Unsportsmanlike Conduct</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="report-form-group">
+          <label class="report-label">REPORT DESCRIPTION <span style="color:var(--accent)">*</span></label>
+          <textarea class="report-textarea" id="report-desc" rows="4" placeholder="Describe the issue in detail..."></textarea>
+        </div>
+
+        <div class="report-form-row-2">
+          <div class="report-form-group">
+            <label class="report-label">UserName <span style="color:var(--accent)">*</span></label>
+            <input type="text" class="report-input" id="report-userid" placeholder="Enter username to report">
+          </div>
+          <div class="report-form-group">
+            <label class="report-label">EVIDENCE UPLOAD <span class="report-optional">(OPTIONAL)</span></label>
+            <button class="report-upload-btn" onclick="document.getElementById('report-evidence').click()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+              Upload screenshots or clips
+            </button>
+            <input type="file" id="report-evidence" accept="image/*,video/*" style="display:none" multiple>
+          </div>
+        </div>
+
+        <div>
+          <button class="report-submit-btn" id="btn-submit-report">Submit Report</button>
+        </div>
+      </div>
+    </div>
+
+
+
+  </main>
+</div>
+<div id="footer-mount"></div>
+
+<script src="../js/script.js"></script>
+<script src="../js/pages/competitions-data.js"></script>
+<script src="../js/pages/comp-reports.js"></script>
+<script>
+  document.getElementById('sidebar-mount').innerHTML = getSidebar('competitions', '../');
+  document.getElementById('footer-mount').innerHTML  = getFooter('../');
+</script>
+</body>
+</html>

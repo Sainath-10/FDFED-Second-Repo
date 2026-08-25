@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Escalate to Super Admin</title>
+  <link rel="stylesheet" href="../../css/styles.css">
+  <link rel="stylesheet" href="../../css/pages/admin/escalate-super-admin.css">
+</head>
+<body>
+<div id="sidebar-mount"></div>
+<div class="page-with-sidebar">
+  <main class="main-content">
+    <a href="disputes.html" class="back-btn-alt">← Back to Disputes</a>
+    <div class="admin-header-block">
+      <h1 class="admin-title-xl">Escalate to Super Admin</h1>
+      <p class="admin-subtitle-muted">Submit this dispute for Super Admin review. This action cannot be undone.</p>
+    </div>
+
+    <div class="escalate-layout">
+      <div class="escalate-main">
+
+        <div class="escalate-card">
+          <div class="escalate-section-title">Dispute Summary</div>
+          <div class="dispute-summary-block">
+            <div class="info-row"><span class="key">Dispute ID</span><span class="val dispute-id" id="esc-id">—</span></div>
+            <div class="info-row"><span class="key">Competition</span><span class="val" id="esc-competition">—</span></div>
+            <div class="info-row"><span class="key">Match / Title</span><span class="val" id="esc-match">—</span></div>
+            <div class="info-row"><span class="key">Filed By</span><span class="val" id="esc-filed-by">—</span></div>
+            <div class="info-row"><span class="key">Against</span><span class="val" id="esc-against">—</span></div>
+            <div class="info-row"><span class="key">Filed On</span><span class="val" id="esc-filed-on">—</span></div>
+            <div class="info-row"><span class="key">Description</span><span class="val" id="esc-description" style="font-size:0.85rem;color:var(--muted,#aaa);">—</span></div>
+            <div class="info-row"><span class="key">Current Status</span><span class="val"><span class="status-pill pending" id="esc-status">Open</span></span></div>
+          </div>
+        </div>
+
+        <div class="escalate-card">
+          <div class="escalate-section-title">Escalation Details</div>
+          <div class="form-stack">
+
+            <div class="form-group">
+              <label class="form-label">Reason for Escalation <span class="required-star">*</span></label>
+              <select class="form-input" id="esc-reason">
+                <option value="">— Select a reason —</option>
+                <option>Insufficient evidence to make a fair decision</option>
+                <option>Involves potential cheating or platform violation</option>
+                <option>High-stakes match affecting playoff qualification</option>
+                <option>Both parties contest the admin decision</option>
+                <option>Requires policy interpretation beyond admin scope</option>
+                <option>Other</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Priority Level <span class="required-star">*</span></label>
+              <div class="priority-options">
+                <label class="priority-option">
+                  <input type="radio" name="priority" value="low">
+                  <span class="priority-btn priority-low">Low</span>
+                </label>
+                <label class="priority-option">
+                  <input type="radio" name="priority" value="medium" checked>
+                  <span class="priority-btn priority-medium">Medium</span>
+                </label>
+                <label class="priority-option">
+                  <input type="radio" name="priority" value="high">
+                  <span class="priority-btn priority-high">High</span>
+                </label>
+                <label class="priority-option">
+                  <input type="radio" name="priority" value="critical">
+                  <span class="priority-btn priority-critical">Critical</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Admin Summary <span class="required-star">*</span></label>
+              <textarea class="form-input escalate-textarea" id="esc-summary" placeholder="Summarize what has been reviewed so far, what evidence was examined, and why you believe this needs Super Admin attention…"></textarea>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Recommended Action (optional)</label>
+              <textarea class="form-input escalate-textarea-sm" id="esc-recommendation" placeholder="If you have a recommendation for the Super Admin, describe it here…"></textarea>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Supporting Documents (optional)</label>
+              <div class="file-upload-zone" onclick="document.getElementById('esc-files').click()">
+                <div class="file-upload-icon">📎</div>
+                <div class="file-upload-text">Click to attach files or drag and drop</div>
+                <div class="file-upload-sub">Screenshots, demo files, logs — max 50MB each</div>
+                <input type="file" id="esc-files" multiple class="hidden-file-input" onchange="handleFiles(event)">
+              </div>
+              <div id="file-list" class="file-list"></div>
+            </div>
+
+          </div>
+
+          <div class="escalate-warning">
+            <span class="warning-icon">⚠️</span>
+            <div>
+              <div class="warning-title">This action is irreversible</div>
+              <div class="warning-desc">Once escalated, you cannot modify or withdraw this dispute. The Super Admin will have full authority over the final decision.</div>
+            </div>
+          </div>
+
+          <div class="escalate-form-actions">
+            <button class="btn-primary btn-escalate-submit" onclick="submitEscalation()">🔺 Confirm Escalation</button>
+            <a href="disputes.html" class="btn-outline btn-cancel-fixed">Cancel</a>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="escalate-sidebar">
+        <div class="comp-sidebar-block">
+          <h3>Guidelines</h3>
+          <div class="guidelines-stack">
+            <p>✅ Only escalate when you genuinely cannot resolve the dispute.</p>
+            <p>✅ Provide a thorough summary so the Super Admin has full context.</p>
+            <p>⚠️ Super Admin decisions are final and non-appealable.</p>
+            <p>⚠️ Both teams will be notified of the escalation immediately.</p>
+            <p>❌ Do not escalate as a way to avoid making a decision.</p>
+          </div>
+        </div>
+        <div class="comp-sidebar-block">
+          <h3>Super Admins Available</h3>
+          <div class="superadmin-list">
+            <div class="superadmin-item">
+              <div class="superadmin-avatar">SA</div>
+              <div>
+                <div class="superadmin-name">Super Admin 1</div>
+                <div class="superadmin-status"><span class="status-dot-green"></span> Online</div>
+              </div>
+            </div>
+            <div class="superadmin-item">
+              <div class="superadmin-avatar">RK</div>
+              <div>
+                <div class="superadmin-name">Super Admin 2</div>
+                <div class="superadmin-status"><span class="status-dot-away"></span> Away</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+  <div id="footer-mount"></div>
+</div>
+<script src="../../js/script.js"></script>
+<script src="../../js/pages/admin/escalate-super-admin.js"></script>
+</body>
+</html>

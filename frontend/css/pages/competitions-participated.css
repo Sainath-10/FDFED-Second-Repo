@@ -1,0 +1,152 @@
+.main-content {
+  padding: 40px 60px 80px 100px;
+  min-height: 100vh;
+}
+
+.page-title {
+  font-family: var(--font-display);
+  font-size: 36px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-white);
+  margin-bottom: 6px;
+}
+
+.page-description {
+  font-size: 15px;
+  color: var(--text-muted);
+  margin-bottom: 32px;
+}
+
+.filter-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.participated-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.comp-participation-card {
+  background: var(--bg-card);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.comp-participation-card.ongoing {
+  border-color: rgba(198,255,51,0.2);
+}
+
+.card-banner {
+  position: relative;
+  height: 160px;
+  overflow: hidden;
+}
+
+.card-banner.small {
+  height: 130px;
+}
+
+.banner-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.card-banner.small .banner-img {
+  filter: brightness(0.4);
+}
+
+.banner-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to right, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.2) 100%);
+}
+
+.banner-content {
+  position: absolute;
+  bottom: 20px;
+  left: 24px;
+}
+
+.card-banner.small .banner-content {
+  bottom: 16px;
+}
+
+.banner-game-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+
+.card-banner.small .banner-game-label {
+  margin-bottom: 2px;
+}
+
+.banner-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+.card-banner.small .banner-title {
+  font-size: 18px;
+}
+
+.status-pill-absolute {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+}
+
+.card-body {
+  padding: 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.card-body.small {
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+}
+
+.stat-group .label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stat-group .value {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  margin-top: 2px;
+}
+
+.stat-group .value.accent {
+  color: var(--accent);
+}
+
+.stat-group .value.muted {
+  color: var(--text-muted);
+}
+
+.card-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+}

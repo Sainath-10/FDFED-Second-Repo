@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Competitions Participated</title>
+  <link rel="stylesheet" href="../css/styles.css">
+  <link rel="stylesheet" href="../css/pages/competitions-participated.css">
+</head>
+<body>
+<div id="sidebar-mount"></div>
+<div class="page-with-sidebar">
+  <main class="main-content">
+    <h1 class="page-title">Competitions Participated</h1>
+    <p class="page-description">All competitions you or your team have been part of.</p>
+
+    <div class="filter-row">
+      <button class="filter-tab active" data-filter="all">All</button>
+      <button class="filter-tab" data-filter="ongoing">Ongoing</button>
+      <button class="filter-tab" data-filter="completed">Completed</button>
+      <button class="filter-tab" data-filter="upcoming">Upcoming</button>
+    </div>
+
+    <div id="comps-part-list" class="participated-list">
+
+      <!-- Ongoing -->
+      <div class="comp-participation-card ongoing" data-status="ongoing">
+        <div class="card-banner">
+          <img src="../assets/b890c61489a080992ad7e99adabb1145e6d59606.png" class="banner-img">
+          <div class="banner-overlay"></div>
+          <div class="banner-content">
+            <div class="banner-game-label">Counter-Strike 2</div>
+            <div class="banner-title">World Championship 2026</div>
+          </div>
+          <span class="status-pill ongoing status-pill-absolute">● Ongoing</span>
+        </div>
+        <div class="card-body">
+          <div class="stat-group"><div class="label">Your Team</div><div class="value">Storm Riders</div></div>
+          <div class="stat-group"><div class="label">Current Round</div><div class="value accent">Quarter Finals</div></div>
+          <div class="stat-group"><div class="label">W / L</div><div class="value">2 / 0</div></div>
+          <div class="stat-group"><div class="label">Next Match</div><div class="value">Aug 5, 18:00</div></div>
+          <div class="card-actions">
+            <button class="btn-table-secondary" onclick="location.href='view-team.html'">View My Team</button>
+            <button class="btn-table-secondary" onclick="showToast('Viewing standings...')">View Standings</button>
+            <button class="btn-table-primary"   onclick="location.href='submit-report.html'">Submit Report</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Completed Win -->
+      <div class="comp-participation-card" data-status="completed">
+        <div class="card-banner small">
+          <img src="../assets/fad13be991fc17a28771191ca710b201fb3ee4fb.png" class="banner-img">
+          <div class="banner-overlay"></div>
+          <div class="banner-content">
+            <div class="banner-game-label">Valorant</div>
+            <div class="banner-title">Pro League Season 4</div>
+          </div>
+          <span class="status-pill completed status-pill-absolute">Completed</span>
+        </div>
+        <div class="card-body small">
+          <div class="stat-group"><div class="label">Team</div><div class="value">Inferno Squad</div></div>
+          <div class="stat-group"><div class="label">Result</div><div class="value muted">Semi Final</div></div>
+          <div class="stat-group"><div class="label">W / L</div><div class="value">4 / 1</div></div>
+          <div class="stat-group"><div class="label">Prize Won</div><div class="value accent">₹75,000</div></div>
+          <div class="card-actions">
+            <button class="btn-table-secondary" onclick="showToast('Viewing final standings...')">View Standings</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Completed loss -->
+      <div class="comp-participation-card" data-status="completed">
+        <div class="card-banner small">
+          <img src="../assets/61fe8554e6377c0b431ed18f65529b1847d225cb.png" class="banner-img">
+          <div class="banner-overlay"></div>
+          <div class="banner-content">
+            <div class="banner-game-label">Rocket League</div>
+            <div class="banner-title">Regional Cup 2026</div>
+          </div>
+          <span class="status-pill completed status-pill-absolute">Completed</span>
+        </div>
+        <div class="card-body small">
+          <div class="stat-group"><div class="label">Team</div><div class="value">Storm Riders</div></div>
+          <div class="stat-group"><div class="label">Eliminated</div><div class="value muted">Semi Final</div></div>
+          <div class="stat-group"><div class="label">W / L</div><div class="value">3 / 1</div></div>
+          <div class="stat-group"><div class="label">Placement</div><div class="value muted">3rd / 16</div></div>
+          <div class="card-actions">
+            <button class="btn-table-secondary" onclick="showToast('Viewing standings...')">View Standings</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+  <div id="footer-mount"></div>
+</div>
+<script src="../js/script.js"></script>
+<script src="../js/pages/competitions-participated.js"></script>
+</body></html>

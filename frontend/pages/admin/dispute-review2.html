@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Dispute Review</title>
+  <link rel="stylesheet" href="../../css/styles.css">
+  <link rel="stylesheet" href="../../css/pages/admin/dispute-review2.css">
+</head>
+<body>
+<div id="sidebar-mount"></div>
+<div class="page-with-sidebar">
+  <main class="main-content">
+    <a href="competition-detail2.html" class="back-btn-alt">← Spring Invitational</a>
+    <h1 class="admin-title-lg">Dispute Review</h1>
+    <p class="admin-subtitle-accent">Review and resolve match disputes</p>
+
+    <div class="admin-comp-tabs">
+      <a href="competition-detail2.html" class="admin-tab">Overview</a>
+      <a href="manage-teams2.html"       class="admin-tab">Manage Teams</a>
+      <a href="manage-matches2.html"     class="admin-tab">Manage Matches</a>
+      <a href="match-results2.html"      class="admin-tab">Match Results</a>
+      <a href="view-standings.html"     class="admin-tab">Standings</a>
+      <a href="dispute-review2.html"     class="admin-tab active">Disputes</a>
+      <a href="edit-competition2.html"   class="admin-tab">Edit</a>
+    </div>
+
+    <div class="layout-wrapper">
+      <div>
+        <div class="dispute-card dispute-card-urgent">
+          <div class="dispute-header"><span class="dispute-id">#DISP-2026-0041</span><span class="status-pill pending">Under Review</span></div>
+          <div class="dispute-title">Match Result Dispute — Group A Match 3</div>
+          <div class="dispute-desc">Storm Riders alleges that a referee incorrectly recorded the round count. Team claims final score should be 16–11 in their favor, not 14–11 as recorded. Screenshots and demo file submitted as evidence.</div>
+          <div class="dispute-meta"><span>Submitted by: Storm Riders</span><span>Against: Inferno Squad</span><span>Filed: Jul 12, 2026 · 21:03 IST</span></div>
+
+          <div class="evidence-section">
+            <div class="evidence-label-sm">Evidence Submitted</div>
+            <div class="evidence-btns-row">
+              <button class="btn-table-secondary" onclick="showToast('Opening screenshot...')">📷 screenshot_r16.png</button>
+              <button class="btn-table-secondary" onclick="showToast('Opening demo...')">🎮 match_demo.dem</button>
+            </div>
+          </div>
+
+          <div class="admin-notes-section">
+            <div class="notes-label-sm">Admin Notes</div>
+            <textarea class="form-textarea notes-textarea-sm" placeholder="Add your review notes here…"></textarea>
+          </div>
+
+          <div class="dispute-actions dispute-actions-stack">
+            <button class="btn-table-primary" onclick="showToast('Dispute approved. Match result updated.')">Approve Dispute</button>
+            <button class="btn-table-danger"  onclick="if(confirm('Reject this dispute?'))showToast('Dispute rejected. Original result stands.','error')">Reject Dispute</button>
+            <button class="btn-table-secondary" onclick="location.href='match-results2.html'">Update Match Result</button>
+            <button class="btn-table-secondary" onclick="showToast('Request sent to both teams for more information.')">Request More Info</button>
+          </div>
+        </div>
+
+        <!-- Resolved history -->
+        <div class="resolved-history-section">
+          <div class="resolved-label-sm">Resolved Disputes</div>
+          <div class="dispute-card dispute-card-resolved">
+            <div class="dispute-header"><span class="dispute-id">#DISP-2026-0028</span><span class="status-pill approved">Resolved</span></div>
+            <div class="dispute-title">Server Disconnect — Group C Match 1</div>
+            <div class="dispute-desc">Match replayed from Round 8 after server drop. Both teams agreed to resolution.</div>
+            <div class="dispute-meta"><span>Resolved: Jun 30, 2026</span></div>
+            <div class="dispute-actions"><button class="btn-table-secondary" onclick="showToast('Viewing history...')">View History</button></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sidebar -->
+      <div class="sidebar-sticky-stack">
+        <div class="comp-sidebar-block">
+          <h3>Match Info</h3>
+          <div class="info-row"><span class="key">Match</span><span class="val">Group A · Match 3</span></div>
+          <div class="info-row"><span class="key">Team A</span><span class="val">Storm Riders</span></div>
+          <div class="info-row"><span class="key">Team B</span><span class="val">Inferno Squad</span></div>
+          <div class="info-row"><span class="key">Recorded</span><span class="val">14 – 11</span></div>
+          <div class="info-row"><span class="key">Claimed</span><span class="val stat-val-accent">16 – 11</span></div>
+        </div>
+        <div class="comp-sidebar-block">
+          <h3>Admin Guidelines</h3>
+          <div class="guidelines-stack">
+            <p>✅ Review all submitted evidence before making a decision.</p>
+            <p>✅ Both teams must be notified of the outcome.</p>
+            <p>⚠️ Escalate to Super Admin if the matter is unresolvable.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+  <div id="footer-mount"></div>
+</div>
+<script src="../../js/script.js"></script>
+<script src="../../js/pages/admin/dispute-review2.js"></script>
+</body></html>

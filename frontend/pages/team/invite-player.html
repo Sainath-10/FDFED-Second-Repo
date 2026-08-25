@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Invite Player</title>
+  <link rel="stylesheet" href="../../css/styles.css">
+  <link rel="stylesheet" href="../../css/pages/team/invite-player.css">
+</head>
+<body>
+<div id="sidebar-mount"></div>
+<div class="page-with-sidebar">
+  <main class="main-content">
+    <a href="add-players.html" class="back-btn-alt">← Back to Add Players</a>
+    <h1 class="page-title">Send Invitation</h1>
+    <p class="page-subtitle">Invite a specific player to join Storm Riders.</p>
+
+    <div class="form-container-sm">
+      <div class="form-card">
+        <form id="invite-form" class="form-stack">
+          <div class="form-group">
+            <label class="form-label">Player Username</label>
+            <input class="form-input" type="text" id="invite-username" placeholder="Enter username exactly as registered…" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Role Offered</label>
+            <select class="form-select">
+              <option value="">Select role…</option>
+              <option>IGL</option>
+              <option>AWPer</option>
+              <option>Entry Fragger</option>
+              <option>Support</option>
+              <option>Rifler</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Personal Message (optional)</label>
+            <textarea class="form-textarea form-textarea-sm" placeholder="Add a personal note to your invitation…"></textarea>
+          </div>
+          <div class="btn-row">
+            <button type="submit" class="btn-primary btn-submit-full">Send Invitation</button>
+            <button type="button" class="btn-outline btn-cancel-alt" onclick="history.back()">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </main>
+  <div id="footer-mount"></div>
+</div>
+<script src="../../js/script.js"></script>
+<script src="../../js/pages/competitions-data.js"></script>
+<script src="../../js/pages/team/team-workflow.js"></script>
+<script src="../../js/pages/team/invite-player.js"></script>
+</body></html>

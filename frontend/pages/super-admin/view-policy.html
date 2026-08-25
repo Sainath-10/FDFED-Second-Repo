@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — View Policy</title>
+  <link rel="stylesheet" href="../../css/styles.css">
+  <link rel="stylesheet" href="../../css/pages/super-admin/super-dashboard.css">
+  <link rel="stylesheet" href="../../css/pages/super-admin/view-policy.css">
+  <style>
+    /* Print optimisation */
+    @media print {
+
+      .page-with-sidebar,
+      .sidebar,
+      #sidebar-mount,
+      #footer-mount,
+      .back-link,
+      .policy-page-header .header-actions,
+      .policy-sidebar {
+        display: none !important;
+      }
+
+      .policy-two-col {
+        display: block !important;
+      }
+
+      body,
+      .policy-view-hero {
+        background: #fff !important;
+        color: #000 !important;
+      }
+
+      .policy-view-hero {
+        border: 1px solid #ccc !important;
+        border-radius: 8px !important;
+      }
+
+      .policy-clause .clause-body {
+        color: #222 !important;
+      }
+    }
+  </style>
+</head>
+
+<body class="super-admin-body">
+
+  <!-- Super Admin Sidebar -->
+  <aside class="sa-sidebar-v2">
+    <div class="sa-brand-v2">
+      <div class="sa-logo-box">NXS</div>
+      <div class="sa-brand-text">
+        <div class="sa-brand-title">NEXUS ESPORTS</div>
+        <div class="sa-brand-role">SUPER ADMIN</div>
+      </div>
+    </div>
+
+    <nav class="sa-nav-v2">
+      <div class="sa-nav-label">OVERVIEW</div>
+      <a href="super-dashboard.html" class="sa-nav-link">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="7" height="7" rx="1" />
+          <rect x="14" y="3" width="7" height="7" rx="1" />
+          <rect x="14" y="14" width="7" height="7" rx="1" />
+          <rect x="3" y="14" width="7" height="7" rx="1" />
+        </svg>
+        Dashboard
+      </a>
+
+      <div class="sa-nav-label">PLATFORM</div>
+      <a href="resolve-disputes.html" class="sa-nav-link">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+        </svg>
+        Disputes
+      </a>
+      <a href="policy-management.html" class="sa-nav-link active">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+          <circle cx="9" cy="7" r="4"></circle>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+        </svg>
+        Policy Management
+      </a>
+      <a href="profile.html" class="sa-nav-link">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+          <circle cx="12" cy="7" r="4"></circle>
+        </svg>
+        Profile
+      </a>
+    </nav>
+  </aside>
+
+<main class="sa-main-v2">
+<section class="policy-page-wrap">
+
+      <!-- Back -->
+      <a href="policy-management.html" class="back-link">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <path d="M12 8H4M4 8L8 12M4 8L8 4" />
+        </svg>
+        Back to Policy Management
+      </a>
+
+      <!-- Hero strip -->
+      <div class="policy-view-hero">
+        <div class="version-badge" id="v-badge">v— · Category</div>
+        <h1 id="v-title">Loading policy…</h1>
+        <div class="meta">
+          <span id="v-scope">Applies to: —</span>
+          <span id="v-effective">Effective: —</span>
+          <span id="v-review">Next review: —</span>
+          <span id="v-updated">Last updated: —</span>
+          <span id="v-status" class="status-pill approved" style="font-size:11px;">Active</span>
+        </div>
+      </div>
+
+      <!-- Action bar -->
+      <div style="display:flex;gap:10px;margin-bottom:28px;flex-wrap:wrap;align-items:center;">
+        <a href="#" class="btn-primary" id="btn-edit-policy"
+          style="font-size:13px;padding:9px 18px;text-decoration:none;">
+          Edit Policy
+        </a>
+        <button class="btn-export" id="btn-archive" style="margin-left:auto;">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+            <path d="M2 4h12v1.5a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4z" />
+            <path d="M3 6.5V13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V6.5" />
+            <line x1="6" y1="9.5" x2="10" y2="9.5" />
+          </svg>
+          Archive Policy
+        </button>
+      </div>
+
+      <div class="policy-two-col">
+
+        <!-- ── Main content column ── -->
+        <div>
+
+          <!-- Summary block -->
+          <div class="policy-content-block">
+            <h2>
+              <span class="section-icon">📋</span>
+              Overview
+            </h2>
+            <p id="v-summary" style="font-size:15px;color:#c8ccd4;line-height:1.7;"></p>
+
+            <!-- Tags -->
+            <div style="margin-top:18px;" id="v-tags"></div>
+          </div>
+
+          <!-- Clauses block -->
+          <div class="policy-content-block">
+            <h2>
+              <span class="section-icon">📜</span>
+              Policy Rules &amp; Clauses
+            </h2>
+
+            <div class="policy-highlight">
+              <strong>Important:</strong> All clauses below are enforceable rules.
+              Violations are reviewed by platform administrators and may result in warnings,
+              match forfeiture, or permanent account bans depending on severity.
+            </div>
+
+            <div id="v-clauses">
+              <!-- Populated by policy.js → PolicyPage.init('view') -->
+            </div>
+          </div>
+
+          <!-- Enforcement block -->
+          <div class="policy-content-block">
+            <h2>
+              <span class="section-icon">⚖️</span>
+              Enforcement &amp; Penalties
+            </h2>
+
+            <div class="policy-clause">
+              <div class="clause-index">→</div>
+              <div class="clause-body">
+                <strong>First offence:</strong> Formal warning issued to player or team captain. Recorded in account
+                history.
+              </div>
+            </div>
+            <div class="policy-clause">
+              <div class="clause-index">→</div>
+              <div class="clause-body">
+                <strong>Second offence:</strong> Match forfeit or competition disqualification depending on severity.
+              </div>
+            </div>
+            <div class="policy-clause">
+              <div class="clause-index">→</div>
+              <div class="clause-body">
+                <strong>Severe or repeated violations:</strong> Temporary or permanent platform ban. All affected
+                results are voided.
+              </div>
+            </div>
+            <div class="policy-clause">
+              <div class="clause-index">→</div>
+              <div class="clause-body">
+                Penalty decisions are made by platform admins and may be appealed once through the
+                <a href="../../pages/disputes.html" style="color:var(--accent);text-decoration:underline;">Dispute
+                  Resolution Policy</a>.
+              </div>
+            </div>
+
+            <div class="policy-warning" style="margin-top:16px;">
+              <strong>Super Admin authority:</strong> Super Admins may override any penalty decision. Their rulings are
+              final and binding.
+            </div>
+          </div>
+
+          <!-- Amendments block -->
+          <div class="policy-content-block">
+            <h2>
+              <span class="section-icon">📝</span>
+              Amendments &amp; Review
+            </h2>
+            <div class="policy-clause">
+              <div class="clause-index">→</div>
+              <div class="clause-body">This policy is reviewed and updated periodically. The review date is shown in the
+                policy header above.</div>
+            </div>
+            <div class="policy-clause">
+              <div class="clause-index">→</div>
+              <div class="clause-body">All registered users and teams are notified via platform notification of any
+                material policy changes at least 7 days before they take effect.</div>
+            </div>
+            <div class="policy-clause">
+              <div class="clause-index">→</div>
+              <div class="clause-body">Continued participation in NEXUS Esports competitions after a policy update
+                constitutes acceptance of the revised terms.</div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ── Right sidebar ── -->
+        <aside class="policy-sidebar">
+
+          <!-- Policy metadata -->
+          <div class="policy-sidebar-block">
+            <h3>Policy Information</h3>
+            <div class="sidebar-info-row">
+              <span class="k">Version</span>
+              <span class="v" id="si-version">—</span>
+            </div>
+            <div class="sidebar-info-row">
+              <span class="k">Status</span>
+              <span class="v" id="si-status">—</span>
+            </div>
+            <div class="sidebar-info-row">
+              <span class="k">Category</span>
+              <span class="v" id="si-category">—</span>
+            </div>
+            <div class="sidebar-info-row">
+              <span class="k">Scope</span>
+              <span class="v" id="si-scope">—</span>
+            </div>
+            <div class="sidebar-info-row">
+              <span class="k">Effective</span>
+              <span class="v" id="si-effective">—</span>
+            </div>
+            <div class="sidebar-info-row">
+              <span class="k">Review</span>
+              <span class="v" id="si-review">—</span>
+            </div>
+            <div class="sidebar-info-row">
+              <span class="k">Updated by</span>
+              <span class="v" id="si-author">—</span>
+            </div>
+            <div class="sidebar-info-row">
+              <span class="k">Updated at</span>
+              <span class="v" id="si-updated">—</span>
+            </div>
+          </div>
+
+          <!-- Changelog -->
+          <div class="policy-sidebar-block">
+            <h3>Version History</h3>
+            <div class="changelog-list" id="v-changelog">
+              <!-- Populated by policy.js -->
+            </div>
+          </div>
+
+          <!-- Related policies -->
+          <div class="policy-sidebar-block">
+            <h3>Related Policies</h3>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <a href="view-policy.html?id=pol-001"
+                style="font-size:13px;color:var(--accent);text-decoration:none;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+                Fair Play &amp; Anti-Cheat →
+              </a>
+              <a href="view-policy.html?id=pol-002"
+                style="font-size:13px;color:var(--accent);text-decoration:none;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+                Team Registration Requirements →
+              </a>
+              <a href="view-policy.html?id=pol-003"
+                style="font-size:13px;color:var(--accent);text-decoration:none;padding:8px 0;">
+                Dispute Resolution Policy →
+              </a>
+            </div>
+          </div>
+
+          <!-- Admin actions -->
+          <div class="policy-sidebar-block">
+            <h3>Admin Actions</h3>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <a href="#" id="btn-edit-sidebar" class="btn-table-primary" style="justify-content:center;padding:10px;">
+                Edit This Policy
+              </a>
+              <button class="btn-table-secondary" style="justify-content:center;padding:10px;"
+                onclick="document.getElementById('btn-archive').click()">
+                Archive Policy
+              </button>
+            </div>
+          </div>
+
+        </aside>
+
+      </div>
+
+    <!-- Site Footer (Standard) -->
+    <footer class="site-footer" style="margin-top: 60px;">
+      <div class="footer-top">
+        <div class="footer-brand">
+          <div class="footer-brand-logo">
+            <img src="../../assets/logo.png" alt="Nexus Esports"
+              onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDciIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjYzZmZjMzIiBzdHJva2Utd2lkdGg9IjIiPjxwYXRoIGQ9Ik0zIDlsOS03IDkgNy05IDctOSA3eiIvPjwvc3ZnPg=='">
+            <div class="footer-brand-name">
+              <div class="name">NEXUS</div>
+              <div class="sub">ESPORTS</div>
+            </div>
+          </div>
+          <p class="footer-desc">The world's leading platform for competitive gaming and live match tracking. Join
+            millions of players worldwide.</p>
+        </div>
+        <div class="footer-col">
+          <div class="footer-col-title">PLATFORM</div>
+          <ul>
+            <li><a href="#">About Us</a></li>
+            <li><a href="#">Tournaments</a></li>
+            <li><a href="#">Live Streams</a></li>
+            <li><a href="#">Match Results</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <div class="footer-col-title">LEGAL</div>
+          <ul>
+            <li><a href="#">Terms of Service</a></li>
+            <li><a href="#">Privacy Policy</a></li>
+            <li><a href="#">Cookie Policy</a></li>
+            <li><a href="#">Contact Support</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <div class="footer-col-title">FOLLOW US</div>
+          <div class="footer-socials">
+            <a href="#" class="social-btn">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path
+                  d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z">
+                </path>
+              </svg>
+            </a>
+            <a href="#" class="social-btn">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+                <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+                <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+              </svg>
+            </a>
+            <a href="#" class="social-btn">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"></path>
+              </svg>
+            </a>
+          </div>
+        </div>
+      </div>
+    </footer>
+  </section>
+  </main>
+
+  <script src="../../js/script.js"></script>
+  <script src="../../js/pages/super-admin/view-policy.js"></script>
+  <script>
+    // Boot the View page — reads ?id= from URL
+    PolicyPage.init('view');
+
+    // Keep edit sidebar button in sync with the one in the action bar
+    const editSidebar = document.getElementById('btn-edit-sidebar');
+    const editMain = document.getElementById('btn-edit-policy');
+    if (editSidebar && editMain) {
+      // After PolicyPage.init sets editMain.href, mirror it
+      setTimeout(() => { editSidebar.href = editMain.href; }, 50);
+    }
+  </script>
+
+</body>
+
+</html>

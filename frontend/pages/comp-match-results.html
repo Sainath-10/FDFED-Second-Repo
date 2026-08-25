@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Match Results</title>
+  <link rel="stylesheet" href="../css/styles.css">
+  <link rel="stylesheet" href="../css/pages/subpage.css">
+</head>
+<body>
+<div id="sidebar-mount"></div>
+<div class="page-with-sidebar">
+  <main class="sub-main">
+
+    <div class="sub-page-header">
+      <div class="sub-header-content">
+        <h1 class="sub-page-title">Match Results</h1>
+        <p class="sub-page-subtitle">Enter and manage results for completed matches</p>
+      </div>
+      <a class="btn-back" id="btn-back-to-comp">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="10" y1="3" x2="4" y2="8"/><line x1="4" y1="8" x2="10" y2="13"/></svg>
+        Back to Dashboard
+      </a>
+    </div>
+
+    <div class="comp-summary-card" id="comp-summary"></div>
+
+    <div class="results-toolbar">
+      <div class="search-box-wrapper">
+        <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="#9aa4b2" stroke-width="1.67" stroke-linecap="round"><circle cx="9" cy="9" r="6"/><line x1="14" y1="14" x2="18" y2="18"/></svg>
+        <input type="text" class="sub-search" id="results-search" placeholder="Search match ID or team name...">
+      </div>
+      <select class="sub-select" id="results-round-filter"><option value="all">All Rounds</option></select>
+      <select class="sub-select" id="results-status-filter">
+        <option value="all">All Status</option>
+        <option value="completed">Completed</option>
+        <option value="live">Live</option>
+        <option value="scheduled">Scheduled</option>
+      </select>
+    </div>
+
+    <div class="sub-panel">
+      <div class="results-table-header">
+        <span class="rc-id">MATCH ID</span>
+        <span class="rc-teams">TEAMS &amp; SCORE</span>
+        <span class="rc-round">ROUND</span>
+        <span class="rc-date">DATE &amp; TIME</span>
+        <span class="rc-status">STATUS</span>
+        <span class="rc-actions">ACTIONS</span>
+      </div>
+      <div id="results-rows"></div>
+      <div class="sub-pagination" id="results-pagination"></div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Enter Result Modal -->
+<div class="modal-overlay" id="result-modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3 class="modal-title">Enter Match Result</h3>
+      <button class="modal-close" onclick="closeResultModal()">
+        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="4" x2="16" y2="16"/><line x1="16" y1="4" x2="4" y2="16"/></svg>
+      </button>
+    </div>
+    <div id="result-modal-body"></div>
+  </div>
+</div>
+
+<div id="footer-mount"></div>
+
+<script src="../js/script.js"></script>
+<script src="../js/pages/competitions-data.js"></script>
+<script src="../js/pages/comp-match-results.js"></script>
+<script>
+  document.getElementById('sidebar-mount').innerHTML = getSidebar('activity', '../');
+  document.getElementById('footer-mount').innerHTML = getFooter('../');
+</script>
+</body>
+</html>

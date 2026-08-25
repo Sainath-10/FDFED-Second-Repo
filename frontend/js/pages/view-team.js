@@ -1,0 +1,2 @@
+initSidebar('activity', '../');
+initFooter('../');

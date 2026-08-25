@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Users</title>
+  <link rel="stylesheet" href="../../css/styles.css">
+  <link rel="stylesheet" href="../../css/pages/super-admin/super-dashboard.css">
+  <link rel="stylesheet" href="../../css/pages/super-admin/users.css">
+</head>
+<body class="super-admin-body">
+<div id="sidebar-mount"></div>
+<main class="sa-main-v2">
+  <header class="sa-header-v2">
+    <div class="sa-header-left">
+      <h1 class="sa-title">Users <span class="accent-text">Roster</span></h1>
+      <p class="sa-desc">All registered users with their roles and email addresses.</p>
+    </div>
+  </header>
+
+  <section class="sa-users-card">
+    <div class="sa-users-header">
+      <h2 class="sa-section-title">User Directory</h2>
+      <div class="search-bar table-search-wrap">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>
+        <input type="text" placeholder="Search by username, role, or email..." id="users-search">
+      </div>
+    </div>
+    <div class="sa-users-table-wrap">
+      <table class="sa-users-table">
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Role</th>
+            <th>Email</th>
+          </tr>
+        </thead>
+        <tbody id="users-table-body"></tbody>
+      </table>
+      <div class="empty-state" id="users-empty" style="display:none;">No users found.</div>
+    </div>
+  </section>
+</main>
+
+<script src="../../js/script.js"></script>
+<script src="../../js/data/auth-accounts.js"></script>
+<script src="../../js/pages/super-admin/users.js"></script>
+</body>
+</html>

@@ -1,0 +1,210 @@
+.main-content {
+  padding: 40px 60px 80px 100px;
+  min-height: 100vh;
+}
+
+.page-title {
+  font-family: var(--font-display);
+  font-size: 36px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-white);
+  margin-bottom: 4px;
+}
+
+.page-subtitle {
+  font-size: 15px;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+}
+
+.notif-badge-sm {
+  background: var(--red);
+  color: #fff;
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 9999px;
+  margin-left: 4px;
+}
+
+.layout-wrapper {
+  display: block;
+}
+
+.roster-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.roster-stats-summary {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.summary-accent {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.header-btn-primary {
+  font-size: 13px;
+  padding: 9px 18px;
+}
+
+.player-card-captain {
+  border-color: rgba(198, 255, 51, 0.3) !important;
+}
+
+.player-avatar-placeholder {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: #1e1e1e;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--accent);
+  margin: 0 auto 12px;
+}
+
+.player-name-placeholder {
+  color: var(--text-muted);
+}
+
+.player-role-placeholder {
+  color: var(--text-dimmer);
+}
+
+.btn-remove-alt {
+  font-size: 11px;
+  padding: 4px 10px;
+}
+
+.player-card-empty {
+  border-style: dashed !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  cursor: pointer;
+}
+
+.empty-slot-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.03);
+  border: 2px dashed rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  color: rgba(255, 255, 255, 0.2);
+  margin: 0 auto 12px;
+}
+
+.empty-slot-btn-wrapper {
+  margin-top: 10px;
+}
+
+.btn-invite-mini {
+  font-size: 11px;
+  justify-content: center;
+}
+
+.active-comps-card {
+  background: var(--bg-card);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 14px;
+  padding: 24px;
+  margin-top: 24px;
+}
+
+.active-comps-title {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+
+.comp-list-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.comp-item-mini {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+}
+
+.comp-img-mini {
+  width: 48px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.comp-info-mini {
+  flex: 1;
+}
+
+.comp-name-mini {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.comp-meta-mini {
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.stat-val-accent {
+  color: var(--accent);
+}
+
+.stat-val-red {
+  color: var(--red);
+}
+
+.sidebar-actions-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.btn-sidebar-outline {
+  justify-content: center;
+  display: flex;
+  padding: 9px;
+}
+
+.captain-pill-wrapper {
+  margin-top: 10px;
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+}
+
+.captain-pill {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  background: rgba(198, 255, 51, 0.15);
+  color: var(--accent);
+  padding: 2px 8px;
+  border-radius: 4px;
+}

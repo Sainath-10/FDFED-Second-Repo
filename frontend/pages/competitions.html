@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Competitions</title>
+  <link rel="stylesheet" href="../css/styles.css">
+  <link rel="stylesheet" href="../css/pages/competitions.css">
+</head>
+
+<body>
+
+  <!-- Sidebar -->
+  <div id="sidebar-mount"></div>
+
+  <div class="page-with-sidebar">
+
+    <main class="competitions-page">
+
+      <!-- Page Header -->
+      <div class="comps-page-header-row">
+        <div class="comps-page-header">
+          <h1>Competitions</h1>
+          <p>Browse and register for active tournaments across all games.</p>
+        </div>
+        <a href="create-competition.html" class="create-comp-btn">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round">
+            <line x1="8" y1="2" x2="8" y2="14" />
+            <line x1="2" y1="8" x2="14" y2="8" />
+          </svg>
+          Create Competition
+        </a>
+      </div>
+
+      <!-- Filters + Search -->
+      <div class="comps-filters">
+        <button class="filter-tab active" data-filter="all">All</button>
+        <button class="filter-tab" data-filter="featured">Featured</button>
+        <button class="filter-tab" data-filter="live">Live</button>
+        <button class="filter-tab" data-filter="hot">Hot</button>
+        <button class="filter-tab" data-filter="new">New</button>
+        <button class="filter-tab" data-filter="league">League</button>
+        <button class="filter-tab" data-filter="tournament">Tournament</button>
+
+        <div class="comps-search">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+            <circle cx="7" cy="7" r="5" />
+            <line x1="10.5" y1="10.5" x2="14" y2="14" />
+          </svg>
+          <input type="text" id="comp-search" placeholder="Search competitions…">
+        </div>
+      </div>
+
+      <!-- Grid -->
+      <div class="comps-grid" id="comps-grid">
+        <!-- Injected by JS -->
+      </div>
+
+    </main>
+
+    <!-- Footer -->
+    <div id="footer-mount"></div>
+
+  </div>
+
+  <script src="../js/api.js"></script>
+  <script src="../js/script.js"></script>
+  <script src="../js/pages/competitions-data.js"></script>
+  <script src="../js/pages/team/team-workflow.js"></script>
+  <script src="../js/pages/competitions.js"></script>
+
+</body>
+
+</html>

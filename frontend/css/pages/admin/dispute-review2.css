@@ -1,0 +1,125 @@
+.main-content {
+  padding: 40px 60px 80px 100px;
+  min-height: 100vh;
+}
+
+.back-btn-alt {
+  font-size: 14px;
+  color: var(--text-muted);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.back-btn-alt:hover {
+  color: var(--accent);
+}
+
+.admin-title-lg {
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-white);
+  margin-bottom: 4px;
+}
+
+.admin-subtitle-accent {
+  font-size: 14px;
+  color: var(--accent);
+  font-weight: 700;
+  margin-bottom: 24px;
+}
+
+.layout-wrapper {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 24px;
+  align-items: start;
+}
+
+.dispute-card-urgent {
+  border-color: rgba(231,0,11,0.2);
+}
+
+.evidence-section {
+  margin-top: 16px;
+  padding: 16px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 8px;
+}
+
+.evidence-label-sm {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.evidence-btns-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.admin-notes-section {
+  margin-top: 16px;
+}
+
+.notes-label-sm {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.notes-textarea-sm {
+  min-height: 80px;
+}
+
+.dispute-actions-stack {
+  margin-top: 16px;
+}
+
+.resolved-history-section {
+  margin-top: 20px;
+}
+
+.resolved-label-sm {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.dispute-card-resolved {
+  opacity: 0.6;
+}
+
+.sidebar-sticky-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.stat-val-accent {
+  color: var(--accent);
+}
+
+.guidelines-stack {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

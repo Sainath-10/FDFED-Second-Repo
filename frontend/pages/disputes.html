@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Disputes</title>
+  <link rel="stylesheet" href="../css/styles.css">
+  <link rel="stylesheet" href="../css/pages/disputes.css">
+</head>
+<body>
+<div id="sidebar-mount"></div>
+<div class="page-with-sidebar">
+  <main class="main-content">
+
+    <div class="page-header-row">
+      <div>
+        <h1 class="page-title">Disputes</h1>
+        <p class="page-subtitle">Manage and track match disputes and escalations.</p>
+      </div>
+      <a href="dispute-escalation.html" class="btn-primary header-btn">Report to Super Admin</a>
+    </div>
+
+    <!-- Filter tabs -->
+    <div class="tabs-row">
+      <button class="filter-tab active" data-filter="all">All</button>
+      <button class="filter-tab" data-filter="pending">Pending</button>
+      <button class="filter-tab" data-filter="investigating">Investigating</button>
+      <button class="filter-tab" data-filter="resolved">Resolved</button>
+    </div>
+
+    <!-- Dispute cards -->
+    <div id="disputes-list">
+
+      <div class="dispute-card" data-status="investigating">
+        <div class="dispute-header">
+          <span class="dispute-id">#DISP-2026-0041</span>
+          <span class="status-pill pending">Investigating</span>
+        </div>
+        <div class="dispute-title">Match Result Dispute — CS2 QF</div>
+        <div class="dispute-desc">Inferno Squad claims Storm Riders used an exploit on Dust2 that resulted in an unfair round win in Round 18. Video evidence submitted.</div>
+        <div class="dispute-meta">
+          <span>📅 Filed: Jul 12, 2026</span>
+          <span>🏆 Competition: World Championship 2026</span>
+          <span>👥 Match: Storm Riders vs Inferno Squad</span>
+        </div>
+        <div class="dispute-actions">
+          <button class="btn-table-secondary" onclick="showToast('Loading dispute details...')">View Details</button>
+          <button class="btn-table-danger" onclick="showToast('Escalating to Super Admin...');setTimeout(()=>location.href='dispute-escalation.html',800)">Escalate</button>
+        </div>
+      </div>
+
+      <div class="dispute-card" data-status="pending">
+        <div class="dispute-header">
+          <span class="dispute-id">#DISP-2026-0038</span>
+          <span class="status-pill pending">Pending Review</span>
+        </div>
+        <div class="dispute-title">Late Forfeit Claim — Valorant Group Stage</div>
+        <div class="dispute-desc">Apex Predators claims their opponent Team Nova failed to show within the 15-minute window, requesting a forfeit win for Round 2, Group B.</div>
+        <div class="dispute-meta">
+          <span>📅 Filed: Jul 10, 2026</span>
+          <span>🏆 Competition: Pro League Season 5</span>
+          <span>👥 Match: Apex Predators vs Team Nova</span>
+        </div>
+        <div class="dispute-actions">
+          <button class="btn-table-secondary" onclick="showToast('Loading dispute details...')">View Details</button>
+          <button class="btn-table-primary" onclick="showToast('Reviewing dispute...')">Review</button>
+        </div>
+      </div>
+
+      <div class="dispute-card" data-status="resolved">
+        <div class="dispute-header">
+          <span class="dispute-id">#DISP-2026-0031</span>
+          <span class="status-pill approved">Resolved</span>
+        </div>
+        <div class="dispute-title">Server Disconnect — Rocket League</div>
+        <div class="dispute-desc">NRG experienced server disconnects during overtime. The match was replayed from the 4:30 mark. Both teams agreed to the resolution.</div>
+        <div class="dispute-meta">
+          <span>📅 Filed: Jun 28, 2026</span>
+          <span>🏆 Competition: Rocket Championship Series</span>
+          <span>👥 Match: NRG vs G2</span>
+          <span>✅ Resolved: Jul 2, 2026</span>
+        </div>
+        <div class="dispute-actions">
+          <button class="btn-table-secondary" onclick="showToast('Loading dispute details...')">View Details</button>
+        </div>
+      </div>
+
+      <div class="dispute-card" data-status="resolved">
+        <div class="dispute-header">
+          <span class="dispute-id">#DISP-2026-0022</span>
+          <span class="status-pill rejected">Dismissed</span>
+        </div>
+        <div class="dispute-title">Cheating Allegation — LoL Spring Finals</div>
+        <div class="dispute-desc">Cloud9 alleged scripting by T1 during Game 2. After review of replay data and anti-cheat logs, the allegation was found to be unsubstantiated.</div>
+        <div class="dispute-meta">
+          <span>📅 Filed: Jun 15, 2026</span>
+          <span>🏆 Competition: Spring Split Finals</span>
+          <span>👥 Match: Cloud9 vs T1</span>
+          <span>❌ Dismissed: Jun 18, 2026</span>
+        </div>
+        <div class="dispute-actions">
+          <button class="btn-table-secondary" onclick="showToast('Loading dispute details...')">View Details</button>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+  <div id="footer-mount"></div>
+</div>
+<script src="../js/api.js"></script>
+<script src="../js/script.js"></script>
+<script src="../js/pages/disputes.js"></script>
+</body>
+</html>

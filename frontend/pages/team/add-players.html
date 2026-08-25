@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Add Players</title>
+  <link rel="stylesheet" href="../../css/styles.css">
+  <link rel="stylesheet" href="../../css/pages/team/add-players.css">
+</head>
+<body>
+<div id="sidebar-mount"></div>
+<div class="page-with-sidebar">
+  <main class="main-content">
+    <h1 class="page-title">Storm Riders</h1>
+    <p class="page-subtitle">Add new players to your roster</p>
+
+    <div class="team-tabs-nav">
+      <a href="team-roster.html"      class="team-tab">Roster</a>
+      <a href="add-players.html"      class="team-tab active">Add Players</a>
+      <a href="join-requests.html"    class="team-tab">Join Requests</a>
+      <a href="invitations-sent.html" class="team-tab">Invitations Sent</a>
+      <a href="team-settings.html"    class="team-tab">Settings</a>
+    </div>
+
+    <div class="layout-wrapper">
+      <div class="content-column">
+
+        <!-- Search for players -->
+        <div class="search-card">
+          <h2 class="card-title-sm">Search Players</h2>
+          <div class="search-controls-row">
+            <div class="search-bar search-bar-alt" style="max-width: 100%;">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>
+              <input type="text" placeholder="Search by username…" id="player-search" oninput="filterPlayers(this.value)">
+            </div>
+          </div>
+
+          <div id="player-results" class="results-stack">
+            <!-- Player results -->
+            <div class="role-user-item" data-name="darkwolf_cs">
+              <div class="player-avatar-sm">D</div>
+              <div class="role-user-info">
+                <div class="role-user-name">darkwolf_cs</div>
+                <div class="player-meta-info">AWPer · Diamond II · 71% WR</div>
+              </div>
+              <span class="status-pill approved status-pill-sm">Available</span>
+              <button class="btn-table-primary" onclick="sendInvite('darkwolf_cs')">Send Invite</button>
+            </div>
+
+            <div class="role-user-item" data-name="stormbreaker99">
+              <div class="player-avatar-sm">S</div>
+              <div class="role-user-info">
+                <div class="role-user-name">stormbreaker99</div>
+                <div class="player-meta-info">IGL · Platinum I · 65% WR</div>
+              </div>
+              <span class="status-pill approved status-pill-sm">Available</span>
+              <button class="btn-table-primary" onclick="sendInvite('stormbreaker99')">Send Invite</button>
+            </div>
+
+            <div class="role-user-item" data-name="FragKing2026">
+              <div class="player-avatar-sm">F</div>
+              <div class="role-user-info">
+                <div class="role-user-name">FragKing2026</div>
+                <div class="player-meta-info">Entry Fragger · Gold III · 58% WR</div>
+              </div>
+              <span class="status-pill upcoming status-pill-sm">In Team</span>
+              <button class="btn-table-secondary btn-disabled-alt">In Team</button>
+            </div>
+
+            <div class="role-user-item" data-name="silent_support_x">
+              <div class="player-avatar-sm">S</div>
+              <div class="role-user-info">
+                <div class="role-user-name">silent_support_x</div>
+                <div class="player-meta-info">Support · Platinum III · 63% WR</div>
+              </div>
+              <span class="status-pill approved status-pill-sm">Available</span>
+              <button class="btn-table-primary" onclick="sendInvite('silent_support_x')">Send Invite</button>
+            </div>
+
+            <div class="role-user-item" data-name="clutch_master_v">
+              <div class="player-avatar-sm">C</div>
+              <div class="role-user-info">
+                <div class="role-user-name">clutch_master_v</div>
+                <div class="player-meta-info">Rifler · Diamond III · 69% WR</div>
+              </div>
+              <span class="status-pill approved status-pill-sm">Available</span>
+              <button class="btn-table-primary" onclick="sendInvite('clutch_master_v')">Send Invite</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Or invite by username directly -->
+        <div class="direct-invite-card">
+          <h2 class="card-title-sm">Invite by Username</h2>
+          <div class="direct-invite-row">
+            <input class="form-input direct-invite-input" type="text" id="direct-username" placeholder="Enter exact username…">
+            <button class="btn-primary" onclick="directInvite()">Send Invitation</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="sidebar-sticky-stack">
+        <div class="comp-sidebar-block">
+          <h3>Roster Status</h3>
+          <div class="info-row"><span class="key">Current Players</span><span class="val">4 / 5</span></div>
+          <div class="info-row"><span class="key">Open Slots</span><span class="val stat-val-accent">1</span></div>
+          <div class="info-row"><span class="key">Pending Invites</span><span class="val" id="pending-count">1</span></div>
+          <div class="info-row"><span class="key">Join Requests</span><span class="val stat-val-accent">2</span></div>
+        </div>
+        <div class="comp-sidebar-block sidebar-btns-stack">
+          <a href="join-requests.html"    class="btn-table-primary btn-sidebar-full">Review Join Requests</a>
+          <a href="invitations-sent.html" class="btn-table-secondary btn-sidebar-full">View Invitations Sent</a>
+        </div>
+      </div>
+    </div>
+  </main>
+  <div id="footer-mount"></div>
+</div>
+<script src="../../js/script.js"></script>
+<script src="../../js/pages/competitions-data.js"></script>
+<script src="../../js/pages/team/team-workflow.js"></script>
+<script src="../../js/pages/team/add-players.js"></script>
+</body></html>

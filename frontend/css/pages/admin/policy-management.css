@@ -1,0 +1,46 @@
+.main-content {
+  padding: 40px 60px 80px 100px;
+  min-height: 100vh;
+}
+
+.header-flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 32px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.admin-title-xl {
+  font-family: var(--font-display);
+  font-size: 36px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-white);
+}
+
+.admin-subtitle-lg {
+  font-size: 15px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+.btn-action-primary {
+  font-size: 13px;
+  padding: 10px 20px;
+}
+
+.policy-actions-row {
+  display: flex;
+  gap: 8px;
+}
+
+.policy-meta-info {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.policy-card-draft {
+  opacity: 0.6;
+}

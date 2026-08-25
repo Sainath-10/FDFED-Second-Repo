@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Home</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Orbitron:wght@900&family=Lato:wght@300;400;700;900&family=Arvo:ital,wght@0,400;0,700;1,400&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/pages/index.css">
+</head>
+
+<body>
+
+  <div id="sidebar-mount"></div>
+
+  <main>
+
+    <!-- HERO -->
+    <section class="hero-fullscreen">
+      <div class="hero-bg-img" aria-hidden="true">
+        <img src="assets/4995f7274a78937e5ef38bb311e6144c2012ab5f.png" alt="">
+      </div>
+      <div class="hero-topbar">
+        <a href="index.html" class="hero-brand">
+          <img src="assets/f03e2b11537e425d8544ee3ca732bf73af5137c0.png" alt="Nexus Logo">
+          <div class="hero-brand-text"><span class="brand">NEXUS</span><span class="sub">ESPORTS</span></div>
+        </a>
+        <div class="hero-topbar-actions">
+          <a href="pages/login.html" class="btn-top">Login</a>
+          <a href="pages/signup.html" class="btn-top">SignUp</a>
+        </div>
+      </div>
+      <div class="hero-center">
+        <div class="hero-badge">
+          <div class="hero-badge-dot"></div>
+          <span>Esports League Management</span>
+        </div>
+        <h1 class="hero-title-orbitron">
+          <span class="l1">WELCOME TO</span>
+          <span class="l2">NEXUS</span>
+        </h1>
+        <p class="hero-tagline">
+          Enter the ultimate battleground. Compete, conquer, and claim your destiny in
+          the world's most elite esports tournaments.
+        </p>
+        <div class="hero-cta-group">
+          <a href="pages/signup.html" class="btn-cta-join" id="hero-join-btn">
+            Join Now
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.67"
+              stroke-linecap="round">
+              <line x1="2" y1="10" x2="15" y2="10" />
+              <polyline points="10,4 16,10 10,16" />
+            </svg>
+          </a>
+          <a href="pages/watch-live.html" class="btn-cta-watch">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.67"
+              stroke-linecap="round">
+              <polygon points="5,3 18,10 5,17" />
+            </svg>
+            Watch Live
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- STATS BAR -->
+    <section class="stats-bar">
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="stat-box-icon"><svg viewBox="0 0 24 24">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg></div>
+          <div class="stat-box-num">500+</div>
+          <div class="stat-box-label">Active Players</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-box-icon"><svg viewBox="0 0 24 24">
+              <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6m12 5h1.5a2.5 2.5 0 0 0 0-5H18m-6-2v2m0 14v-2" />
+              <path d="M5 9v6a7 7 0 0 0 14 0V9" />
+            </svg></div>
+          <div class="stat-box-num">2.5k</div>
+          <div class="stat-box-label">Tournaments</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-box-icon"><svg viewBox="0 0 24 24">
+              <line x1="12" y1="1" x2="12" y2="23" />
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+            </svg></div>
+          <div class="stat-box-num">₹10 Lakh+</div>
+          <div class="stat-box-label">Prize Pool</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-box-icon"><svg viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12,6 12,12 16,14" />
+            </svg></div>
+          <div class="stat-box-num">24/7</div>
+          <div class="stat-box-label">Support</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TOP COMPETITIONS -->
+    <section class="home-section" style="background:#0b0b0b;">
+      <div class="section-header">
+        <div class="section-title-group">
+          <div class="section-accent-bar"></div>
+          <h2 class="section-title">TOP Competitions</h2>
+        </div>
+        <a href="pages/competitions.html" class="view-all-btn">View All</a>
+      </div>
+      <div class="comps-home-grid" id="home-comps-grid"></div>
+    </section>
+
+    <!-- LIVE NOW -->
+    <section class="home-section dark">
+      <div class="section-header">
+        <div class="section-title-group">
+          <div class="section-accent-bar"></div>
+          <h2 class="section-title">LIVE NOW</h2>
+        </div>
+        <a href="pages/watch-live.html" class="view-all-btn">View All</a>
+      </div>
+      <div class="live-grid">
+        <div class="live-card" onclick="location.href='pages/watch-live.html'">
+          <div class="live-thumb"><img src="assets/b890c61489a080992ad7e99adabb1145e6d59606.png" alt="">
+            <div class="live-pill">
+              <div class="dot"></div>Live
+            </div>
+            <div class="view-pill">👁 45.2K</div>
+          </div>
+          <div class="live-info">
+            <div class="live-avatar">P</div>
+            <div class="live-meta">
+              <h3>Grand Finals</h3>
+              <div class="streamer">ProGamer</div>
+              <div class="game">Counter-Strike 2</div>
+            </div>
+          </div>
+        </div>
+        <div class="live-card" onclick="location.href='pages/watch-live.html'">
+          <div class="live-thumb"><img src="assets/7b04655f1d50a8b1b25ad53f36d80ff99cb3184e.png" alt="">
+            <div class="live-pill">
+              <div class="dot"></div>Live
+            </div>
+            <div class="view-pill">👁 32.8K</div>
+          </div>
+          <div class="live-info">
+            <div class="live-avatar">E</div>
+            <div class="live-meta">
+              <h3>Semi Finals Match</h3>
+              <div class="streamer">EliteGamer</div>
+              <div class="game">League of Legends</div>
+            </div>
+          </div>
+        </div>
+        <div class="live-card" onclick="location.href='pages/watch-live.html'">
+          <div class="live-thumb"><img src="assets/0e6f51d89fed056f96d58f2c51d79eb797ccdf75.png" alt="">
+            <div class="live-pill">
+              <div class="dot"></div>Live
+            </div>
+            <div class="view-pill">👁 18.4K</div>
+          </div>
+          <div class="live-info">
+            <div class="live-avatar">D</div>
+            <div class="live-meta">
+              <h3>Champions League QF</h3>
+              <div class="streamer">DotaPro</div>
+              <div class="game">Dota 2</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- BROWSE GAMES -->
+    <section class="home-section darker">
+      <div class="section-header">
+        <div class="section-title-group">
+          <div class="section-accent-bar"></div>
+          <h2 class="section-title" style="font-size:36px;">Browse Games</h2>
+        </div>
+        <a href="pages/competitions.html" class="view-all-btn">View All</a>
+      </div>
+      <div class="games-grid" style="margin-top:24px;">
+        <div class="game-card" onclick="location.href='pages/competitions.html'">
+          <div class="game-card-badge">32 Tournaments</div>
+          <h3>Counter-Strike 2</h3>
+          <p class="tournaments">Active competitions worldwide</p>
+          <div class="explore-btn">Explore →</div>
+        </div>
+        <div class="game-card" onclick="location.href='pages/competitions.html'">
+          <div class="game-card-badge">24 Tournaments</div>
+          <h3>League of Legends</h3>
+          <p class="tournaments">Active competitions worldwide</p>
+          <div class="explore-btn">Explore →</div>
+        </div>
+        <div class="game-card" onclick="location.href='pages/competitions.html'">
+          <div class="game-card-badge">18 Tournaments</div>
+          <h3>Dota 2</h3>
+          <p class="tournaments">Active competitions worldwide</p>
+          <div class="explore-btn">Explore →</div>
+        </div>
+        <div class="game-card" onclick="location.href='pages/competitions.html'">
+          <div class="game-card-badge">41 Tournaments</div>
+          <h3>Fortnite</h3>
+          <p class="tournaments">Active competitions worldwide</p>
+          <div class="explore-btn">Explore →</div>
+        </div>
+        <div class="game-card" onclick="location.href='pages/competitions.html'">
+          <div class="game-card-badge">27 Tournaments</div>
+          <h3>Valorant</h3>
+          <p class="tournaments">Active competitions worldwide</p>
+          <div class="explore-btn">Explore →</div>
+        </div>
+        <div class="game-card" onclick="location.href='pages/competitions.html'">
+          <div class="game-card-badge">15 Tournaments</div>
+          <h3>Rocket League</h3>
+          <p class="tournaments">Active competitions worldwide</p>
+          <div class="explore-btn">Explore →</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta-home">
+      <div>
+        <h2>Ready to <span>Compete?</span></h2>
+        <p>Register for tournaments and show the world what you're made of. The arena awaits.</p>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:28px;">
+          <a href="pages/signup.html" class="btn-hero-primary" id="cta-join-btn">Join Now — It's Free</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <div id="footer-mount" class="footer-offset"></div>
+
+  </main>
+
+  <script src="js/api.js"></script>
+  <script src="js/script.js"></script>
+  <script src="js/pages/index.js"></script>
+</body>
+
+</html>

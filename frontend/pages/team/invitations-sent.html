@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Invitations Sent</title>
+  <link rel="stylesheet" href="../../css/styles.css">
+  <link rel="stylesheet" href="../../css/pages/team/invitations-sent.css">
+</head>
+
+<body>
+  <div id="sidebar-mount"></div>
+  <div class="page-with-sidebar">
+    <main class="main-content">
+      <h1 class="page-title">Storm Riders</h1>
+      <p class="page-subtitle">Track invitations you've sent to players</p>
+
+      <div class="team-tabs-nav">
+        <a href="team-roster.html" class="team-tab">Roster</a>
+        <a href="add-players.html" class="team-tab">Add Players</a>
+        <a href="join-requests.html" class="team-tab">Join Requests <span class="notif-badge-sm">2</span></a>
+        <a href="invitations-sent.html" class="team-tab active">Invitations Sent</a>
+        <a href="team-settings.html" class="team-tab">Settings</a>
+      </div>
+
+      <div class="invites-stack">
+        <div class="invite-row">
+          <div class="invite-avatar-sm">D</div>
+          <div class="invite-info-wrapper">
+            <div class="invite-name">darkwolf_cs</div>
+            <div class="invite-meta">Invited for: AWPer slot · Sent 1 hour ago</div>
+          </div>
+          <span class="status-pill pending">Pending</span>
+          <button class="btn-table-danger btn-revoke-mini" onclick="revokeInvite('darkwolf_cs', this)">Revoke</button>
+        </div>
+
+        <div class="invite-row invite-row-accepted">
+          <div class="invite-avatar-sm avatar-accepted">N</div>
+          <div class="invite-info-wrapper">
+            <div class="invite-name">ninja_byte</div>
+            <div class="invite-meta">Invited for: AWPer slot · Sent 2 days ago</div>
+          </div>
+          <span class="status-pill approved">Accepted</span>
+          <span class="status-text-green">✓ Joined team</span>
+        </div>
+
+        <div class="invite-row invite-row-declined">
+          <div class="invite-avatar-sm avatar-declined">Z</div>
+          <div class="invite-info-wrapper">
+            <div class="invite-name">zero_frag</div>
+            <div class="invite-meta">Invited for: Support slot · Sent 4 days ago</div>
+          </div>
+          <span class="status-pill rejected">Declined</span>
+          <span class="status-text-red">✗ Declined offer</span>
+        </div>
+
+        <div class="invites-footer-actions">
+          <a href="add-players.html" class="btn-primary invite-more-btn">+ Invite More Players</a>
+        </div>
+      </div>
+    </main>
+    <div id="footer-mount"></div>
+  </div>
+  <script src="../../js/script.js"></script>
+  <script src="../../js/pages/competitions-data.js"></script>
+  <script src="../../js/pages/team/team-workflow.js"></script>
+  <script src="../../js/pages/team/invitations-sent.js"></script>
+</body>
+
+</html>

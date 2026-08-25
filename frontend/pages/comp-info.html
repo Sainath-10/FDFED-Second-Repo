@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Competition Info</title>
+  <link rel="stylesheet" href="../css/styles.css">
+  <link rel="stylesheet" href="../css/pages/comp-info.css">
+</head>
+
+<body>
+
+  <!-- Sidebar -->
+  <div id="sidebar-mount"></div>
+
+  <div class="page-with-sidebar">
+
+    <main class="comp-info-page">
+
+      <!-- Back -->
+      <a href="competitions.html" class="back-btn">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <path d="M12 8H4M4 8L8 12M4 8L8 4" />
+        </svg>
+        Back to Competitions
+      </a>
+
+      <!-- Hero Banner -->
+      <div class="comp-info-hero" id="comp-hero">
+        <img id="comp-hero-img" src="../assets/b890c61489a080992ad7e99adabb1145e6d59606.png" alt="">
+        <div class="comp-info-overlay">
+          <div class="game" id="comp-hero-game">—</div>
+          <h1 id="comp-hero-name">Loading...</h1>
+        </div>
+        <span class="comp-badge featured" id="comp-hero-badge"
+          style="position:absolute;top:20px;right:20px;z-index:3;"></span>
+      </div>
+
+      <!-- Body -->
+      <div class="comp-info-body">
+
+        <!-- Main Content -->
+        <div class="comp-info-details">
+
+          <!-- Tabs -->
+          <div class="tabs-nav">
+            <button class="tab-btn active" data-tab="overview">Overview</button>
+            <button class="tab-btn" data-tab="teams">Teams</button>
+            <button class="tab-btn" data-tab="bracket">Bracket</button>
+            <button class="tab-btn" data-tab="standings">Standings</button>
+            <button class="tab-btn" data-tab="rules">Rules</button>
+          </div>
+
+          <!-- Overview Tab -->
+          <div class="tab-panel active" id="tab-overview">
+            <div class="comp-info-block">
+              <h2>About this Tournament</h2>
+              <p id="comp-description">Loading competition details...</p>
+            </div>
+
+            <div class="comp-info-block" style="margin-top:20px;">
+              <h2>Schedule</h2>
+              <div style="display:flex;flex-direction:column;gap:12px;" id="comp-schedule">
+                <div class="info-row">
+                  <span class="key">Registration Opens</span>
+                  <span class="val" id="sched-reg-open">—</span>
+                </div>
+                <div class="info-row">
+                  <span class="key">Registration Closes</span>
+                  <span class="val" id="sched-reg-close">—</span>
+                </div>
+                <div class="info-row">
+                  <span class="key">Competition Dates</span>
+                  <span class="val" id="sched-dates">—</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="comp-info-block" style="margin-top:20px;">
+              <h2>Competition Limits</h2>
+              <div style="display:flex;flex-direction:column;gap:12px;">
+                <div class="info-row">
+                  <span class="key">Max Teams</span>
+                  <span class="val" id="overview-max-teams">—</span>
+                </div>
+                <div class="info-row">
+                  <span class="key">Max Players per Team</span>
+                  <span class="val" id="overview-max-players">—</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Teams Tab -->
+          <div class="tab-panel" id="tab-teams">
+            <div class="comp-info-block">
+              <h2 id="teams-heading">Registered Teams</h2>
+              <div class="teams-grid" id="comp-teams-grid">
+                <p style="color:var(--text-muted);font-size:14px;">No teams have been accepted yet.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bracket Tab -->
+          <div class="tab-panel" id="tab-bracket">
+            <div class="comp-info-block">
+              <h2>Tournament Bracket</h2>
+              <p style="margin-bottom:20px;font-size:14px;color:var(--text-muted);" id="comp-format-desc">—</p>
+              <div class="bracket-row" id="comp-bracket-row">
+                <p style="color:var(--text-muted);font-size:14px;">No matches scheduled yet.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Standings Tab -->
+          <div class="tab-panel" id="tab-standings">
+            <div class="comp-info-block">
+              <h2 style="margin-bottom: 20px;">Standings</h2>
+
+              <div class="standings-table-header">
+                <span class="col-rank">RANK</span>
+                <span class="col-team">TEAM</span>
+                <span class="col-mp">MP</span>
+                <span class="col-w">W</span>
+                <span class="col-l">L</span>
+                <span class="col-d">D</span>
+                <span class="col-pts">POINTS</span>
+                <span class="col-last5">LAST 5</span>
+              </div>
+              <div id="standings-rows">
+                <p style="color:var(--text-muted);font-size:14px;padding: 18px;">Standings will be updated as the
+                  tournament progresses.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Rules Tab -->
+          <div class="tab-panel" id="tab-rules">
+            <div class="comp-info-block">
+              <h2>Tournament Rules</h2>
+              <div id="comp-rules"
+                style="display:flex;flex-direction:column;gap:14px;font-size:15px;color:var(--text-muted);line-height:24px;">
+                <p>Rules will be specified by the organizer.</p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Sidebar Panel -->
+        <aside class="comp-sidebar-panel">
+
+          <!-- Quick Info -->
+          <div class="comp-sidebar-block">
+            <h3>Tournament Info</h3>
+            <div class="info-row">
+              <span class="key">Status</span>
+              <span class="val" id="info-status" style="color:var(--accent);">—</span>
+            </div>
+            <div class="info-row">
+              <span class="key">Game</span>
+              <span class="val" id="info-game">—</span>
+            </div>
+            <div class="info-row">
+              <span class="key">Format</span>
+              <span class="val" id="info-format">—</span>
+            </div>
+            <div class="info-row">
+              <span class="key">Teams</span>
+              <span class="val" id="info-teams">—</span>
+            </div>
+            <div class="info-row">
+              <span class="key">Date</span>
+              <span class="val" id="info-date">—</span>
+            </div>
+            <div class="info-row">
+              <span class="key">Prize Pool</span>
+              <span class="val" id="info-prize" style="color:var(--accent); font-size:18px;">—</span>
+            </div>
+          </div>
+
+          <!-- Prize Breakdown -->
+          <div class="comp-sidebar-block" id="prize-breakdown-block">
+            <h3>Prize Breakdown</h3>
+            <div class="prize-breakdown" id="comp-prize-breakdown">
+              <p style="color:var(--text-muted);font-size:14px;">No prize breakdown available.</p>
+            </div>
+          </div>
+
+          <!-- CTA -->
+          <div class="comp-sidebar-block" id="comp-cta-block"
+            style="display:flex;flex-direction:column;gap:12px;align-items:stretch;">
+            <a id="btn-manage-comp" class="btn-primary"
+              style="width:100%;text-align:center;display:none;padding:14px;font-size:15px;cursor:pointer;border:none;text-decoration:none;box-sizing:border-box;">
+              ✏ Manage Competition
+            </a>
+            <button id="btn-register-team" class="btn-primary"
+              style="width:100%;text-align:center;display:block;padding:14px;font-size:15px;cursor:pointer;border:none;">
+              Join Teams
+            </button>
+            <button id="btn-create-team" class="btn-outline"
+              style="width:100%;text-align:center;display:block;padding:13px;font-size:14px;cursor:pointer;background:none;">
+              Create a New Team
+            </button>
+            <button id="btn-dispute" class="btn-outline"
+              style="width:100%;text-align:center;display:none;padding:13px;font-size:14px;cursor:pointer;background:none; border-color: #f87171; color: #f87171;">
+              Dispute
+            </button>
+            <button id="btn-share-comp" class="btn-outline"
+              style="width:100%;text-align:center;display:block;padding:11px;font-size:13px;cursor:pointer;background:none;opacity:0.8;">
+              🔗 Share Link
+            </button>
+          </div>
+
+        </aside>
+
+      </div>
+
+    </main>
+
+    <!-- Footer -->
+    <div id="footer-mount"></div>
+
+  </div>
+
+  <script src="../js/script.js"></script>
+  <script src="../js/pages/competitions-data.js"></script>
+  <script src="../js/pages/team/team-workflow.js"></script>
+  <script src="../js/pages/comp-info.js"></script>
+  <script>
+    document.getElementById('sidebar-mount').innerHTML = getSidebar('competitions', '../');
+    document.getElementById('footer-mount').innerHTML = getFooter('../');
+  </script>
+
+</body>
+
+</html>

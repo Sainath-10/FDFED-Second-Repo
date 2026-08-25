@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Standings</title>
+  <link rel="stylesheet" href="../../css/styles.css">
+  <link rel="stylesheet" href="../../css/pages/admin/view-standings.css">
+</head>
+<body>
+<div id="sidebar-mount"></div>
+<div class="page-with-sidebar">
+  <main class="main-content">
+    <a href="dashboard.html" class="back-btn-alt">← Dashboard</a>
+    <h1 class="admin-title-lg">Standings</h1>
+    <p class="admin-subtitle-accent">Current tournament rankings · Group Stage</p>
+
+    <div class="admin-comp-tabs">
+      <a href="competition-detail.html" class="admin-tab">Overview</a>
+      <a href="manage-teams.html"       class="admin-tab">Teams</a>
+      <a href="manage-matches.html"     class="admin-tab">Matches</a>
+      <a href="match-results.html"      class="admin-tab">Results</a>
+      <a href="view-standings.html"     class="admin-tab active">Standings</a>
+    </div>
+
+    <div class="standings-grid-layout">
+      <div class="standings-card-wrap">
+        <div class="standings-card-header">Group A</div>
+        <table class="standings-table">
+          <thead><tr><th>#</th><th class="text-left-align">Team</th><th>W</th><th>L</th><th>Pts</th></tr></thead>
+          <tbody>
+            <tr><td><span class="rank-num gold">1</span></td><td class="text-left-align team-name-white">NaVi</td><td>3</td><td>0</td><td class="score-pts-accent">9</td></tr>
+            <tr><td><span class="rank-num silver">2</span></td><td class="text-left-align team-name-white">Storm Riders</td><td>2</td><td>1</td><td class="score-pts-accent">6</td></tr>
+            <tr><td><span class="rank-num bronze">3</span></td><td class="text-left-align group-name-muted">Inferno Squad</td><td>1</td><td>2</td><td>3</td></tr>
+            <tr><td><span class="rank-num">4</span></td><td class="text-left-align group-name-muted">Team Alpha</td><td>0</td><td>3</td><td>0</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="standings-card-wrap">
+        <div class="standings-card-header">Group B</div>
+        <table class="standings-table">
+          <thead><tr><th>#</th><th class="text-left-align">Team</th><th>W</th><th>L</th><th>Pts</th></tr></thead>
+          <tbody>
+            <tr><td><span class="rank-num gold">1</span></td><td class="text-left-align team-name-white">Cloud9</td><td>3</td><td>0</td><td class="score-pts-accent">9</td></tr>
+            <tr><td><span class="rank-num silver">2</span></td><td class="text-left-align team-name-white">Heroic</td><td>2</td><td>1</td><td class="score-pts-accent">6</td></tr>
+            <tr><td><span class="rank-num bronze">3</span></td><td class="text-left-align group-name-muted">FaZe Clan</td><td>1</td><td>2</td><td>3</td></tr>
+            <tr><td><span class="rank-num">4</span></td><td class="text-left-align group-name-muted">ENCE</td><td>0</td><td>3</td><td>0</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="standings-card-wrap">
+      <div class="standings-header-row-flex">
+        <span class="standings-header-title-muted">Playoff Qualification — Top 4 per Group</span>
+        <button class="btn-table-secondary" onclick="showToast('Full rankings loaded')">Load Full Rankings</button>
+      </div>
+      <table class="standings-table">
+        <thead><tr><th>#</th><th class="text-left-align">Team</th><th>Group</th><th>W</th><th>L</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td><span class="rank-num gold">1</span></td><td class="text-left-align team-name-white">NaVi</td><td class="group-name-muted">A</td><td>3</td><td>0</td><td><span class="status-pill approved">Qualified</span></td></tr>
+          <tr><td><span class="rank-num gold">1</span></td><td class="text-left-align team-name-white">Cloud9</td><td class="group-name-muted">B</td><td>3</td><td>0</td><td><span class="status-pill approved">Qualified</span></td></tr>
+          <tr><td><span class="rank-num silver">2</span></td><td class="text-left-align team-name-white">Storm Riders</td><td class="group-name-muted">A</td><td>2</td><td>1</td><td><span class="status-pill approved">Qualified</span></td></tr>
+          <tr><td><span class="rank-num silver">2</span></td><td class="text-left-align team-name-white">Heroic</td><td class="group-name-muted">B</td><td>2</td><td>1</td><td><span class="status-pill approved">Qualified</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+  <div id="footer-mount"></div>
+</div>
+<script src="../../js/script.js"></script>
+<script src="../../js/pages/admin/view-standings.js"></script>
+</body></html>

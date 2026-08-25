@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Manage Matches</title>
+  <link rel="stylesheet" href="../css/styles.css">
+  <link rel="stylesheet" href="../css/pages/subpage.css">
+</head>
+<body>
+<div id="sidebar-mount"></div>
+<div class="page-with-sidebar">
+  <main class="sub-main">
+
+    <div class="sub-page-header">
+      <div class="sub-header-content">
+        <h1 class="sub-page-title">Manage Matches</h1>
+        <p class="sub-page-subtitle">Schedule and manage scheduled matches for this competition</p>
+      </div>
+      <a class="btn-back" id="btn-back-to-comp">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="10" y1="3" x2="4" y2="8"/><line x1="4" y1="8" x2="10" y2="13"/></svg>
+        Back to Dashboard
+      </a>
+    </div>
+
+    <div class="comp-banner comp-banner-lg" id="comp-banner"></div>
+
+    <div class="matches-body">
+
+      <div class="sub-panel">
+        <div class="panel-section-title">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#C6FF33" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><line x1="8" y1="5" x2="8" y2="8"/><line x1="10" y1="10" x2="8" y2="8"/></svg>
+          Schedule New Match
+        </div>
+        <form id="schedule-form" class="schedule-form">
+          <div class="form-row-2">
+            <div class="form-group"><label>TEAM 1</label><select id="sf-team1"><option value="">Select Team</option></select></div>
+            <div class="form-group"><label>TEAM 2</label><select id="sf-team2"><option value="">Select Team</option></select></div>
+          </div>
+          <div class="form-row-2">
+            <div class="form-group"><label>MATCH DATE</label><input type="date" id="sf-date"></div>
+            <div class="form-group"><label>MATCH TIME</label><input type="time" id="sf-time"></div>
+          </div>
+          <div class="form-group">
+            <label>ROUND</label>
+            <select id="sf-round"><!-- populated by JS based on competition type --></select>
+          </div>
+          <button type="submit" class="btn-schedule">SCHEDULE MATCH</button>
+        </form>
+      </div>
+
+      <div class="sub-panel">
+        <div class="panel-section-title">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#C6FF33" stroke-width="1.5" stroke-linecap="round"><rect x="1" y="2" width="14" height="13" rx="2"/><line x1="1" y1="6" x2="15" y2="6"/></svg>
+          Scheduled Matches
+        </div>
+        <div class="matches-toolbar">
+          <div class="search-box-wrapper">
+            <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#9aa4b2" stroke-width="1.67" stroke-linecap="round"><circle cx="9" cy="9" r="6"/><line x1="14" y1="14" x2="18" y2="18"/></svg>
+            <input type="text" class="sub-search sub-search-sm" id="matches-search" placeholder="Search matches...">
+          </div>
+          <select class="sub-select sub-select-sm" id="matches-status-filter">
+            <option value="all">Status: All</option>
+            <option value="scheduled">Scheduled</option>
+            <option value="live">Live</option>
+            <option value="completed">Completed</option>
+          </select>
+          <button class="icon-btn" title="Sort">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="2" y1="4" x2="14" y2="4"/><line x1="4" y1="8" x2="12" y2="8"/><line x1="6" y1="12" x2="10" y2="12"/></svg>
+          </button>
+        </div>
+        <div class="scheduled-matches-table">
+          <div class="sm-header">
+            <span class="sm-col-id">MATCH ID</span>
+            <span class="sm-col-teams">TEAMS</span>
+            <span class="sm-col-round">ROUND</span>
+            <span class="sm-col-date">DATE & TIME</span>
+            <span class="sm-col-status">STATUS</span>
+          </div>
+          <div id="matches-rows"></div>
+        </div>
+        <div class="sub-pagination" id="matches-pagination"></div>
+      </div>
+
+    </div>
+
+  </main>
+</div>
+<div id="footer-mount"></div>
+
+<script src="../js/script.js"></script>
+<script src="../js/pages/competitions-data.js"></script>
+<script src="../js/pages/comp-manage-matches.js"></script>
+<script>
+  document.getElementById('sidebar-mount').innerHTML = getSidebar('activity', '../');
+  document.getElementById('footer-mount').innerHTML = getFooter('../');
+</script>
+</body>
+</html>

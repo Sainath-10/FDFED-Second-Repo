@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Dispute Escalation</title>
+  <link rel="stylesheet" href="../css/styles.css">
+  <link rel="stylesheet" href="../css/pages/dispute-escalation.css">
+</head>
+<body>
+<div id="sidebar-mount"></div>
+<div class="page-with-sidebar">
+  <main class="main-content">
+
+    <a href="disputes.html" class="back-btn">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M12 8H4M4 8L8 12M4 8L8 4"/></svg>
+      Back to Disputes
+    </a>
+
+    <h1 class="page-title">Escalate Dispute</h1>
+    <p class="page-subtitle">Send an unresolved dispute to a Super Admin for final review.</p>
+
+    <div class="layout-grid">
+
+      <div class="form-card">
+        <form id="escalation-form" class="escalation-form">
+
+          <div class="form-group">
+            <label class="form-label">Dispute Reference</label>
+            <select class="form-select">
+              <option value="">Select existing dispute…</option>
+              <option value="041">#DISP-2026-0041 — CS2 QF Match Result (Investigating)</option>
+              <option value="038">#DISP-2026-0038 — Valorant Late Forfeit (Pending)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Escalation Reason</label>
+            <select class="form-select">
+              <option value="">Select reason…</option>
+              <option>Admin decision appears biased or unfair</option>
+              <option>New evidence has emerged</option>
+              <option>Admin has not responded within 48 hours</option>
+              <option>Dispute involves platform policy violation</option>
+              <option>Other</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Summary of Escalation</label>
+            <textarea class="form-textarea form-textarea-tall" placeholder="Briefly explain why this dispute needs Super Admin review. Include any new information not covered in the original dispute."></textarea>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Additional Evidence (optional)</label>
+            <div class="evidence-upload" onclick="document.getElementById('evidence-file').click()">
+              <div class="upload-icon-large">📎</div>
+              <div class="upload-text-small">
+                <span class="accent-bold">Upload files</span> — screenshots, videos, logs<br>
+                Max 50MB per file
+              </div>
+              <input type="file" id="evidence-file" multiple style="display:none;">
+            </div>
+          </div>
+
+          <div class="warning-box">
+            <p class="warning-text">
+              ⚠️ <strong>Important:</strong> Super Admin escalations are reserved for serious unresolved matters. Frivolous escalations may result in account restrictions. Super Admins typically respond within 72 hours.
+            </p>
+          </div>
+
+          <button type="submit" class="btn-auth-submit" style="font-size:16px;">Send to Super Admin</button>
+        </form>
+      </div>
+
+      <div class="sidebar-stack">
+        <div class="comp-sidebar-block">
+          <h3>Escalation Guidelines</h3>
+          <div class="guidelines-list">
+            <p>✅ Only escalate if the admin response is unsatisfactory or delayed 48h+.</p>
+            <p>✅ Include all relevant evidence upfront to speed up resolution.</p>
+            <p>✅ Be specific — Super Admins review dozens of cases daily.</p>
+            <p>❌ Do not escalate the same dispute twice without new evidence.</p>
+            <p>❌ Personal grievances or ranking disputes are not grounds for escalation.</p>
+          </div>
+        </div>
+
+        <div class="comp-sidebar-block">
+          <h3>Response Times</h3>
+          <div class="info-row"><span class="key">Admin Review</span><span class="val">24–48h</span></div>
+          <div class="info-row"><span class="key">Super Admin</span><span class="val">48–72h</span></div>
+          <div class="info-row"><span class="key">Final Decision</span><span class="val">Binding</span></div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+  <div id="footer-mount"></div>
+</div>
+<script src="../js/script.js"></script>
+<script src="../js/pages/dispute-escalation.js"></script>
+</body>
+</html>
