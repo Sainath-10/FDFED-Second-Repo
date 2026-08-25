@@ -31,11 +31,12 @@ function renderDisputes() {
           <span class="status-pill ${statusClass}">${statusLabel}</span>
         </div>
         <div class="dispute-title">${d.title}</div>
-        <div class="dispute-desc">${d.desc}</div>
+        <div class="dispute-desc">${d.desc || d.description || ''}</div>
         <div class="dispute-meta">
-          <span>📅 Filed: ${d.time}</span>
+          <span>📅 Filed: ${d.time || 'Recent'}</span>
           <span>🏆 Competition: ${d.matchName || 'N/A'}</span>
-          <span>👥 Reporter: ${d.reporter}</span>
+          <span>👥 Reporter: ${d.reporter || d.submitter || 'Player'}</span>
+          <span>🛡️ Routed to: ${Array.isArray(d.organizers) && d.organizers.length > 0 ? d.organizers.join(', ') : 'Event Organizers'}</span>
         </div>
         <div class="dispute-actions">
           <button class="btn-table-secondary" onclick="showEvidence('${d.id}')">View Details</button>

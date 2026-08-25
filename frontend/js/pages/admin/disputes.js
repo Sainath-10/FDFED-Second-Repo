@@ -122,11 +122,11 @@ function renderDisputes() {
           </span>
         </div>
         <div class="dfc-title">${d.title}</div>
-        <div class="dfc-desc">${d.description}</div>
+        <div class="dfc-desc">${d.description || d.desc || d.detail || ''}</div>
         <div class="dfc-meta-row">
-          <span>Filed by: <strong>${d.filedBy}</strong></span>
-          <span>Against: <strong>${d.against}</strong></span>
-          <span>Filed: ${d.filedAt}</span>
+          <span>👥 Assigned Organizers: <strong style="color:var(--accent);">${Array.isArray(d.organizers) && d.organizers.length > 0 ? d.organizers.join(', ') : (d.organizer || 'Tournament Organizer')}</strong></span>
+          <span>Filed by: <strong>${d.filedBy || d.submitter || d.reporter || 'Player'}</strong></span>
+          <span>Filed: ${d.filedAt || d.time || 'Recent'}</span>
         </div>
         ${notesHtml}
         ${actionsHtml}
