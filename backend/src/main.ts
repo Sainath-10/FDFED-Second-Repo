@@ -2,9 +2,16 @@ import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
+import { FileLoggerService } from './common/logger/file-logger.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  const fileLogger = app.get(FileLoggerService);
+
+  // Global Exception / Error Handling Filter
+  app.useGlobalFilters(new GlobalExceptionFilter(fileLogger));
 
   // Enable CORS
   app.enableCors();
