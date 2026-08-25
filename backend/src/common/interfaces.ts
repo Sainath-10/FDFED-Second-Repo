@@ -41,7 +41,7 @@ export interface IDispute {
   competitionId: string;
   teamId: string;
   reportedBy: string;
-  organizers?: string[];
+  organizers: string[];
   description: string;
   status: 'open' | 'under_review' | 'resolved' | 'escalated';
   resolutionNotes?: string;

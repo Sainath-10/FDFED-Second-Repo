@@ -41,42 +41,77 @@ function updatePrizeTotal() {
   updateSummary();
 }
 
+// ── Field-level error UI helpers ─────────────────────────────
+function showFieldError(inputId, message) {
+  const el = document.getElementById(inputId);
+  if (!el) return;
+  el.style.borderColor = '#ef4444';
+  el.style.boxShadow = '0 0 0 1px rgba(239, 68, 68, 0.4)';
+
+  const existingErr = document.getElementById(`err-${inputId}`);
+  if (!existingErr) {
+    const errEl = document.createElement('p');
+    errEl.id = `err-${inputId}`;
+    errEl.className = 'field-error-msg';
+    errEl.style.cssText = 'color:#ef4444;font-size:12px;font-weight:600;margin-top:5px;display:flex;align-items:center;gap:4px;';
+    errEl.innerHTML = `<span>⚠</span> <span>${message}</span>`;
+    if (el.parentNode) el.parentNode.appendChild(errEl);
+  } else {
+    existingErr.innerHTML = `<span>⚠</span> <span>${message}</span>`;
+  }
+}
+
+function clearFieldErrors() {
+  document.querySelectorAll('.field-error-msg').forEach(el => el.remove());
+  document.querySelectorAll('.form-input, .form-select, .form-textarea, .prize-input').forEach(el => {
+    el.style.borderColor = '';
+    el.style.boxShadow = '';
+  });
+}
+
 // ── Date validation ──────────────────────────────────────────
 /**
- * Validates all date fields. Returns an error message string or null if valid.
- *
- * Rules:
- *  - reg-open  > today
- *  - reg-open  < reg-close
- *  - start-date >= reg-close
- *  - start-date < end-date
+ * Validates all date fields. Returns an object of errors or null if valid.
  */
 function validateDates(regOpen, regClose, startDate, endDate) {
+  const errors = {};
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const toDate = (s) => s ? new Date(s) : null;
+  const toDate = (s) => s ? new Date(s + 'T00:00:00') : null;
   const rOpen = toDate(regOpen);
   const rClose = toDate(regClose);
   const sDate = toDate(startDate);
   const eDate = toDate(endDate);
 
-  if (rOpen && rOpen <= today) {
-    return 'Registration Open date must be in the future (after today).';
+  if (!regOpen) {
+    errors['reg-open'] = 'Registration Open date is required.';
+  } else if (rOpen < today) {
+    errors['reg-open'] = 'Registration Open date cannot be in the past.';
   }
-  if (rOpen && rClose && rOpen >= rClose) {
-    return 'Registration Opens must be before Registration Closes.';
+
+  if (!regClose) {
+    errors['reg-close'] = 'Registration Close date is required.';
+  } else if (rOpen && rClose && rClose <= rOpen) {
+    errors['reg-close'] = 'Registration Closes must be strictly after Registration Opens.';
   }
-  if (sDate && rClose && sDate < rClose) {
-    return 'Event Start Date must be on or after Registration Closes.';
+
+  if (!startDate) {
+    errors['start-date'] = 'Tournament Start Date is required.';
+  } else if (rClose && sDate && sDate < rClose) {
+    errors['start-date'] = 'Tournament Start Date must be on or after Registration Closes.';
   }
-  if (sDate && eDate && sDate >= eDate) {
-    return 'Event Start Date must be before Event End Date.';
+
+  if (!endDate) {
+    errors['end-date'] = 'Tournament End Date is required.';
+  } else if (sDate && eDate && eDate <= sDate) {
+    errors['end-date'] = 'Tournament End Date must be strictly after Tournament Start Date.';
   }
-  return null;
+
+  return Object.keys(errors).length > 0 ? errors : null;
 }
 
-// Wire up date inputs to show inline errors as user types
+// Real-time date input checks
 ['reg-open', 'reg-close', 'start-date', 'end-date'].forEach(id => {
   const el = document.getElementById(id);
   if (!el) return;
@@ -86,39 +121,24 @@ function validateDates(regOpen, regClose, startDate, endDate) {
     const startDate = document.getElementById('start-date').value;
     const endDate = document.getElementById('end-date').value;
 
-    const err = validateDates(regOpen, regClose, startDate, endDate);
+    const dateErrors = validateDates(regOpen, regClose, startDate, endDate);
+    // Clear only date errors
+    ['reg-open', 'reg-close', 'start-date', 'end-date'].forEach(dId => {
+      const inputEl = document.getElementById(dId);
+      if (inputEl) {
+        inputEl.style.borderColor = '';
+        inputEl.style.boxShadow = '';
+      }
+      const errEl = document.getElementById(`err-${dId}`);
+      if (errEl) errEl.remove();
+    });
 
-    // Highlight date inputs
-    clearDateErrors();
-    if (err) showDateError(id, err);
-
+    if (dateErrors && dateErrors[id]) {
+      showFieldError(id, dateErrors[id]);
+    }
     updateSummary();
   });
 });
-
-function clearDateErrors() {
-  ['reg-open', 'reg-close', 'start-date', 'end-date'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.borderColor = '';
-    const errEl = document.getElementById(`err-${id}`);
-    if (errEl) errEl.remove();
-  });
-}
-
-function showDateError(inputId, message) {
-  const el = document.getElementById(inputId);
-  if (!el) return;
-  el.style.borderColor = '#f87171';
-  // Insert small error message below input if not already there
-  const existingErr = document.getElementById(`err-${inputId}`);
-  if (!existingErr) {
-    const errEl = document.createElement('p');
-    errEl.id = `err-${inputId}`;
-    errEl.style.cssText = 'color:#f87171;font-size:11px;margin-top:4px;';
-    errEl.textContent = `⚠ ${message}`;
-    el.parentNode.insertBefore(errEl, el.nextSibling);
-  }
-}
 
 // ── Misc helpers ─────────────────────────────────────────────
 function toggleCheck(el) {
@@ -161,11 +181,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// ── Form submit ──────────────────────────────────────────────
+// ── Form submit with Full Strict QA Validation ──────────────
 const createCompForm = document.getElementById('create-comp-form');
 if (createCompForm) {
   createCompForm.addEventListener('submit', function (e) {
     e.preventDefault();
+    clearFieldErrors();
     
     const sessionRaw = localStorage.getItem('nexus.auth.session');
     let session = null;
@@ -175,39 +196,143 @@ if (createCompForm) {
       return;
     }
 
-    const name = document.getElementById('comp-name').value.trim();
-    const game = document.getElementById('comp-game').value;
-    const formatLabel = document.getElementById('comp-format').value;
-    const description = document.getElementById('comp-desc').value.trim();
-    const regOpen      = document.getElementById('reg-open').value;
-    const regClose     = document.getElementById('reg-close').value;
-    const startDate    = document.getElementById('start-date').value;
-    const endDate      = document.getElementById('end-date').value;
-    const maxTeams    = document.getElementById('max-teams').value;
-    const maxPlayers  = document.getElementById('max-players').value;
-    const entryFee    = document.getElementById('entry-fee').value;
+    const nameEl       = document.getElementById('comp-name');
+    const gameEl       = document.getElementById('comp-game');
+    const formatEl     = document.getElementById('comp-format');
+    const descEl       = document.getElementById('comp-desc');
+    const regOpenEl    = document.getElementById('reg-open');
+    const regCloseEl   = document.getElementById('reg-close');
+    const startDateEl  = document.getElementById('start-date');
+    const endDateEl    = document.getElementById('end-date');
+    const maxTeamsEl   = document.getElementById('max-teams');
+    const maxPlayersEl = document.getElementById('max-players');
+    const entryFeeEl   = document.getElementById('entry-fee');
 
-    const p1 = parseInt(document.getElementById('prize-1').value) || 0;
-    const p2 = parseInt(document.getElementById('prize-2').value) || 0;
-    const p3 = parseInt(document.getElementById('prize-3').value) || 0;
+    const name        = (nameEl?.value || '').trim();
+    const game        = gameEl?.value || '';
+    const formatLabel = formatEl?.value || '';
+    const description = (descEl?.value || '').trim();
+    const regOpen     = regOpenEl?.value || '';
+    const regClose    = regCloseEl?.value || '';
+    const startDate   = startDateEl?.value || '';
+    const endDate     = endDateEl?.value || '';
+    const maxTeams    = parseInt(maxTeamsEl?.value);
+    const maxPlayers  = parseInt(maxPlayersEl?.value);
+    const entryFee    = parseFloat(entryFeeEl?.value || '0');
+
+    const p1 = parseInt(document.getElementById('prize-1')?.value) || 0;
+    const p2 = parseInt(document.getElementById('prize-2')?.value) || 0;
+    const p3 = parseInt(document.getElementById('prize-3')?.value) || 0;
     const totalPrize = p1 + p2 + p3;
 
-    // Collect all dynamic co-organizer inputs
-    const coOrganizers = Array.from(document.querySelectorAll('.co-organizer-input'))
-      .map(input => input.value.trim().replace(/^@/, ''))
-      .filter(Boolean);
+    // ── QA Rule 1: Competition Name ──
+    let firstErrorField = null;
 
-    // ── Validation: Basic fields ──
-    if (!name || !game || !formatLabel) {
-      if (typeof showToast === 'function') showToast('Please fill in all basic information!', 'error');
-      return;
+    if (!name) {
+      showFieldError('comp-name', 'Tournament name is required.');
+      if (!firstErrorField) firstErrorField = nameEl;
+    } else if (name.length < 3) {
+      showFieldError('comp-name', 'Tournament name must be at least 3 characters.');
+      if (!firstErrorField) firstErrorField = nameEl;
+    } else if (name.length > 100) {
+      showFieldError('comp-name', 'Tournament name cannot exceed 100 characters.');
+      if (!firstErrorField) firstErrorField = nameEl;
     }
 
-    // ── Validation: Dates ──
-    clearDateErrors();
-    const dateErr = validateDates(regOpen, regClose, startDate, endDate);
-    if (dateErr) {
-      if (typeof showToast === 'function') showToast(dateErr, 'error');
+    // ── QA Rule 2: Game Selection ──
+    if (!game) {
+      showFieldError('comp-game', 'Please select a game.');
+      if (!firstErrorField) firstErrorField = gameEl;
+    }
+
+    // ── QA Rule 3: Format Selection ──
+    if (!formatLabel) {
+      showFieldError('comp-format', 'Please select a tournament format.');
+      if (!firstErrorField) firstErrorField = formatEl;
+    }
+
+    // ── QA Rule 4: Description ──
+    if (!description) {
+      showFieldError('comp-desc', 'Tournament description is required.');
+      if (!firstErrorField) firstErrorField = descEl;
+    } else if (description.length < 10) {
+      showFieldError('comp-desc', 'Description must be at least 10 characters long.');
+      if (!firstErrorField) firstErrorField = descEl;
+    }
+
+    // ── QA Rule 5: Dates & Schedule Integrity ──
+    const dateErrors = validateDates(regOpen, regClose, startDate, endDate);
+    if (dateErrors) {
+      Object.keys(dateErrors).forEach(fieldId => {
+        showFieldError(fieldId, dateErrors[fieldId]);
+        if (!firstErrorField) firstErrorField = document.getElementById(fieldId);
+      });
+    }
+
+    // ── QA Rule 6: Max Teams ──
+    if (isNaN(maxTeams) || maxTeams < 2) {
+      showFieldError('max-teams', 'Max Teams must be at least 2 teams.');
+      if (!firstErrorField) firstErrorField = maxTeamsEl;
+    } else if (maxTeams > 256) {
+      showFieldError('max-teams', 'Max Teams cannot exceed 256 teams.');
+      if (!firstErrorField) firstErrorField = maxTeamsEl;
+    }
+
+    // ── QA Rule 7: Max Players per Team ──
+    if (isNaN(maxPlayers) || maxPlayers < 1) {
+      showFieldError('max-players', 'Max Players per Team must be at least 1 player.');
+      if (!firstErrorField) firstErrorField = maxPlayersEl;
+    } else if (maxPlayers > 20) {
+      showFieldError('max-players', 'Max Players per Team cannot exceed 20 players.');
+      if (!firstErrorField) firstErrorField = maxPlayersEl;
+    }
+
+    // ── QA Rule 8: Entry Fee ──
+    if (isNaN(entryFee) || entryFee < 0) {
+      showFieldError('entry-fee', 'Entry fee cannot be negative.');
+      if (!firstErrorField) firstErrorField = entryFeeEl;
+    }
+
+    // ── QA Rule 9: Prize Pool Distribution ──
+    if (p1 < 0) showFieldError('prize-1', 'Prize cannot be negative.');
+    if (p2 < 0) showFieldError('prize-2', 'Prize cannot be negative.');
+    if (p3 < 0) showFieldError('prize-3', 'Prize cannot be negative.');
+    if (p2 > 0 && p2 > p1) {
+      showFieldError('prize-2', '1st place prize must be ≥ 2nd place prize.');
+      if (!firstErrorField) firstErrorField = document.getElementById('prize-2');
+    }
+    if (p3 > 0 && p3 > p2 && p2 > 0) {
+      showFieldError('prize-3', '2nd place prize must be ≥ 3rd place prize.');
+      if (!firstErrorField) firstErrorField = document.getElementById('prize-3');
+    }
+
+    // ── QA Rule 10: Co-Organizers Validation ──
+    const coOrganizers = [];
+    const coInputs = document.querySelectorAll('.co-organizer-input');
+    coInputs.forEach(input => {
+      const val = input.value.trim().replace(/^@/, '');
+      if (val) {
+        if (val.toLowerCase() === (session.username || '').toLowerCase()) {
+          input.style.borderColor = '#ef4444';
+          if (typeof showToast === 'function') showToast(`You (@${session.username}) are already the primary creator/owner.`, 'error');
+          if (!firstErrorField) firstErrorField = input;
+        } else if (coOrganizers.map(s => s.toLowerCase()).includes(val.toLowerCase())) {
+          input.style.borderColor = '#ef4444';
+          if (typeof showToast === 'function') showToast(`Co-organizer @${val} is added multiple times.`, 'error');
+          if (!firstErrorField) firstErrorField = input;
+        } else {
+          coOrganizers.push(val);
+        }
+      }
+    });
+
+    // ── If any validation failed, halt submission & scroll to first error ──
+    if (firstErrorField) {
+      firstErrorField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      firstErrorField.focus();
+      if (typeof showToast === 'function') {
+        showToast('Please fix all highlighted errors to auto-approve tournament.', 'error');
+      }
       return;
     }
 

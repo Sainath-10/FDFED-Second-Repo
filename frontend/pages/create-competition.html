@@ -44,14 +44,14 @@
             <div class="form-section-title">Basic Information</div>
 
             <div class="form-group">
-              <label class="form-label" for="comp-name">Competition Name</label>
+              <label class="form-label" for="comp-name">Competition Name <span style="color:#ef4444">*</span></label>
               <input class="form-input" type="text" id="comp-name" placeholder="e.g. Summer Showdown 2026"
                 oninput="updateSummary()" required>
             </div>
 
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label" for="comp-game">Game</label>
+                <label class="form-label" for="comp-game">Game <span style="color:#ef4444">*</span></label>
                 <select class="form-select" id="comp-game" onchange="updateSummary()" required>
                   <option value="">Select game…</option>
                   <option>Counter-Strike 2</option>
@@ -63,7 +63,7 @@
                 </select>
               </div>
               <div class="form-group">
-                <label class="form-label" for="comp-format">Format</label>
+                <label class="form-label" for="comp-format">Format <span style="color:#ef4444">*</span></label>
                 <select class="form-select" id="comp-format" onchange="updateSummary()" required>
                   <option value="">Select format…</option>
                   <option>Single Elimination</option>
@@ -73,9 +73,9 @@
             </div>
 
             <div class="form-group">
-              <label class="form-label" for="comp-desc">Description</label>
+              <label class="form-label" for="comp-desc">Description <span style="color:#ef4444">*</span></label>
               <textarea class="form-textarea" id="comp-desc"
-                placeholder="Describe your tournament — rules, goals, what makes it special…"></textarea>
+                placeholder="Describe your tournament — rules, schedule, eligibility requirements… (at least 10 characters)" required></textarea>
             </div>
 
             <!-- Co-Organizers -->
@@ -101,8 +101,8 @@
             <div class="upload-area" onclick="document.getElementById('banner-file').click()">
               <div class="upload-icon">🖼️</div>
               <div class="upload-text">
-                <span>Click to upload</span> or drag & drop<br>
-                PNG, JPG recommended — 1280×720 or larger
+                <span>Click to upload custom banner</span> or drag &amp; drop<br>
+                Automatic game-tailored banner will be used if left empty
               </div>
               <input type="file" id="banner-file" accept="image/*" style="display:none;"
                 onchange="previewBanner(event)">
@@ -115,47 +115,47 @@
 
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label" for="reg-open">Registration Opens</label>
-                <input class="form-input" type="date" id="reg-open" oninput="updateSummary()">
+                <label class="form-label" for="reg-open">Registration Opens <span style="color:#ef4444">*</span></label>
+                <input class="form-input" type="date" id="reg-open" oninput="updateSummary()" required>
               </div>
               <div class="form-group">
-                <label class="form-label" for="reg-close">Registration Closes</label>
-                <input class="form-input" type="date" id="reg-close" oninput="updateSummary()">
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label" for="start-date">Start Date</label>
-                <input class="form-input" type="date" id="start-date" oninput="updateSummary()">
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="end-date">End Date</label>
-                <input class="form-input" type="date" id="end-date" oninput="updateSummary()">
+                <label class="form-label" for="reg-close">Registration Closes <span style="color:#ef4444">*</span></label>
+                <input class="form-input" type="date" id="reg-close" oninput="updateSummary()" required>
               </div>
             </div>
 
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label" for="max-teams">Max Teams</label>
-                <input class="form-input" type="number" id="max-teams" placeholder="e.g. 16" min="1" value="16" oninput="updateSummary()">
+                <label class="form-label" for="start-date">Tournament Start Date <span style="color:#ef4444">*</span></label>
+                <input class="form-input" type="date" id="start-date" oninput="updateSummary()" required>
               </div>
               <div class="form-group">
-                <label class="form-label" for="max-players">Max Players per Team</label>
-                <input class="form-input" type="number" id="max-players" placeholder="e.g. 5" min="1" value="5" oninput="updateSummary()">
+                <label class="form-label" for="end-date">Tournament End Date <span style="color:#ef4444">*</span></label>
+                <input class="form-input" type="date" id="end-date" oninput="updateSummary()" required>
               </div>
             </div>
 
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label" for="entry-fee">Entry Fee (₹)</label>
-                <input class="form-input" type="number" id="entry-fee" placeholder="0 = Free" min="0">
+                <label class="form-label" for="max-teams">Max Teams (2–256) <span style="color:#ef4444">*</span></label>
+                <input class="form-input" type="number" id="max-teams" placeholder="e.g. 16" min="2" max="256" value="16" oninput="updateSummary()" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="max-players">Max Players per Team (1–20) <span style="color:#ef4444">*</span></label>
+                <input class="form-input" type="number" id="max-players" placeholder="e.g. 5" min="1" max="20" value="5" oninput="updateSummary()" required>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="entry-fee">Entry Fee (₹, 0 = Free)</label>
+                <input class="form-input" type="number" id="entry-fee" placeholder="0 = Free" min="0" value="0">
               </div>
               <div class="form-group" style="visibility: hidden;"></div>
             </div>
 
             <!-- Prize Pool -->
-            <div class="form-section-title">Prize Pool</div>
+            <div class="form-section-title">Prize Pool Distribution (₹)</div>
 
             <div class="prize-tiers">
               <div class="prize-tier">

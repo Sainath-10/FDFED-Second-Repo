@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { CompetitionRepository } from './repositories/competition.repository';
 import { CreateCompetitionDto, UpdateCompetitionDto } from './dto/competition.dto';
 import { ICompetition } from '@/common/interfaces';
@@ -13,11 +13,30 @@ export class CompetitionsService {
   ): Promise<ICompetition> {
     const { name, description, startDate, endDate, coOrganizers } = createCompetitionDto;
 
+    if (!name || name.trim().length < 3) {
+      throw new BadRequestException('Tournament name must be at least 3 characters.');
+    }
+    if (!description || description.trim().length < 10) {
+      throw new BadRequestException('Tournament description must be at least 10 characters.');
+    }
+    if (!startDate || isNaN(new Date(startDate).getTime())) {
+      throw new BadRequestException('Valid tournament start date is required for auto-approval.');
+    }
+    if (!endDate || isNaN(new Date(endDate).getTime())) {
+      throw new BadRequestException('Valid tournament end date is required for auto-approval.');
+    }
+
+    const sDate = new Date(startDate);
+    const eDate = new Date(endDate);
+    if (sDate >= eDate) {
+      throw new BadRequestException('Tournament End Date must be strictly after Start Date.');
+    }
+
     return this.competitionRepository.create(
-      name,
-      description,
-      new Date(startDate),
-      new Date(endDate),
+      name.trim(),
+      description.trim(),
+      sDate,
+      eDate,
       createdBy,
       coOrganizers || [],
     );
