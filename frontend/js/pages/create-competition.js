@@ -140,6 +140,20 @@ function validateDates(regOpen, regClose, startDate, endDate) {
   });
 });
 
+// Real-time general field input clear
+['comp-name', 'comp-game', 'comp-format', 'comp-desc', 'max-teams', 'max-players', 'entry-fee', 'prize-1', 'prize-2', 'prize-3'].forEach(id => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const clearFn = () => {
+    el.style.borderColor = '';
+    el.style.boxShadow = '';
+    const errEl = document.getElementById(`err-${id}`);
+    if (errEl) errEl.remove();
+  };
+  el.addEventListener('input', clearFn);
+  el.addEventListener('change', clearFn);
+});
+
 // ── Misc helpers ─────────────────────────────────────────────
 function toggleCheck(el) {
   el.classList.toggle('checked');
@@ -229,10 +243,10 @@ if (createCompForm) {
     let firstErrorField = null;
 
     if (!name) {
-      showFieldError('comp-name', 'Tournament name is required.');
+      showFieldError('comp-name', 'Please enter the valid name');
       if (!firstErrorField) firstErrorField = nameEl;
     } else if (name.length < 3) {
-      showFieldError('comp-name', 'Tournament name must be at least 3 characters.');
+      showFieldError('comp-name', 'Please enter the valid name (at least 3 characters)');
       if (!firstErrorField) firstErrorField = nameEl;
     } else if (name.length > 100) {
       showFieldError('comp-name', 'Tournament name cannot exceed 100 characters.');
