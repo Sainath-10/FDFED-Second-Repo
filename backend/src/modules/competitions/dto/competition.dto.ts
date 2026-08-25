@@ -30,6 +30,23 @@ export class CreateCompetitionDto {
   })
   @IsDateString()
   endDate: string;
+
+  @ApiProperty({
+    description: 'Initial co-organizer IDs or usernames',
+    example: ['admin@nexus.gg'],
+    required: false,
+  })
+  @IsOptional()
+  coOrganizers?: string[];
+}
+
+export class AddCoOrganizerDto {
+  @ApiProperty({
+    description: 'User ID or username of the co-organizer to add',
+    example: 'co_organizer_user',
+  })
+  @IsString()
+  organizerId: string;
 }
 
 export class UpdateCompetitionDto {
@@ -88,6 +105,9 @@ export class CompetitionResponseDto {
 
   @ApiProperty()
   createdBy: string;
+
+  @ApiProperty({ example: ['organizer_1', 'co_organizer_2'] })
+  organizers: string[];
 
   @ApiProperty()
   createdAt: Date;

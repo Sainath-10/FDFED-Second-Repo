@@ -9,14 +9,17 @@ export class CompetitionsService {
 
   async createCompetition(
     createCompetitionDto: CreateCompetitionDto,
+    createdBy: string = 'system',
   ): Promise<ICompetition> {
-    const { name, description, startDate, endDate } = createCompetitionDto;
+    const { name, description, startDate, endDate, coOrganizers } = createCompetitionDto;
 
     return this.competitionRepository.create(
       name,
       description,
       new Date(startDate),
       new Date(endDate),
+      createdBy,
+      coOrganizers || [],
     );
   }
 
@@ -30,6 +33,18 @@ export class CompetitionsService {
 
   async getCompetitionsByUser(userId: string): Promise<ICompetition[]> {
     return this.competitionRepository.findByCreator(userId);
+  }
+
+  async getCompetitionsByOrganizer(userId: string): Promise<ICompetition[]> {
+    return this.competitionRepository.findByOrganizer(userId);
+  }
+
+  async addCoOrganizer(id: string, organizerId: string): Promise<ICompetition> {
+    return this.competitionRepository.addCoOrganizer(id, organizerId);
+  }
+
+  async removeCoOrganizer(id: string, organizerId: string): Promise<ICompetition> {
+    return this.competitionRepository.removeCoOrganizer(id, organizerId);
   }
 
   async updateCompetition(

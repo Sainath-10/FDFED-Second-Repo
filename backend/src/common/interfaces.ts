@@ -23,6 +23,7 @@ export interface ICompetition {
   endDate: Date;
   status: 'draft' | 'active' | 'completed';
   createdBy: string;
+  organizers: string[];
   createdAt: Date;
 }
 
@@ -40,7 +41,10 @@ export interface IDispute {
   competitionId: string;
   teamId: string;
   reportedBy: string;
+  organizers?: string[];
   description: string;
   status: 'open' | 'under_review' | 'resolved' | 'escalated';
+  resolutionNotes?: string;
+  resolvedBy?: string;
   createdAt: Date;
 }
