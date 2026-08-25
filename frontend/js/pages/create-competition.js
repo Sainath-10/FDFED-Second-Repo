@@ -196,7 +196,7 @@ if (createCompForm) {
     const bannerPreview = document.getElementById('banner-preview');
     const bannerImg = bannerPreview && bannerPreview.src && !bannerPreview.src.includes('window.location')
       ? bannerPreview.src
-      : '../assets/b890c61489a080992ad7e99adabb1145e6d59606.png';
+      : getDefaultBanner(game);
 
     const prizePoolStr = `₹${totalPrize.toLocaleString('en-IN')}`;
 
@@ -253,8 +253,25 @@ if (createCompForm) {
   });
 }
 
+function getDefaultBanner(gameName) {
+  const g = String(gameName || '').toLowerCase();
+  if (g.includes('valorant')) {
+    return '../assets/8764f3a5ce7a0eb0275743600c60fb0c727893c8.png';
+  }
+  if (g.includes('counter-strike') || g.includes('cs2') || g.includes('cs:go') || g.includes('csgo')) {
+    return '../assets/c4f97eccde97e10ac89b61ec5fb36fdce0ab2477.png';
+  }
+  if (g.includes('league of legends') || g.includes('lol')) {
+    return '../assets/95bc0921c86340a2cee9e0a2d7ecd20b15a26143.png';
+  }
+  if (g.includes('apex')) {
+    return '../assets/f03e2b11537e425d8544ee3ca732bf73af5137c0.png';
+  }
+  return '../assets/b890c61489a080992ad7e99adabb1145e6d59606.png';
+}
+
 // ── Co-Organizer Dynamic Inputs ─────────────────────────────
-function addOrganizerInputRow(initialValue = '') {
+function addOrganizerInputRow(initialValue = '', shouldFocus = false) {
   const container = document.getElementById('co-organizers-container');
   if (!container) return;
 
@@ -262,32 +279,35 @@ function addOrganizerInputRow(initialValue = '') {
   const row = document.createElement('div');
   row.id = rowId;
   row.className = 'co-organizer-row';
-  row.style.cssText = 'display:flex;gap:8px;align-items:center;animation:fadeIn 0.2s ease-in-out;';
+  row.style.cssText = 'display:flex;gap:8px;align-items:center;';
 
   row.innerHTML = `
     <div style="position:relative;flex:1;">
       <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:13px;font-weight:700;">@</span>
-      <input type="text" class="form-input co-organizer-input" placeholder="e.g. co_organizer_username or ID" value="${initialValue}" style="padding-left:28px;width:100%;" required>
+      <input type="text" class="form-input co-organizer-input" placeholder="e.g. co_organizer_username or ID" value="${initialValue}" style="padding-left:28px;width:100%;">
     </div>
     <button type="button" class="btn-table-danger" onclick="document.getElementById('${rowId}').remove()" style="padding:10px 14px;font-size:13px;cursor:pointer;border-radius:6px;background:rgba(239,68,68,0.12);color:#ef4444;border:1px solid rgba(239,68,68,0.3);" title="Remove co-organizer">
       ✕
     </button>
   `;
   container.appendChild(row);
-  const input = row.querySelector('input');
-  if (input && !initialValue) input.focus();
+  if (shouldFocus) {
+    const input = row.querySelector('input');
+    if (input) input.focus();
+  }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Spawn 1 empty co-organizer row by default if container is empty
+  // Spawn 1 empty co-organizer row by default without auto-focusing
   const container = document.getElementById('co-organizers-container');
   if (container && container.children.length === 0) {
-    addOrganizerInputRow();
+    addOrganizerInputRow('', false);
   }
 });
 
 // Global exposure for inline onclicks
 window.addOrganizerInputRow = addOrganizerInputRow;
+window.getDefaultBanner = getDefaultBanner;
 window.updateSummary = updateSummary;
 window.updatePrizeTotal = updatePrizeTotal;
 window.toggleCheck = toggleCheck;

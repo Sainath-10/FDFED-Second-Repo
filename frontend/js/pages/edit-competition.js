@@ -55,9 +55,9 @@ function populateForm(comp) {
       : [];
 
     if (coOrgs.length > 0) {
-      coOrgs.forEach(org => addEditOrganizerRow(org));
+      coOrgs.forEach(org => addEditOrganizerRow(org, false));
     } else {
-      addEditOrganizerRow(); // default 1 row
+      addEditOrganizerRow('', false);
     }
   }
 
@@ -70,9 +70,12 @@ function populateForm(comp) {
   }
   if (comp.endDate) setVal('ef-enddate', comp.endDate);
   if (comp.regDeadline) setVal('ef-regdeadline', comp.regDeadline);
+  
+  // Ensure view stays at top
+  window.scrollTo(0, 0);
 }
 
-function addEditOrganizerRow(initialValue = '') {
+function addEditOrganizerRow(initialValue = '', shouldFocus = false) {
   const container = document.getElementById('edit-coorganizers-container');
   if (!container) return;
 
@@ -80,20 +83,22 @@ function addEditOrganizerRow(initialValue = '') {
   const row = document.createElement('div');
   row.id = rowId;
   row.className = 'edit-coorganizer-row';
-  row.style.cssText = 'display:flex;gap:8px;align-items:center;animation:fadeIn 0.2s ease-in-out;';
+  row.style.cssText = 'display:flex;gap:8px;align-items:center;';
 
   row.innerHTML = `
     <div style="position:relative;flex:1;">
       <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:13px;font-weight:700;">@</span>
-      <input type="text" class="edit-input edit-coorganizer-input" placeholder="e.g. co_organizer_username or ID" value="${initialValue}" style="padding-left:28px;width:100%;" required>
+      <input type="text" class="edit-input edit-coorganizer-input" placeholder="e.g. co_organizer_username or ID" value="${initialValue}" style="padding-left:28px;width:100%;">
     </div>
     <button type="button" class="btn-table-danger" onclick="document.getElementById('${rowId}').remove()" style="padding:10px 14px;font-size:13px;cursor:pointer;border-radius:6px;background:rgba(239,68,68,0.12);color:#ef4444;border:1px solid rgba(239,68,68,0.3);" title="Remove co-organizer">
       ✕
     </button>
   `;
   container.appendChild(row);
-  const input = row.querySelector('input');
-  if (input && !initialValue) input.focus();
+  if (shouldFocus) {
+    const input = row.querySelector('input');
+    if (input) input.focus();
+  }
 }
 window.addEditOrganizerRow = addEditOrganizerRow;
 
@@ -333,10 +338,11 @@ function saveChanges(id) {
   const creator = editComp.createdBy || editComp.organizerId || 'organizer';
   const organizersList = Array.from(new Set([creator, ...coOrganizers]));
 
+  const game = document.getElementById('ef-game').value || editComp.game;
   const updated = {
     ...editComp,
     name,
-    game:              document.getElementById('ef-game').value    || editComp.game,
+    game,
     type:              document.getElementById('ef-type').value    || editComp.type,
     format:            document.getElementById('ef-format').value  || editComp.format,
     status:            document.getElementById('ef-status').value  || editComp.status,
@@ -349,7 +355,8 @@ function saveChanges(id) {
     startDate:         startDate   || editComp.startDate,
     endDate:           endDate     || editComp.endDate,
     regDeadline:       document.getElementById('ef-regdeadline').value || editComp.regDeadline,
-    organizers:        organizersList
+    organizers:        organizersList,
+    img:               editComp.img || getDefaultBanner(game)
   };
 
   window.NexusData.updateCompetition(updated);
@@ -360,6 +367,23 @@ function saveChanges(id) {
   setupStatusPanel(updated);
 
   showEditToast('Changes saved successfully!', 'success');
+}
+
+function getDefaultBanner(gameName) {
+  const g = String(gameName || '').toLowerCase();
+  if (g.includes('valorant')) {
+    return '../assets/8764f3a5ce7a0eb0275743600c60fb0c727893c8.png';
+  }
+  if (g.includes('counter-strike') || g.includes('cs2') || g.includes('cs:go') || g.includes('csgo')) {
+    return '../assets/c4f97eccde97e10ac89b61ec5fb36fdce0ab2477.png';
+  }
+  if (g.includes('league of legends') || g.includes('lol')) {
+    return '../assets/95bc0921c86340a2cee9e0a2d7ecd20b15a26143.png';
+  }
+  if (g.includes('apex')) {
+    return '../assets/f03e2b11537e425d8544ee3ca732bf73af5137c0.png';
+  }
+  return '../assets/b890c61489a080992ad7e99adabb1145e6d59606.png';
 }
 
 /* ── Banner upload ── */
