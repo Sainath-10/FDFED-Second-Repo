@@ -6,6 +6,7 @@ import { TeamsModule } from './modules/teams/teams.module';
 import { TeamsController } from './modules/teams/teams.controller';
 import { DisputesModule } from './modules/disputes/disputes.module';
 import { DisputesController } from './modules/disputes/disputes.controller';
+import { UploadModule } from './modules/upload/upload.module';
 import { FileLoggerService } from './common/logger/file-logger.service';
 import { LoggingMiddleware } from './common/middleware/logging.middleware';
 import { SecurityMiddleware } from './common/middleware/security.middleware';
@@ -15,7 +16,7 @@ import { TeamValidationMiddleware } from './common/middleware/team-validation.mi
 import { DisputeTrackingMiddleware } from './common/middleware/dispute-tracking.middleware';
 
 @Module({
-  imports: [AuthModule, CompetitionsModule, TeamsModule, DisputesModule],
+  imports: [AuthModule, CompetitionsModule, TeamsModule, DisputesModule, UploadModule],
   controllers: [],
   providers: [FileLoggerService],
   exports: [FileLoggerService],

@@ -46,6 +46,7 @@ async function bootstrap() {
     .addTag('Competitions', 'Competition management endpoints')
     .addTag('Teams', 'Team management endpoints')
     .addTag('Disputes', 'Dispute and escalation endpoints')
+    .addTag('Upload', 'File upload and retrieval endpoints')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

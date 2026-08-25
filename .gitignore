@@ -25,6 +25,9 @@ lerna-debug.log*
 # TypeScript
 *.tsbuildinfo
 
+# Uploads
+uploads/
+
 # Editor & OS
 .DS_Store
 Thumbs.db
