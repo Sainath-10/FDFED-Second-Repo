@@ -106,7 +106,8 @@ function buildBuckets(allComps, session) {
     const teams = Array.isArray(comp.teams) ? comp.teams.map(team => ensureTeamShape(team, comp)) : [];
 
     if (userKey) {
-      const isOwner = (normalize(comp.organizerId) === userKey) || (normalize(comp.createdBy) === userKey) || (normalize(comp.organizerId) && normalize(comp.organizerId) === normalize((readSession() && readSession().id)));
+      const isCoOrganizer = Array.isArray(comp.organizers) && comp.organizers.map(normalize).includes(userKey);
+      const isOwner = isCoOrganizer || (normalize(comp.organizerId) === userKey) || (normalize(comp.createdBy) === userKey) || (normalize(comp.organizerId) && normalize(comp.organizerId) === normalize((readSession() && readSession().id)));
       if (isOwner) {
         const approvalStatus = window.NexusData && typeof window.NexusData.getApprovalStatus === 'function'
           ? window.NexusData.getApprovalStatus(comp)
@@ -175,11 +176,6 @@ function buildCard(comp) {
   let clickHandler = `window.location.href='../pages/competition-detail.html?id=${encodeURIComponent(comp.id)}'`;
   let cardAttrs = '';
 
-  if (comp.role === 'organizer' && comp.approvalStatus === 'pending') {
-    clickHandler = `if(typeof showToast==='function'){showToast('This competition is pending admin approval.','error');}`;
-    cardAttrs = 'style="cursor:not-allowed;opacity:0.9;"';
-  }
-
   if (comp.role === 'participant') {
     clickHandler = `window.location.href='../pages/comp-participant.html?id=${encodeURIComponent(comp.id)}'`;
   } else if (comp.role === 'teamlead') {
@@ -205,7 +201,7 @@ function buildCard(comp) {
   const participantLabel = comp.userCreated ? 'members' : 'participants';
   const participantValue = comp.participants || comp.members || 0;
   const approvalBadge = comp.role === 'organizer'
-    ? `<span class="act-badge ${approvalClass(comp.approvalStatus || 'pending')}">${approvalLabel(comp.approvalStatus || 'pending')}</span>`
+    ? `<span class="act-badge act-approved">Auto-Approved (Live)</span>`
     : '';
 
   const teamRegBadge = comp.role === 'teamlead'

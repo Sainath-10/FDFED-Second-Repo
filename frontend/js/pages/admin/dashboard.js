@@ -1,25 +1,25 @@
 initAdminSidebar('home');
 initFooter('../../');
 
-let activeApprovalFilter = 'pending';
+let activeCompFilter = 'all';
 let activeSearch = '';
 
 function normalize(value) {
   return String(value || '').trim().toLowerCase();
 }
 
-function getApprovalStatus(comp) {
-  if (window.NexusData && typeof window.NexusData.getApprovalStatus === 'function') {
-    return window.NexusData.getApprovalStatus(comp);
-  }
-  return normalize(comp && comp.approvalStatus) || 'approved';
+function getCompStatus(comp) {
+  if (!comp) return 'upcoming';
+  if (comp.ended || comp.status === 'completed') return 'completed';
+  if (comp.status === 'ongoing' || comp.status === 'active') return 'active';
+  return 'upcoming';
 }
 
 function updateStats(comps) {
   const total = comps.length;
-  const pending = comps.filter(c => getApprovalStatus(c) === 'pending').length;
-  const approved = comps.filter(c => getApprovalStatus(c) === 'approved').length;
-  const rejected = comps.filter(c => getApprovalStatus(c) === 'rejected').length;
+  const active = comps.filter(c => getCompStatus(c) === 'active').length;
+  const upcoming = comps.filter(c => getCompStatus(c) === 'upcoming').length;
+  const completed = comps.filter(c => getCompStatus(c) === 'completed').length;
 
   const set = (id, value) => {
     const el = document.getElementById(id);
@@ -27,18 +27,18 @@ function updateStats(comps) {
   };
 
   set('stat-total', total);
-  set('stat-pending', pending);
-  set('stat-approved', approved);
-  set('stat-rejected', rejected);
+  set('stat-active', active);
+  set('stat-upcoming', upcoming);
+  set('stat-completed', completed);
 }
 
-function formatApprovalBadge(status) {
+function formatStatusBadge(status) {
   const map = {
-    pending: '<span class="status-pill upcoming">Pending</span>',
-    approved: '<span class="status-pill ongoing">Approved</span>',
-    rejected: '<span class="status-pill completed">Rejected</span>'
+    active: '<span class="status-pill ongoing">Active &amp; Live</span>',
+    upcoming: '<span class="status-pill upcoming">Upcoming</span>',
+    completed: '<span class="status-pill completed">Completed</span>'
   };
-  return map[status] || map.pending;
+  return map[status] || '<span class="status-pill ongoing">Active</span>';
 }
 
 function renderCards() {
@@ -52,16 +52,18 @@ function renderCards() {
   updateStats(comps);
 
   const filtered = comps.filter(comp => {
-    const approval = getApprovalStatus(comp);
-    if (activeApprovalFilter && approval !== activeApprovalFilter) return false;
+    const status = getCompStatus(comp);
+    if (activeCompFilter !== 'all' && status !== activeCompFilter) return false;
     if (!activeSearch) return true;
 
+    const organizersStr = Array.isArray(comp.organizers) ? comp.organizers.join(' ') : '';
     const haystack = [
       comp.name,
       comp.game,
       comp.location,
       comp.description,
-      (comp.createdBy || comp.organizerId)
+      (comp.createdBy || comp.organizerId),
+      organizersStr
     ].map(v => normalize(v)).join(' ');
     return haystack.includes(activeSearch);
   });
@@ -74,31 +76,32 @@ function renderCards() {
   if (empty) empty.style.display = 'none';
 
   wrap.innerHTML = filtered.map(comp => {
-    const approval = getApprovalStatus(comp);
-    const actionButtons = approval === 'pending'
-      ? `
-      <button class="btn-table-primary t-btn-manage" onclick="approveCompetition('${comp.id}')">Approve</button>
-      <button class="btn-table-danger" onclick="rejectCompetition('${comp.id}')">Reject</button>
-      <button class="btn-table-secondary" onclick="openCompDetails('${comp.id}')">View Details</button>`
-      : `<button class="btn-table-secondary t-btn-full" onclick="openCompDetails('${comp.id}')">View Details</button>`;
+    const status = getCompStatus(comp);
+    const orgList = Array.isArray(comp.organizers) && comp.organizers.length > 0
+      ? comp.organizers.join(', ')
+      : (comp.createdBy || comp.organizerId || 'System');
+
+    const actionButtons = `
+      <button class="btn-table-primary t-btn-manage" onclick="location.href='../competition-detail.html?id=${comp.id}'">Overview</button>
+      <button class="btn-table-secondary" onclick="openCompDetails('${comp.id}')">Details</button>
+    `;
 
     return `
       <div class="t-card" data-search="${normalize(comp.name)} ${normalize(comp.game)} ${normalize(comp.location)}">
         <div class="t-card-header">
           <div class="t-card-title-row">
             <h3 class="t-card-name">${comp.name || 'Competition'}</h3>
-            ${formatApprovalBadge(approval)}
+            ${formatStatusBadge(status)}
           </div>
           <div class="t-card-game">${comp.game || 'Unknown Game'}</div>
         </div>
         <div class="t-card-meta">
-          <div class="t-meta-item"><span>Organizer: ${comp.createdBy || comp.organizerId || '—'}</span></div>
-          <div class="t-meta-item"><span>${comp.dates || 'TBD'}</span></div>
-          <div class="t-meta-item"><span>${comp.location || 'Online'}</span></div>
-          <div class="t-meta-item"><span>${comp.participants || 0} participants</span></div>
+          <div class="t-meta-item"><span>👥 Organizers: <strong>${orgList}</strong></span></div>
+          <div class="t-meta-item"><span>📅 ${comp.dates || 'TBD'}</span></div>
+          <div class="t-meta-item"><span>📍 ${comp.location || 'Online'}</span></div>
+          <div class="t-meta-item"><span>🛡️ ${comp.participants || (comp.teams ? comp.teams.length : 0)} teams</span></div>
           <div class="t-meta-item t-meta-prize"><span class="prize-text">${comp.prizePool || '—'} Prize Pool</span></div>
         </div>
-        ${approval === 'pending' ? '<div class="t-card-pending-bar"><span>Awaiting admin decision</span></div>' : ''}
         <div class="t-card-actions">${actionButtons}</div>
       </div>`;
   }).join('');
@@ -109,59 +112,11 @@ function filterCards(q) {
   renderCards();
 }
 
-function setApprovalFilter(filter, btn) {
-  activeApprovalFilter = filter;
+function setCompFilter(filter, btn) {
+  activeCompFilter = filter;
   document.querySelectorAll('#approval-tabs .approval-tab').forEach(tab => tab.classList.remove('active'));
   if (btn) btn.classList.add('active');
   renderCards();
-}
-
-function approveCompetition(compId) {
-  if (!window.NexusData || typeof window.NexusData.setCompetitionApproval !== 'function') return;
-  const session = JSON.parse(localStorage.getItem('nexus.auth.session') || 'null');
-  const adminUser = session && session.username ? session.username : 'admin';
-  const result = window.NexusData.setCompetitionApproval(compId, 'approved', adminUser);
-  if (!result.ok) {
-    if (typeof showToast === 'function') showToast(result.error || 'Unable to approve competition.', 'error');
-    return;
-  }
-  // Record in admin activity log
-  const comp = result.competition || {};
-  pushAdminActivityEntry({ type: 'approved', title: 'Approved tournament: ' + (comp.name || compId) });
-  if (typeof showToast === 'function') showToast('Competition approved successfully.');
-  renderCards();
-}
-
-function rejectCompetition(compId) {
-  if (!window.NexusData || typeof window.NexusData.setCompetitionApproval !== 'function') return;
-  const session = JSON.parse(localStorage.getItem('nexus.auth.session') || 'null');
-  const adminUser = session && session.username ? session.username : 'admin';
-  const result = window.NexusData.setCompetitionApproval(compId, 'rejected', adminUser);
-  if (!result.ok) {
-    if (typeof showToast === 'function') showToast(result.error || 'Unable to reject competition.', 'error');
-    return;
-  }
-  // Record in admin activity log
-  const comp = result.competition || {};
-  pushAdminActivityEntry({ type: 'rejected', title: 'Rejected tournament: ' + (comp.name || compId) });
-  if (typeof showToast === 'function') showToast('Competition rejected. Organizer notified.', 'error');
-  renderCards();
-}
-
-/* ── Shared admin activity helper ── */
-function pushAdminActivityEntry(entry) {
-  const ADMIN_ACTIVITY_KEY = 'nexus.admin.activity';
-  try {
-    const raw = localStorage.getItem(ADMIN_ACTIVITY_KEY);
-    const list = raw ? JSON.parse(raw) : [];
-    list.unshift({
-      id: 'act-' + Math.random().toString(36).slice(2, 10),
-      type: entry.type || 'info',
-      title: entry.title || '',
-      time: new Date().toISOString()
-    });
-    localStorage.setItem(ADMIN_ACTIVITY_KEY, JSON.stringify(list.slice(0, 30)));
-  } catch (e) {}
 }
 
 function openCompDetails(compId) {
@@ -174,11 +129,16 @@ function openCompDetails(compId) {
   const body = document.getElementById('admin-modal-body');
   if (!modal || !title || !body) return;
 
+  const orgList = Array.isArray(comp.organizers) && comp.organizers.length > 0
+    ? comp.organizers.join(', ')
+    : (comp.createdBy || comp.organizerId || '—');
+
   title.textContent = comp.name || 'Competition Details';
   body.innerHTML = `
     <div class="admin-detail-grid">
       <p><strong>Game:</strong> ${comp.game || '—'}</p>
-      <p><strong>Organizer:</strong> ${comp.createdBy || comp.organizerId || '—'}</p>
+      <p><strong>Primary Creator:</strong> ${comp.createdBy || comp.organizerId || '—'}</p>
+      <p><strong>All Organizers:</strong> ${orgList}</p>
       <p><strong>Type:</strong> ${comp.type || '—'}</p>
       <p><strong>Format:</strong> ${comp.format || '—'}</p>
       <p><strong>Dates:</strong> ${comp.dates || '—'}</p>
@@ -188,7 +148,7 @@ function openCompDetails(compId) {
       <p><strong>Max Teams:</strong> ${comp.maxTeams || '—'}</p>
       <p><strong>Prize Pool:</strong> ${comp.prizePool || '—'}</p>
       <p><strong>Location:</strong> ${comp.location || 'Online'}</p>
-      <p><strong>Approval Status:</strong> ${getApprovalStatus(comp)}</p>
+      <p><strong>Status:</strong> <span style="color:#c6ff33;font-weight:700">Auto-Approved (Live)</span></p>
     </div>
     <div class="admin-detail-desc"><strong>Description:</strong><br>${comp.description || 'No description provided.'}</div>
   `;
@@ -203,8 +163,8 @@ function closeCompDetails() {
 document.addEventListener('DOMContentLoaded', () => {
   const params = new URLSearchParams(window.location.search);
   const filter = normalize(params.get('filter'));
-  if (filter === 'pending' || filter === 'approved' || filter === 'rejected') {
-    activeApprovalFilter = filter;
+  if (filter === 'active' || filter === 'upcoming' || filter === 'completed') {
+    activeCompFilter = filter;
     document.querySelectorAll('#approval-tabs .approval-tab').forEach(tab => {
       tab.classList.toggle('active', tab.getAttribute('data-filter') === filter);
     });
@@ -219,8 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 window.filterCards = filterCards;
-window.setApprovalFilter = setApprovalFilter;
-window.approveCompetition = approveCompetition;
-window.rejectCompetition = rejectCompetition;
+window.setCompFilter = setCompFilter;
+window.setApprovalFilter = setCompFilter;
 window.openCompDetails = openCompDetails;
 window.closeCompDetails = closeCompDetails;

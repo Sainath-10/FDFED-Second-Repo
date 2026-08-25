@@ -270,9 +270,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const approvalStatus = (window.NexusData && typeof window.NexusData.getApprovalStatus === 'function')
     ? window.NexusData.getApprovalStatus(currentComp)
-    : String(currentComp.approvalStatus || 'approved').toLowerCase();
-  if (approvalStatus !== 'approved') {
-    if (typeof showToast === 'function') showToast('Team registration is not open until competition approval.', 'error');
+    : 'approved';
+  if (approvalStatus === 'rejected') {
+    if (typeof showToast === 'function') showToast('This competition has been archived.', 'error');
     window.location.href = 'competitions.html';
     return;
   }

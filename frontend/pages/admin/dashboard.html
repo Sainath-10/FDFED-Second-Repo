@@ -23,37 +23,38 @@
         <div><div class="dash-stat-num" id="stat-total">0</div><div class="dash-stat-lbl">Total Tournaments</div></div>
       </div>
       <div class="dash-stat-card">
+        <div class="dash-stat-icon dash-stat-icon-success">⚡</div>
+        <div><div class="dash-stat-num" id="stat-active">0</div><div class="dash-stat-lbl">Active &amp; Live (Auto-Approved)</div></div>
+      </div>
+      <div class="dash-stat-card">
         <div class="dash-stat-icon dash-stat-icon-info">📅</div>
-        <div><div class="dash-stat-num" id="stat-pending">0</div><div class="dash-stat-lbl">Pending Approval</div></div>
+        <div><div class="dash-stat-num" id="stat-upcoming">0</div><div class="dash-stat-lbl">Upcoming</div></div>
       </div>
       <div class="dash-stat-card">
-        <div class="dash-stat-icon dash-stat-icon-success">▶️</div>
-        <div><div class="dash-stat-num" id="stat-approved">0</div><div class="dash-stat-lbl">Approved</div></div>
-      </div>
-      <div class="dash-stat-card">
-        <div class="dash-stat-icon dash-stat-icon-warn">⏳</div>
-        <div><div class="dash-stat-num" id="stat-rejected">0</div><div class="dash-stat-lbl">Rejected</div></div>
+        <div class="dash-stat-icon dash-stat-icon-warn">🏁</div>
+        <div><div class="dash-stat-num" id="stat-completed">0</div><div class="dash-stat-lbl">Completed</div></div>
       </div>
     </div>
 
     <!-- All Tournaments as Cards -->
     <div class="tournaments-section">
       <div class="tournaments-section-header">
-        <h2 class="table-title-md">All Tournaments</h2>
+        <h2 class="table-title-md">Tournament Directory &amp; Oversight</h2>
         <div class="search-bar table-search-wrap">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>
-          <input type="text" placeholder="Search tournaments by name, game, or location..." oninput="filterCards(this.value)">
+          <input type="text" placeholder="Search tournaments by name, game, or organizer..." oninput="filterCards(this.value)">
         </div>
       </div>
 
       <div class="approval-tabs" id="approval-tabs">
-        <button class="approval-tab active" data-filter="pending" onclick="setApprovalFilter('pending', this)">Pending</button>
-        <button class="approval-tab" data-filter="approved" onclick="setApprovalFilter('approved', this)">Approved</button>
-        <button class="approval-tab" data-filter="rejected" onclick="setApprovalFilter('rejected', this)">Rejected</button>
+        <button class="approval-tab active" data-filter="all" onclick="setCompFilter('all', this)">All</button>
+        <button class="approval-tab" data-filter="active" onclick="setCompFilter('active', this)">Active / Live</button>
+        <button class="approval-tab" data-filter="upcoming" onclick="setCompFilter('upcoming', this)">Upcoming</button>
+        <button class="approval-tab" data-filter="completed" onclick="setCompFilter('completed', this)">Completed</button>
       </div>
 
       <div class="tournament-cards-grid" id="tournament-cards">
-        <p class="act-empty" id="admin-empty" style="display:none;grid-column:1/-1;">No competitions in this status.</p>
+        <p class="act-empty" id="admin-empty" style="display:none;grid-column:1/-1;">No tournaments in this view.</p>
       </div>
     </div>
 

@@ -324,14 +324,50 @@ function addCompetition(comp) {
     } catch (e) { }
   }
 
-  comp.approvalStatus = 'pending';
+  comp.approvalStatus = comp.approvalStatus || 'approved';
   comp.approvalUpdatedAt = new Date().toISOString();
-  comp.approvalUpdatedBy = 'system';
+  comp.approvalUpdatedBy = 'auto-approval-system';
   comp.createdBy = creatorUsername || comp.createdBy || comp.organizerId || '';
+  comp.organizers = Array.isArray(comp.organizers) && comp.organizers.length > 0
+    ? comp.organizers
+    : Array.from(new Set([comp.createdBy, comp.organizerId].filter(Boolean)));
 
   forgetDeletedCompetitionId(comp.id);
   all.unshift(comp);
   saveCompetitions(all);
+}
+
+function addCoOrganizerToComp(compId, organizerUsername) {
+  if (!compId || !organizerUsername) return { ok: false, error: 'Missing competition or username.' };
+  const all = loadCompetitions();
+  const comp = all.find(c => c && c.id === compId);
+  if (!comp) return { ok: false, error: 'Competition not found.' };
+
+  if (!Array.isArray(comp.organizers)) {
+    comp.organizers = Array.from(new Set([comp.createdBy, comp.organizerId].filter(Boolean)));
+  }
+
+  const cleanUser = String(organizerUsername).trim();
+  if (!comp.organizers.includes(cleanUser)) {
+    comp.organizers.push(cleanUser);
+  }
+
+  updateCompetition(comp);
+  return { ok: true, competition: comp };
+}
+
+function removeCoOrganizerFromComp(compId, organizerUsername) {
+  if (!compId || !organizerUsername) return { ok: false, error: 'Missing competition or username.' };
+  const all = loadCompetitions();
+  const comp = all.find(c => c && c.id === compId);
+  if (!comp) return { ok: false, error: 'Competition not found.' };
+
+  if (Array.isArray(comp.organizers)) {
+    comp.organizers = comp.organizers.filter(u => u !== organizerUsername && u !== comp.createdBy);
+  }
+
+  updateCompetition(comp);
+  return { ok: true, competition: comp };
 }
 
 function getApprovalStatus(comp) {
@@ -529,6 +565,8 @@ window.NexusData = {
   updateCompetition, deleteCompetition, addCompetition, generateId, getCompIdFromUrl,
   goToComp, goToParticipant,
   getApprovalStatus, setCompetitionApproval, getCompetitionsForPublic,
+  addCoOrganizer: addCoOrganizerToComp,
+  removeCoOrganizer: removeCoOrganizerFromComp,
   setTeamRegistrationStatus,
   seedShowcaseCompetitions,
 };

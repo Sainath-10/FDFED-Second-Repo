@@ -170,15 +170,19 @@ if (createCompForm) {
     const p3 = parseInt(document.getElementById('prize-3').value) || 0;
     const totalPrize = p1 + p2 + p3;
 
+    // Parse co-organizers
+    const coOrganizersInput = document.getElementById('comp-coorganizers')?.value || '';
+    const coOrganizers = coOrganizersInput
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+
     // ── Validation: Basic fields ──
     if (!name || !game || !formatLabel) {
       if (typeof showToast === 'function') showToast('Please fill in all basic information!', 'error');
       return;
     }
 
-    // ── Validation: Prize pool ──
-    // No longer mandatory as per request.
-    
     // ── Validation: Dates ──
     clearDateErrors();
     const dateErr = validateDates(regOpen, regClose, startDate, endDate);
@@ -197,6 +201,9 @@ if (createCompForm) {
       : '../assets/b890c61489a080992ad7e99adabb1145e6d59606.png';
 
     const prizePoolStr = `₹${totalPrize.toLocaleString('en-IN')}`;
+
+    // Combine primary creator and co-organizers
+    const organizersList = Array.from(new Set([session.username, ...coOrganizers]));
 
     const newComp = {
       id: window.NexusData.generateId(name),
@@ -227,7 +234,9 @@ if (createCompForm) {
       standings: [],
       disputes: [],
       organizerId: session.username,
-      approvalStatus: 'pending',
+      createdBy: session.username,
+      organizers: organizersList,
+      approvalStatus: 'approved', // Auto-approved immediately
       badge: 'New',
       badgeClass: 'hot',
       season: 'Season 1',
@@ -239,8 +248,10 @@ if (createCompForm) {
       window.NexusData.addCompetition(newComp);
     }
 
-    if (typeof showToast === 'function') showToast(`Competition "${name}" submitted for admin approval.`);
-    setTimeout(() => window.location.href = 'my-activity.html', 1400);
+    if (typeof showToast === 'function') {
+      showToast(`Tournament "${name}" created and auto-approved (Live)!`);
+    }
+    setTimeout(() => window.location.href = 'my-activity.html', 1200);
   });
 }
 
