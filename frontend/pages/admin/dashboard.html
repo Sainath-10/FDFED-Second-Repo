@@ -23,6 +23,14 @@
         <div><div class="dash-stat-num" id="stat-total">0</div><div class="dash-stat-lbl">Total Tournaments</div></div>
       </div>
       <div class="dash-stat-card">
+        <div class="dash-stat-icon dash-stat-icon-warn" style="color:#fb923c;background:rgba(251,146,60,0.15);">💰</div>
+        <div><div class="dash-stat-num" id="stat-platform-fees" style="color:#fb923c;">₹0</div><div class="dash-stat-lbl">Platform Fees Collected</div></div>
+      </div>
+      <div class="dash-stat-card">
+        <div class="dash-stat-icon dash-stat-icon-warn" style="color:#f59e0b;background:rgba(245,158,11,0.15);">⏳</div>
+        <div><div class="dash-stat-num" id="stat-pending" style="color:#f59e0b;">0</div><div class="dash-stat-lbl">Pending Approval</div></div>
+      </div>
+      <div class="dash-stat-card">
         <div class="dash-stat-icon dash-stat-icon-success">⚡</div>
         <div><div class="dash-stat-num" id="stat-active">0</div><div class="dash-stat-lbl">Active &amp; Live</div></div>
       </div>
@@ -48,6 +56,7 @@
 
       <div class="approval-tabs" id="approval-tabs">
         <button class="approval-tab active" data-filter="all" onclick="setCompFilter('all', this)">All</button>
+        <button class="approval-tab" data-filter="pending" onclick="setCompFilter('pending', this)" style="color:#fb923c;">⏳ Pending Approval</button>
         <button class="approval-tab" data-filter="active" onclick="setCompFilter('active', this)">Active / Live</button>
         <button class="approval-tab" data-filter="upcoming" onclick="setCompFilter('upcoming', this)">Upcoming</button>
         <button class="approval-tab" data-filter="completed" onclick="setCompFilter('completed', this)">Completed</button>

@@ -275,14 +275,33 @@
       console.error('Login failed:', result.error);
       const local = authenticate(opts.username, opts.password);
       if (!local) {
-        // Check if it's because they are banned
-        const account = getAccounts().find(entry => normalize(entry.username) === normalize(opts.username));
+        // Check if account exists
+        const account = getAccounts().find(entry => normalize(entry.username) === normalize(opts.username) || normalize(entry.email) === normalize(opts.username));
         if (account && account.banned) {
-            return { ok: false, error: 'Your account has been permanently banned for platform violations.' };
+          return { ok: false, error: 'Your account has been permanently banned for platform violations.' };
         }
+
+        // If account exists locally but password did not match -> WRONG PASSWORD!
+        if (account) {
+          return { ok: false, error: 'Wrong password entered. Please check your password and try again.' };
+        }
+
+        const errLower = String(result.error || '').toLowerCase();
+        if (errLower.includes('password') || errLower.includes('credential') || errLower.includes('unauthorized') || errLower.includes('401')) {
+          return { ok: false, error: 'Wrong password entered. Please check your password and try again.' };
+        }
+
+        if (errLower.includes('no user') || errLower.includes('not found') || errLower.includes('404')) {
+          return { ok: false, error: 'No account found with that username or email.' };
+        }
+
+        if (errLower.includes('failed') || errLower.includes('network')) {
+          return { ok: false, error: 'Wrong password or invalid credentials entered. Please try again.' };
+        }
+
         return {
           ok: false,
-          error: result.error || 'Login failed'
+          error: result.error || 'Wrong password entered. Please check your password and try again.'
         };
       }
 

@@ -22,6 +22,13 @@ document.addEventListener('DOMContentLoaded', () => {
       avatarEl.textContent = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
     }
 
+    // Dynamic Last Login
+    const lastLoginEl = document.getElementById('admin-last-login');
+    if (lastLoginEl) {
+      const loginTime = session.lastLoginAt || session.loggedInAt || Date.now();
+      lastLoginEl.textContent = formatActivityTime(loginTime);
+    }
+
     // Prefill Account Information fields
     const nameField = document.getElementById('field-name');
     if (nameField) nameField.value = session.displayName || '';
@@ -31,13 +38,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const usernameField = document.querySelectorAll('.form-input')[1];
     if (usernameField && usernameField.type === 'text') {
-      usernameField.value = session.username ? '@' + session.username : '';
+      const uname = session.username || '';
+      usernameField.value = uname.includes('@') ? uname : (uname ? '@' + uname : '');
     }
   }
 
-  // Render dynamic recent activity
+  // Render dynamic stats & recent activity
+  renderAdminStats();
   renderAdminActivity();
 });
+
+function renderAdminStats() {
+  try {
+    const comps = JSON.parse(localStorage.getItem('nexus_competitions') || '[]');
+    const disputes = JSON.parse(localStorage.getItem('nexus.disputes') || '[]');
+    
+    const managedCount = comps.length;
+    const resolvedDisputesCount = disputes.filter(d => d.status === 'resolved').length;
+    const processedCount = comps.filter(c => c.approvalStatus === 'approved' || c.approvalStatus === 'rejected').length;
+
+    const statVals = document.querySelectorAll('.comp-sidebar-block .stat-val-accent');
+    if (statVals.length >= 3) {
+      statVals[0].textContent = String(managedCount);
+      statVals[1].textContent = String(resolvedDisputesCount);
+      statVals[2].textContent = String(processedCount);
+    }
+  } catch (e) {}
+}
 
 /* ── Save account info ─────────────────────────────────────── */
 function saveAccountInfo() {

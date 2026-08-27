@@ -250,9 +250,9 @@ function loadTeamData() {
     setTxt('modal-team-sub', teamName + ' — Elite Tier Roster');
     document.title = 'NEXUS ESPORTS — ' + teamName;
 
-    // Team registration status (pending/approved/rejected)
+    // Team registration status (pending/approved/rejected/banned)
     const statusRaw = normalize(team.status || 'approved');
-    const statusLabel = statusRaw === 'approved' ? 'Approved' : (statusRaw === 'rejected' ? 'Rejected' : 'Pending');
+    const statusLabel = statusRaw === 'approved' ? 'Approved' : (statusRaw === 'rejected' ? 'Rejected' : (statusRaw === 'banned' ? 'Banned' : 'Pending'));
     const meta = document.querySelector('.hero-meta');
     if (meta) {
       let statusEl = document.getElementById('hero-team-status');
@@ -263,6 +263,10 @@ function loadTeamData() {
         meta.appendChild(statusEl);
       }
       statusEl.textContent = 'Team ' + statusLabel;
+      if (statusRaw === 'banned') {
+        statusEl.style.borderColor = '#ef4444';
+        statusEl.style.color = '#ef4444';
+      }
     }
 
   } else if (comp) {

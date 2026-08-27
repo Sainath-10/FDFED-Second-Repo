@@ -184,11 +184,24 @@ const PolicyPage = (() => {
     document.getElementById('v-updated').innerHTML     = `Last updated: <strong>${policy.updatedAt}</strong>`;
     const statusEl = document.getElementById('v-status');
     statusEl.textContent = policy.status.charAt(0).toUpperCase() + policy.status.slice(1);
-    statusEl.className   = `status-pill ${policy.status === 'active' ? 'approved' : policy.status === 'draft' ? 'pending' : 'upcoming'}`;
+    statusEl.className   = `status-pill ${policy.status === 'active' ? 'approved' : policy.status === 'draft' ? 'pending' : policy.status === 'archived' ? 'rejected' : 'upcoming'}`;
 
     // ── Edit link ──
     const editBtn = document.getElementById('btn-edit-policy');
     if (editBtn) editBtn.href = `edit-policy.html?id=${id}`;
+
+    // ── Archive button text ──
+    const archiveBtn = document.getElementById('btn-archive');
+    if (archiveBtn && policy.status === 'archived') {
+      archiveBtn.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="23 4 23 10 17 10"></polyline>
+          <polyline points="1 20 1 14 7 14"></polyline>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+        Restore Policy
+      `;
+    }
 
     // ── Summary ──
     document.getElementById('v-summary').textContent = policy.summary;

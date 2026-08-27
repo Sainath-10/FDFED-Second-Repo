@@ -2,7 +2,11 @@ const POLICY_STORE_KEY = 'nexus_policies';
 let currentTab = 'active';
 
 function normalizePolicyStatus(status) {
-    return status === 'active' ? 'active' : 'draft';
+    status = String(status || '').trim().toLowerCase();
+    if (status === 'active' || status === 'draft' || status === 'archived') {
+        return status;
+    }
+    return 'draft';
 }
 
 function safeParse(json, fallback) {
@@ -139,6 +143,53 @@ function buildPolicyCard(policy) {
     const iconClass = iconClassForCategory(category);
     const status = normalizePolicyStatus(policy.status);
 
+    const actionButtons = status === 'archived' ? `
+        <button class="btn-policy outline" onclick="location.href='view-policy.html?id=${encodeURIComponent(policy.id)}'">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+                <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+            View Full Policy
+        </button>
+        <button class="btn-policy restore" onclick="restorePolicyDirect('${escapeHtml(policy.id)}')" style="border: 1px solid #c6ff33; color: #c6ff33; background: transparent; padding: 6px 12px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; font-family: inherit;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+            Restore
+        </button>
+    ` : `
+        <button class="btn-policy outline" onclick="location.href='view-policy.html?id=${encodeURIComponent(policy.id)}'">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+                <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+            View Full Policy
+        </button>
+        <button class="btn-policy edit" onclick="location.href='edit-policy.html?id=${encodeURIComponent(policy.id)}'">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+            </svg>
+            Edit
+        </button>
+        <button class="btn-policy archive" onclick="archivePolicyDirect('${escapeHtml(policy.id)}')" style="border: 1px solid rgba(255,255,255,0.15); color: #9aa4b2; background: transparent; padding: 6px 12px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; font-family: inherit;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="21 8 21 21 3 21 3 8"></polyline>
+                <rect x="1" y="3" width="22" height="5"></rect>
+                <line x1="10" y1="12" x2="14" y2="12"></line>
+            </svg>
+            Archive
+        </button>
+    `;
+
     return `
         <div class="policy-card" data-status="${escapeHtml(status)}">
             <div class="policy-icon-box ${iconClass}">${policyCardSvg()}</div>
@@ -160,23 +211,7 @@ function buildPolicyCard(policy) {
                         <span class="meta-item">Compliance: <span class="compliance-text">${escapeHtml(policy.compliance || '98%')}</span></span>
                     </div>
                     <div class="policy-actions">
-                        <button class="btn-policy outline" onclick="location.href='view-policy.html?id=${encodeURIComponent(policy.id)}'">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                                <polyline points="14 2 14 8 20 8"></polyline>
-                                <line x1="16" y1="13" x2="8" y2="13"></line>
-                                <line x1="16" y1="17" x2="8" y2="17"></line>
-                                <polyline points="10 9 9 9 8 9"></polyline>
-                            </svg>
-                            View Full Policy
-                        </button>
-                        <button class="btn-policy edit" onclick="location.href='edit-policy.html?id=${encodeURIComponent(policy.id)}'">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                            </svg>
-                            Edit
-                        </button>
+                        ${actionButtons}
                     </div>
                 </div>
             </div>
@@ -187,11 +222,13 @@ function buildPolicyCard(policy) {
 function updateTabCounts(policies) {
     const activeCount = policies.filter(policy => normalizePolicyStatus(policy.status) === 'active').length;
     const draftCount = policies.filter(policy => normalizePolicyStatus(policy.status) === 'draft').length;
+    const archivedCount = policies.filter(policy => normalizePolicyStatus(policy.status) === 'archived').length;
 
     document.querySelectorAll('.pm-tab-btn').forEach(btn => {
         const text = btn.textContent.toLowerCase();
         if (text.includes('active')) btn.textContent = `Active Policies (${activeCount})`;
-        if (text.includes('draft')) btn.textContent = `Drafts (${draftCount})`;
+        else if (text.includes('draft')) btn.textContent = `Drafts (${draftCount})`;
+        else if (text.includes('archive')) btn.textContent = `Archived (${archivedCount})`;
     });
 
     const statValues = document.querySelectorAll('.pm-stat-value');
@@ -228,6 +265,36 @@ function switchPMTab(btn, status) {
     renderPolicies(currentTab);
 }
 
+function archivePolicyDirect(id) {
+    let policies = ensurePolicyData();
+    const idx = policies.findIndex(p => p.id === id);
+    if (idx !== -1) {
+        policies[idx].status = 'archived';
+        savePoliciesToStorage(policies);
+        if (typeof showToast === 'function') {
+            showToast('Policy archived.');
+        } else {
+            alert('Policy archived.');
+        }
+        renderPolicies(currentTab);
+    }
+}
+
+function restorePolicyDirect(id) {
+    let policies = ensurePolicyData();
+    const idx = policies.findIndex(p => p.id === id);
+    if (idx !== -1) {
+        policies[idx].status = 'active';
+        savePoliciesToStorage(policies);
+        if (typeof showToast === 'function') {
+            showToast('Policy restored to active.');
+        } else {
+            alert('Policy restored to active.');
+        }
+        renderPolicies(currentTab);
+    }
+}
+
 window.addEventListener('storage', event => {
     if (event.key !== POLICY_STORE_KEY) return;
     renderPolicies(currentTab);
@@ -237,9 +304,15 @@ document.addEventListener('DOMContentLoaded', () => {
     ensureShellConsistency();
 
     const activeTab = document.querySelector('.pm-tab-btn.active');
-    if (activeTab && activeTab.textContent.toLowerCase().includes('draft')) currentTab = 'draft';
+    if (activeTab) {
+        const text = activeTab.textContent.toLowerCase();
+        if (text.includes('draft')) currentTab = 'draft';
+        else if (text.includes('archive')) currentTab = 'archived';
+    }
 
     renderPolicies(currentTab);
 });
 
 window.switchPMTab = switchPMTab;
+window.archivePolicyDirect = archivePolicyDirect;
+window.restorePolicyDirect = restorePolicyDirect;

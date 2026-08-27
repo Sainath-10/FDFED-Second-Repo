@@ -22,7 +22,7 @@ const MIME = {
 
 const server = http.createServer((req, res) => {
   let url = req.url.split('?')[0]; // strip query string for file lookup
-  if (url === '/') url = '/pages/my-activity.html';
+  if (url === '/') url = '/pages/login.html';
 
   const filePath = path.join(ROOT, url);
 
@@ -44,6 +44,6 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, () => {
   console.log('=================================================');
   console.log(' Nexus Frontend Server running at:');
-  console.log(' http://localhost:' + PORT + '/pages/my-activity.html');
+  console.log(' http://localhost:' + PORT + '/pages/login.html');
   console.log('=================================================');
 });

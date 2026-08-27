@@ -23,15 +23,28 @@ function updateSummary() {
   if (sReg) sReg.textContent = reg;
 }
 
-// ── Prize total auto-calculation ─────────────────────────────
+// ── Prize total & Platform Fee auto-calculation ─────────────────────────────
 function updatePrizeTotal() {
-  const p1 = parseInt(document.getElementById('prize-1').value) || 0;
-  const p2 = parseInt(document.getElementById('prize-2').value) || 0;
-  const p3 = parseInt(document.getElementById('prize-3').value) || 0;
+  const p1 = parseInt(document.getElementById('prize-1')?.value) || 0;
+  const p2 = parseInt(document.getElementById('prize-2')?.value) || 0;
+  const p3 = parseInt(document.getElementById('prize-3')?.value) || 0;
   const total = p1 + p2 + p3;
+
+  const feeType = document.getElementById('fee-type')?.value || 'free';
+  const entryFeeGroup = document.getElementById('entry-fee-group');
+  if (entryFeeGroup) {
+    entryFeeGroup.style.display = (feeType === 'free') ? 'none' : 'block';
+  }
 
   const display = document.getElementById('prize-total-display');
   if (display) display.textContent = `₹${total.toLocaleString('en-IN')}`;
+
+  const platformFee = window.NexusData && typeof window.NexusData.calculatePlatformFee === 'function'
+    ? window.NexusData.calculatePlatformFee(total)
+    : (total <= 0 ? 0 : (total <= 700 ? 50 : Math.round(total * 0.07)));
+
+  const totalDueDisplay = document.getElementById('total-due-display');
+  if (totalDueDisplay) totalDueDisplay.textContent = `₹${platformFee.toLocaleString('en-IN')}`;
 
   // Clear error once user has prizes set
   const errEl = document.getElementById('prize-total-error');
@@ -93,19 +106,25 @@ function validateDates(regOpen, regClose, startDate, endDate) {
   if (!regClose) {
     errors['reg-close'] = 'Registration Close date is required.';
   } else if (rOpen && rClose && rClose <= rOpen) {
-    errors['reg-close'] = 'Registration Closes must be strictly after Registration Opens.';
+    errors['reg-close'] = 'Registration Close date must be strictly after Registration Open date.';
+  } else if (rClose < today) {
+    errors['reg-close'] = 'Registration Close date cannot be in the past.';
   }
 
   if (!startDate) {
     errors['start-date'] = 'Tournament Start Date is required.';
   } else if (rClose && sDate && sDate < rClose) {
-    errors['start-date'] = 'Tournament Start Date must be on or after Registration Closes.';
+    errors['start-date'] = 'Tournament Start Date must be on or after Registration Close date.';
+  } else if (sDate < today) {
+    errors['start-date'] = 'Tournament Start Date cannot be in the past.';
   }
 
   if (!endDate) {
     errors['end-date'] = 'Tournament End Date is required.';
   } else if (sDate && eDate && eDate <= sDate) {
     errors['end-date'] = 'Tournament End Date must be strictly after Tournament Start Date.';
+  } else if (eDate < today) {
+    errors['end-date'] = 'Tournament End Date cannot be in the past.';
   }
 
   return Object.keys(errors).length > 0 ? errors : null;
@@ -362,7 +381,19 @@ if (createCompForm) {
 
     const prizePoolStr = `₹${totalPrize.toLocaleString('en-IN')}`;
 
-    // Combine primary creator and co-organizers without duplicates
+    const platformFee = window.NexusData && typeof window.NexusData.calculatePlatformFee === 'function'
+      ? window.NexusData.calculatePlatformFee(totalPrize)
+      : (totalPrize <= 0 ? 0 : (totalPrize <= 700 ? 50 : Math.round(totalPrize * 0.07)));
+
+    const feeType = document.getElementById('fee-type')?.value || 'free';
+    const entryFeeAmount = feeType !== 'free' ? (parseFloat(document.getElementById('entry-fee')?.value) || 0) : 0;
+    let formattedEntryFee = 'Free';
+    if (feeType === 'per_team') formattedEntryFee = `₹${entryFeeAmount.toLocaleString('en-IN')} / Team`;
+    else if (feeType === 'per_player') formattedEntryFee = `₹${entryFeeAmount.toLocaleString('en-IN')} / Player`;
+
+    const prizeThreshold = 50000;
+    const isHighStakes = totalPrize > prizeThreshold;
+    const approvalStatus = isHighStakes ? 'pending' : 'approved';
     const organizersList = Array.from(new Set([session.username, ...coOrganizers]));
 
     const newComp = {
@@ -380,12 +411,16 @@ if (createCompForm) {
       maxPlayersPerTeam: parseInt(maxPlayers) || 5,
       prizePool: totalPrize > 0 ? prizePoolStr : 'No Prize Pool',
       prize: totalPrize,
+      platformFee: platformFee,
+      feeType: feeType,
+      entryFeeAmount: entryFeeAmount,
+      entryFee: formattedEntryFee,
+      organizerPaid: true,
       prizes: [
         { place: '1st Place', amount: `₹${p1.toLocaleString('en-IN')}` },
         { place: '2nd Place', amount: `₹${p2.toLocaleString('en-IN')}` },
         { place: '3rd Place', amount: `₹${p3.toLocaleString('en-IN')}` },
       ],
-      entryFee: entryFee > 0 ? `₹${entryFee.toLocaleString('en-IN')}` : 'Free',
       status: 'upcoming',
       img: bannerImg,
       participants: 0,
@@ -396,22 +431,81 @@ if (createCompForm) {
       organizerId: session.username,
       createdBy: session.username,
       organizers: organizersList,
-      approvalStatus: 'approved', // Auto-approved immediately
-      badge: 'New',
-      badgeClass: 'hot',
+      approvalStatus: approvalStatus,
+      badge: isHighStakes ? 'Pending' : 'New',
+      badgeClass: isHighStakes ? 'live' : 'hot',
       season: 'Season 1',
       totalMatches: 0,
       matchesCompleted: 0
     };
 
-    if (window.NexusData) {
-      window.NexusData.addCompetition(newComp);
-    }
+    // Show Organizer Checkout Modal
+    showOrganizerCheckoutModal(newComp, totalPrize, platformFee, () => {
+      if (window.NexusData) {
+        window.NexusData.addCompetition(newComp);
+      }
 
-    if (typeof showToast === 'function') {
-      showToast('Tournament Created!');
-    }
-    setTimeout(() => window.location.href = 'my-activity.html', 1200);
+      if (typeof showToast === 'function') {
+        if (isHighStakes) {
+          showToast(`Tournament submitted! Requires Admin approval because prize pool (₹${totalPrize.toLocaleString('en-IN')}) exceeds ₹50,000.`, 'warning');
+        } else {
+          showToast('Tournament Created & Published!', 'success');
+        }
+      }
+      setTimeout(() => window.location.href = 'my-activity.html', 1500);
+    });
+  });
+}
+
+function showOrganizerCheckoutModal(comp, prizePool, platformFee, onConfirm) {
+  const existing = document.getElementById('org-checkout-modal');
+  if (existing) existing.remove();
+
+  const feeRuleText = prizePool <= 700 ? 'Flat ₹50 Fee (Prize ≤ ₹700)' : '7% Platform Fee (Prize > ₹700)';
+
+  const modal = document.createElement('div');
+  modal.id = 'org-checkout-modal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.8);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;';
+  modal.innerHTML = `
+    <div style="background:#0f172a;border:1px solid #fb923c;border-radius:16px;width:min(90vw,480px);padding:32px;box-shadow:0 20px 60px #000a;color:#f1f5f9;">
+      <h3 style="margin:0 0 4px;font-size:20px;color:#f1f5f9;">💳 Organizer Platform Fee Checkout</h3>
+      <p style="margin:0 0 20px;font-size:13px;color:#94a3b8;">Review platform fee payment for "${comp.name}".</p>
+
+      <div style="background:#1e293b;border-radius:12px;padding:16px;margin-bottom:20px;display:flex;flex-direction:column;gap:10px;">
+        <div style="display:flex;justify-content:space-between;font-size:14px;color:#cbd5e1;">
+          <span>Tournament Prize Pool:</span>
+          <strong style="color:#c6ff33;">₹${prizePool.toLocaleString('en-IN')}</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:14px;color:#94a3b8;border-top:1px solid #334155;padding-top:8px;">
+          <span>Fee Calculation:</span>
+          <strong style="color:#f1f5f9;">${feeRuleText}</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:14px;color:#94a3b8;border-top:1px solid #334155;padding-top:8px;">
+          <span>Participation Fee Model:</span>
+          <strong style="color:#f1f5f9;">${comp.entryFee}</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:16px;color:#f1f5f9;border-top:2px dashed #fb923c;padding-top:10px;margin-top:2px;">
+          <strong>Platform Fee Due by Organizer:</strong>
+          <strong style="color:#fb923c;font-size:22px;">₹${platformFee.toLocaleString('en-IN')}</strong>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;">
+        <button id="cancel-checkout-btn" style="flex:1;padding:12px;background:none;border:1px solid #334155;color:#94a3b8;border-radius:8px;cursor:pointer;font-size:14px;">
+          Cancel
+        </button>
+        <button id="confirm-checkout-btn" style="flex:2;padding:12px;background:#fb923c;border:none;color:#fff;border-radius:8px;cursor:pointer;font-size:14px;font-weight:700;">
+          ✔ Pay Platform Fee (₹${platformFee.toLocaleString('en-IN')})
+        </button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(modal);
+
+  document.getElementById('cancel-checkout-btn').addEventListener('click', () => modal.remove());
+  document.getElementById('confirm-checkout-btn').addEventListener('click', () => {
+    modal.remove();
+    if (typeof onConfirm === 'function') onConfirm();
   });
 }
 

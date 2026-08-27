@@ -67,6 +67,19 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
+  if (approvalStatus === 'pending') {
+    const bannerHtml = `
+      <div style="background:rgba(251,146,60,0.15);border:1px solid #fb923c;border-radius:12px;padding:16px 24px;margin-bottom:24px;display:flex;align-items:center;gap:16px;">
+        <span style="font-size:28px;">⏳</span>
+        <div>
+          <h4 style="margin:0 0 4px;color:#fb923c;font-size:16px;font-weight:700;">Pending Admin Approval</h4>
+          <p style="margin:0;color:#cbd5e1;font-size:13px;">This tournament's prize pool (${comp.prizePool || 'High Stakes'}) exceeds ₹50,000. It is currently under review by Platform Admin and will be published publicly once approved.</p>
+        </div>
+      </div>`;
+    const main = document.querySelector('.comp-info-page') || document.querySelector('.main-content');
+    if (main) main.insertAdjacentHTML('afterbegin', bannerHtml);
+  }
+
   renderComp(comp);
   setupCTAButtons(comp);
 });
@@ -109,7 +122,9 @@ function renderComp(comp) {
   setText('info-prize', comp.prizePool || '—');
 
   // ── Overview tab ─────────────────────────────────────────
-  setText('comp-description', comp.description || `The ${comp.name} is a ${formatType(comp.type)} competition for ${comp.game}. Join teams from around the world to compete for the prize pool of ${comp.prizePool || '—'}.`);
+  const hasPrize = comp.prizePool && comp.prizePool !== 'No Prize Pool' && comp.prizePool !== '₹0' && comp.prizePool !== '—';
+  const prizePhrase = hasPrize ? `the prize pool of ${comp.prizePool}` : 'glory and championship honors';
+  setText('comp-description', comp.description || `The ${comp.name} is a ${formatType(comp.type)} competition for ${comp.game}. Join teams from around the world to compete for ${prizePhrase}.`);
 
   const regDates = comp.registrationDates || {};
   setText('sched-reg-open', regDates.open || '—');
@@ -214,15 +229,21 @@ function renderComp(comp) {
       bracketRow.innerHTML = matches.map(m => {
         const isLive = m.status === 'live';
         const isDone = m.status === 'completed';
+
+        const isT1Banned = window.NexusData && typeof window.NexusData.isTeamBannedInComp === 'function' && window.NexusData.isTeamBannedInComp(m.team1, comp);
+        const isT2Banned = window.NexusData && typeof window.NexusData.isTeamBannedInComp === 'function' && window.NexusData.isTeamBannedInComp(m.team2, comp);
+        const t1Name = isT1Banned ? `<del style="color:#ef4444;">${m.team1 || 'TBD'}</del> <span style="color:#ef4444;font-size:10px;font-weight:700;">(BANNED)</span>` : (m.team1 || 'TBD');
+        const t2Name = isT2Banned ? `<del style="color:#ef4444;">${m.team2 || 'TBD'}</del> <span style="color:#ef4444;font-size:10px;font-weight:700;">(BANNED)</span>` : (m.team2 || 'TBD');
+
         return `
           <div class="bracket-match">
             <div class="round-label">${m.round || 'Match'} · ${isLive ? '🔴 LIVE' : (isDone ? 'Completed' : 'Scheduled')}</div>
             <div class="bracket-team ${isDone && m.score1 >= m.score2 ? 'winner' : ''}">
-              <span>${m.team1 || 'TBD'}</span>
+              <span>${t1Name}</span>
               <span class="score">${isDone ? m.score1 : '—'}</span>
             </div>
             <div class="bracket-team ${isDone && m.score2 > m.score1 ? 'winner' : ''}">
-              <span>${m.team2 || 'TBD'}</span>
+              <span>${t2Name}</span>
               <span class="score">${isDone ? m.score2 : '—'}</span>
             </div>
           </div>`;
@@ -285,7 +306,7 @@ function setupCTAButtons(comp) {
     if (registerBtn) registerBtn.style.display = 'none';
     if (createBtn) createBtn.style.display = 'none';
     if (manageBtn) { manageBtn.href = 'competition-detail.html?id=' + comp.id; manageBtn.style.display = 'block'; }
-    if (disputeBtn) { disputeBtn.style.display = 'block'; disputeBtn.addEventListener('click', function() { window.location.href = 'comp-reports.html?id=' + comp.id; }); }
+    if (disputeBtn) { disputeBtn.style.display = 'block'; }
     if (shareBtn) { shareBtn.addEventListener('click', function() { var url = window.location.href; if (navigator.clipboard) { navigator.clipboard.writeText(url).then(function() { if (typeof showToast === 'function') showToast('Link copied!'); }); } else { prompt('Copy:', url); } }); }
     return;
   }
@@ -314,11 +335,12 @@ function setupCTAButtons(comp) {
     });
   }
 
-  // Dispute button
+  // Dispute button ensures modal is invoked
   if (disputeBtn) {
-    disputeBtn.addEventListener('click', () => {
-      window.location.href = `comp-reports.html?id=${comp.id}`;
-    });
+    disputeBtn.onclick = function(e) {
+      e.preventDefault();
+      if (typeof openDisputeModal === 'function') openDisputeModal();
+    };
   }
 
   if (registerBtn) {
@@ -368,6 +390,24 @@ function setupCTAButtons(comp) {
   }
 
   if (myTeam && teamStatus !== 'rejected') {
+    if (teamStatus === 'banned') {
+      if (registerBtn) {
+        registerBtn.textContent = '🚫 Team Banned from Tournament';
+        registerBtn.disabled = true;
+        registerBtn.style.background = '#1a1015';
+        registerBtn.style.color = '#ef4444';
+        registerBtn.style.border = '1px solid #ef4444';
+        registerBtn.style.cursor = 'not-allowed';
+      }
+      if (createBtn) {
+        createBtn.style.display = 'none';
+      }
+      if (disputeBtn) {
+        disputeBtn.style.display = 'none';
+      }
+      return;
+    }
+
     if (teamStatus === 'pending') {
       if (registerBtn) {
         registerBtn.textContent = 'Pending Approval';

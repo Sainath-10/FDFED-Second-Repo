@@ -5,6 +5,20 @@ export enum UserRole {
   PARTICIPANT = 'participant',
 }
 
+export enum DisputeStatus {
+  OPEN_ORGANIZER = 'open_organizer',
+  OPEN_ADMIN = 'open_admin',
+  UNDER_REVIEW = 'under_review',
+  ESCALATED_TO_ADMIN = 'escalated_to_admin',
+  RESOLVED = 'resolved',
+}
+
+export enum DisputeTargetType {
+  OPPONENT_TEAM = 'opponent_team',
+  MATCH_RULE = 'match_rule',
+  ORGANIZER = 'organizer',
+}
+
 export interface IUser {
   id: string;
   email: string;
@@ -12,6 +26,7 @@ export interface IUser {
   firstName: string;
   lastName: string;
   role: UserRole;
+  banned?: boolean;
   createdAt: Date;
 }
 
@@ -21,9 +36,16 @@ export interface ICompetition {
   description: string;
   startDate: Date;
   endDate: Date;
-  status: 'draft' | 'active' | 'completed';
+  status: string;
   createdBy: string;
   organizers: string[];
+  platformFee?: number;
+  feeType?: string;
+  entryFeeAmount?: number;
+  organizerPaid?: boolean;
+  approvalStatus?: string;
+  approvalUpdatedBy?: string;
+  approvalUpdatedAt?: Date;
   createdAt: Date;
 }
 
@@ -32,19 +54,33 @@ export interface ITeam {
   name: string;
   competitionId: string;
   leaderId: string;
-  members: string[];
+  members?: string[];
+  memberUsernames?: string[];
+  status?: string;
+  statusUpdatedBy?: string;
+  statusUpdatedAt?: Date;
+  warningsCount?: number;
+  createdBy?: string;
   createdAt: Date;
 }
 
 export interface IDispute {
   id: string;
   competitionId: string;
-  teamId: string;
+  matchId?: string;
+  teamId?: string;
   reportedBy: string;
+  targetType: DisputeTargetType;
+  targetUserOrTeam?: string;
+  reason: string;
+  evidenceUrls?: string[];
   organizers: string[];
-  description: string;
-  status: 'open' | 'under_review' | 'resolved' | 'escalated';
-  resolutionNotes?: string;
+  status: DisputeStatus;
+  organizerNotes?: string;
+  adminNotes?: string;
   resolvedBy?: string;
+  banRequested?: boolean;
+  banApplied?: boolean;
   createdAt: Date;
+  updatedAt: Date;
 }

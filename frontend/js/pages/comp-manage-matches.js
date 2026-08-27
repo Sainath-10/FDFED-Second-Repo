@@ -72,7 +72,7 @@ function renderBanner() {
 function buildTeamOptions(excludeName) {
   const key = String(excludeName || '').toLowerCase();
   return comp.teams
-    .filter(t => t.status === 'approved')
+    .filter(t => t.status === 'approved' && t.status !== 'banned')
     .filter(t => !key || String(t.name || '').toLowerCase() !== key)
     .map(t => `<option value="${t.name}">${t.name}</option>`)
     .join('');

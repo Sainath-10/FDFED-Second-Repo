@@ -28,11 +28,16 @@ if (reportForm) {
     const against = document.querySelector('#report-form input[placeholder*="Team"]')?.value || 'Opponent';
     const description = document.querySelector('#report-form textarea')?.value || '';
 
-    // Get current user session
+    // Get current user session & role
     let reporter = 'Player';
+    let isOrg = false;
     try {
       const sess = JSON.parse(localStorage.getItem('nexus.auth.session') || '{}');
       if (sess.username) reporter = sess.username;
+      const role = String(sess.role || '').toLowerCase();
+      if (role === 'organizer' || role === 'admin' || role === 'super-admin' || (comp && comp.createdBy === sess.username)) {
+        isOrg = true;
+      }
     } catch(e) {}
 
     // Find competition if available
@@ -50,18 +55,29 @@ if (reportForm) {
 
     const newDisputeObj = {
       id: disputeId,
+      cardId: 'disp-' + Date.now(),
       title: `${reportType} — ${against}`,
       desc: description,
       detail: description,
+      description: description,
       reason: reportType,
       round: matchRound,
       submitter: reporter,
       reporter: reporter,
+      filedBy: reporter,
+      against: against,
+      targetUserOrTeam: against,
       organizers: organizers,
       time: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      filedAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       matchName: comp ? comp.name : compSelect,
+      competition: comp ? comp.name : compSelect,
       competitionId: compId || '1',
-      status: 'awaiting',
+      compId: compId || '1',
+      status: isOrg ? 'escalated_to_admin' : 'awaiting',
+      escalated: isOrg,
+      superAdminState: isOrg ? 'pending' : '',
+      escalationReason: isOrg ? 'Filed directly by Organizer — auto-escalated to Super Admin' : '',
       evidence: files.length
     };
 
@@ -120,7 +136,7 @@ if (reportForm) {
       } catch(e) {}
 
       if (typeof showToast === 'function') {
-        showToast('Report submitted! Sent directly to tournament organizers for review.');
+        showToast('Dispute submitted', 'success');
       }
       setTimeout(() => { location.href = 'my-activity.html'; }, 1500);
     });

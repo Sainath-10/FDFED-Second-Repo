@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Add / Manage Competition</title>
+  <meta name="description" content="Create and manage esports competitions, assign co-organizers, and configure tournament settings.">
+  <link rel="stylesheet" href="../../css/styles.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <script>
+    if (!localStorage.getItem('nexus.auth.session')) { window.location.replace('login.html'); }
+  </script>
+  <style>
+    :root {
+      --bg: #0a0a0a; --bg-card: #111; --bg-inset: #181818; --bg-hover: #1e1e1e;
+      --border: #262626; --accent: #c6ff33; --accent-dim: rgba(198,255,51,0.12);
+      --accent-mid: rgba(198,255,51,0.25); --tw: #f5f5f5; --tm: #737373; --td: #a3a3a3;
+      --red: #ef4444; --orange: #fb923c; --font: 'Inter', sans-serif;
+      --r: 12px; --rs: 8px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: var(--font); background: var(--bg); color: var(--tw); }
+    .mc-page { padding: 36px 48px 60px; max-width: 1100px; }
+
+    /* BACK BUTTON */
+    .back-btn { display:inline-flex;align-items:center;gap:8px;color:var(--tm);font-size:13px;font-weight:500;text-decoration:none;padding:6px 12px 6px 8px;border-radius:var(--rs);border:1px solid transparent;transition:all .2s;margin-bottom:28px; }
+    .back-btn:hover { color:var(--accent);border-color:var(--accent-mid);background:var(--accent-dim); }
+
+    /* HEADER */
+    .mc-header { display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:16px;margin-bottom:36px; }
+    .mc-title { font-size:28px;font-weight:800;color:var(--tw);letter-spacing:-0.5px; }
+    .mc-title span { color:var(--accent); }
+    .mc-sub { color:var(--tm);font-size:14px;margin-top:4px; }
+
+    /* STEP TABS */
+    .step-tabs { display:flex;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r);padding:4px;margin-bottom:32px;overflow-x:auto;gap:0; }
+    .step-tab { flex:1;min-width:120px;padding:10px 16px;background:none;border:none;border-radius:9px;cursor:pointer;font-family:var(--font);font-size:13px;font-weight:600;color:var(--tm);transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap; }
+    .step-tab.active { background:var(--accent);color:#000; }
+    .step-tab:hover:not(.active) { background:var(--bg-hover);color:var(--tw); }
+    .snum { width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0; }
+    .step-tab.active .snum { background:rgba(0,0,0,0.2);color:#000; }
+
+    /* PANELS */
+    .tab-panel { display:none; }
+    .tab-panel.active { display:block; }
+
+    /* SECTION CARD */
+    .sec-card { background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r);padding:28px 32px;margin-bottom:20px; }
+    .sec-head { display:flex;align-items:center;gap:12px;margin-bottom:24px; }
+    .sec-ico { width:36px;height:36px;border-radius:8px;background:var(--accent-dim);border:1px solid var(--accent-mid);display:flex;align-items:center;justify-content:center;color:var(--accent);flex-shrink:0; }
+    .sec-title { font-size:16px;font-weight:700;color:var(--tw); }
+    .sec-desc { font-size:12px;color:var(--tm);margin-top:2px; }
+
+    /* FORM */
+    .fg2 { display:grid;grid-template-columns:1fr 1fr;gap:20px; }
+    .fg3 { display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px; }
+    .fg1 { display:grid;grid-template-columns:1fr;gap:20px; }
+    @media(max-width:720px){ .fg2,.fg3 { grid-template-columns:1fr; } }
+    .fg { display:flex;flex-direction:column;gap:7px; }
+    .fl { font-size:12px;font-weight:600;color:var(--td);text-transform:uppercase;letter-spacing:0.5px; }
+    .fl .r { color:var(--red);margin-left:2px; }
+    .fi,.fs,.fta { background:var(--bg-inset);border:1px solid var(--border);border-radius:var(--rs);color:var(--tw);font-family:var(--font);font-size:14px;padding:11px 14px;outline:none;transition:border-color .2s,box-shadow .2s;width:100%; }
+    .fi:focus,.fs:focus,.fta:focus { border-color:var(--accent);box-shadow:0 0 0 3px rgba(198,255,51,0.1); }
+    .fi::placeholder,.fta::placeholder { color:#404040; }
+    .fs option { background:#1a1a1a; }
+    .fta { resize:vertical;min-height:100px; }
+    .fhint { font-size:11px;color:var(--tm);margin-top:4px; }
+
+    /* TOGGLE */
+    .trow { display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--border); }
+    .trow:last-child { border-bottom:none;padding-bottom:0; }
+    .trow:first-child { padding-top:0; }
+    .tinfo { flex:1;padding-right:16px; }
+    .tlbl { font-size:14px;font-weight:600;color:var(--tw); }
+    .tdesc { font-size:12px;color:var(--tm);margin-top:2px; }
+    .tsw { position:relative;width:44px;height:24px;flex-shrink:0; }
+    .tsw input { display:none; }
+    .ttrack { position:absolute;inset:0;background:#333;border-radius:12px;cursor:pointer;transition:background .2s; }
+    .ttrack::after { content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;background:#666;border-radius:50%;transition:transform .2s,background .2s; }
+    .tsw input:checked + .ttrack { background:var(--accent); }
+    .tsw input:checked + .ttrack::after { transform:translateX(20px);background:#000; }
+
+    /* BADGE */
+    .badge { display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700; }
+    .ba { background:var(--accent-dim);color:var(--accent);border:1px solid var(--accent-mid); }
+    .bo { background:rgba(251,146,60,0.12);color:#fb923c;border:1px solid rgba(251,146,60,0.25); }
+
+    /* BUTTONS */
+    .btn { display:inline-flex;align-items:center;gap:8px;padding:11px 20px;border-radius:var(--rs);font-family:var(--font);font-size:14px;font-weight:600;cursor:pointer;border:none;transition:all .2s;text-decoration:none; }
+    .btn-a { background:var(--accent);color:#000; }
+    .btn-a:hover { background:#d4ff4d;transform:translateY(-1px);box-shadow:0 4px 20px rgba(198,255,51,0.3); }
+    .btn-o { background:transparent;border:1px solid var(--border);color:var(--td); }
+    .btn-o:hover { border-color:var(--accent);color:var(--accent);background:var(--accent-dim); }
+    .btn-r { background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);color:#f87171; }
+    .btn-r:hover { background:rgba(239,68,68,0.25);border-color:#f87171; }
+    .btn-sm { padding:7px 14px;font-size:12px; }
+
+    /* CO-ORG */
+    .coorg-list { display:flex;flex-direction:column;gap:12px;margin-top:16px; }
+    .coorg-card { display:flex;align-items:center;justify-content:space-between;background:var(--bg-inset);border:1px solid var(--border);border-radius:var(--rs);padding:14px 18px;gap:12px;transition:border-color .2s; }
+    .coorg-card:hover { border-color:#333; }
+    .coorg-av { width:40px;height:40px;border-radius:50%;background:var(--accent-dim);border:1px solid var(--accent-mid);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:var(--accent);flex-shrink:0; }
+    .coorg-info { flex:1;min-width:0; }
+    .coorg-name { font-size:14px;font-weight:600;color:var(--tw); }
+    .coorg-role { font-size:12px;color:var(--tm);margin-top:2px; }
+    .coorg-acts { display:flex;gap:8px;align-items:center;flex-shrink:0; }
+
+    .add-panel { background:var(--bg-inset);border:1px dashed var(--border);border-radius:var(--rs);padding:20px;margin-top:16px;display:none; }
+    .add-panel.open { display:block; }
+    .su-row { display:flex;gap:10px;align-items:flex-end; }
+    .su-row .fg { flex:1; }
+    .sres { margin-top:12px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--rs);overflow:hidden;display:none; }
+    .sres.vis { display:block; }
+    .sri { display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);gap:12px;transition:background .15s;cursor:pointer; }
+    .sri:last-child { border-bottom:none; }
+    .sri:hover { background:var(--bg-hover); }
+    .sri-n { font-size:14px;font-weight:600;color:var(--tw); }
+    .sri-e { font-size:12px;color:var(--tm); }
+
+    /* PRIZE */
+    .pr { display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--border); }
+    .pr:last-of-type { border-bottom:none; }
+    .pp { width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0; }
+    .pl { flex:1;font-size:14px;font-weight:600;color:var(--tw); }
+    .pi { width:160px;background:var(--bg-inset);border:1px solid var(--border);border-radius:var(--rs);color:var(--tw);font-family:var(--font);font-size:14px;font-weight:700;padding:9px 14px;outline:none;transition:border-color .2s; }
+    .pi:focus { border-color:var(--accent); }
+    .divider { height:1px;background:var(--border);margin:24px 0; }
+
+    /* ACTION BAR */
+    .abar { display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-top:32px;padding:20px 24px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r); }
+    .abar-l,.abar-r { display:flex;align-items:center;gap:12px; }
+
+    /* STATUS PILL */
+    .spill { display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:700; }
+    .spill::before { content:'';width:7px;height:7px;border-radius:50%;background:currentColor; }
+    .sp-draft { background:#1f1f1f;color:#737373;border:1px solid #333; }
+    .sp-active { background:rgba(198,255,51,0.1);color:var(--accent);border:1px solid rgba(198,255,51,0.25); }
+    .sp-pend { background:rgba(245,158,11,0.1);color:#f59e0b;border:1px solid rgba(245,158,11,0.25); }
+
+    /* MANAGE LIST */
+    .ml { display:flex;flex-direction:column;gap:12px; }
+    .mc { display:flex;align-items:center;gap:16px;background:var(--bg-inset);border:1px solid var(--border);border-radius:var(--rs);padding:16px 20px;transition:border-color .2s; }
+    .mc:hover { border-color:#333; }
+    .mc-ico { width:44px;height:44px;border-radius:10px;background:var(--accent-dim);border:1px solid var(--accent-mid);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0; }
+    .mc-info { flex:1;min-width:0; }
+    .mc-name { font-size:15px;font-weight:700;color:var(--tw); }
+    .mc-meta { font-size:12px;color:var(--tm);margin-top:3px; }
+    .mc-acts { display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap; }
+
+    /* EMPTY */
+    .empty { text-align:center;padding:48px 24px;color:var(--tm); }
+    .empty-ico { font-size:40px;margin-bottom:12px;opacity:0.5; }
+    .empty-t { font-size:15px;font-weight:600;color:var(--td); }
+    .empty-s { font-size:13px;margin-top:6px; }
+
+    /* TOAST */
+    #mct { position:fixed;bottom:28px;right:28px;background:var(--bg-card);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:var(--rs);padding:14px 20px;font-size:14px;font-weight:600;color:var(--tw);box-shadow:0 4px 32px rgba(0,0,0,0.5);z-index:9999;transform:translateY(100px);opacity:0;transition:all .35s cubic-bezier(0.34,1.56,0.64,1);max-width:360px; }
+    #mct.show { transform:translateY(0);opacity:1; }
+    #mct.err { border-left-color:var(--red); }
+    #mct.wrn { border-left-color:var(--orange); }
+  </style>
+</head>
+<body>
+<div id="sidebar-mount"></div>
+<div class="page-with-sidebar">
+<main class="mc-page">
+
+  <a href="dashboard.html" class="back-btn">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 8H4M4 8L8 12M4 8L8 4"/></svg>
+    Back to Dashboard
+  </a>
+
+  <div class="mc-header">
+    <div>
+      <h1 class="mc-title">Add / <span>Manage</span> Competition</h1>
+      <p class="mc-sub">Create tournaments, assign co-organizers, configure rules and prize pools.</p>
+    </div>
+    <span class="spill sp-draft" id="spill">Draft</span>
+  </div>
+
+  <div class="step-tabs">
+    <button class="step-tab active" id="tab-basic" onclick="swTab('basic')"><span class="snum">1</span>Basic Info</button>
+    <button class="step-tab" id="tab-settings" onclick="swTab('settings')"><span class="snum">2</span>Settings</button>
+    <button class="step-tab" id="tab-organizers" onclick="swTab('organizers')"><span class="snum">3</span>Organizers</button>
+    <button class="step-tab" id="tab-prizes" onclick="swTab('prizes')"><span class="snum">4</span>Prize Pool</button>
+    <button class="step-tab" id="tab-manage" onclick="swTab('manage')"><span class="snum">5</span>Manage Existing</button>
+  </div>
+
+  <!-- ═══ BASIC INFO ═══ -->
+  <div class="tab-panel active" id="panel-basic">
+    <div class="sec-card">
+      <div class="sec-head">
+        <div class="sec-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4.5 2h11l-1.5 7a5 5 0 0 1-8 0L4.5 2z"/><path d="M2.5 2h2m13 0h2"/><path d="M10 16v2m-3 0h6"/></svg></div>
+        <div><div class="sec-title">Basic Information</div><div class="sec-desc">Core details about your competition</div></div>
+      </div>
+      <div class="fg1" style="margin-bottom:20px;">
+        <div class="fg"><label class="fl" for="cn">Competition Name <span class="r">*</span></label><input class="fi" type="text" id="cn" placeholder="e.g. Summer Showdown 2026" oninput="onChange()"></div>
+      </div>
+      <div class="fg2" style="margin-bottom:20px;">
+        <div class="fg"><label class="fl" for="cg">Game <span class="r">*</span></label>
+          <select class="fs" id="cg" onchange="onChange()">
+            <option value="">Select game…</option>
+            <option>Counter-Strike 2</option><option>League of Legends</option><option>Dota 2</option>
+            <option>Valorant</option><option>Fortnite</option><option>Rocket League</option>
+            <option>PUBG Mobile</option><option>Free Fire</option>
+          </select>
+        </div>
+        <div class="fg"><label class="fl" for="cf">Format <span class="r">*</span></label>
+          <select class="fs" id="cf" onchange="onChange()">
+            <option value="">Select format…</option>
+            <option>Single Elimination</option><option>Double Elimination</option>
+            <option>Round Robin</option><option>Swiss System</option><option>Battle Royale</option>
+          </select>
+        </div>
+      </div>
+      <div class="fg2" style="margin-bottom:20px;">
+        <div class="fg"><label class="fl" for="cs">Start Date <span class="r">*</span></label><input class="fi" type="datetime-local" id="cs" onchange="onChange()"></div>
+        <div class="fg"><label class="fl" for="ce">End Date <span class="r">*</span></label><input class="fi" type="datetime-local" id="ce" onchange="onChange()"></div>
+      </div>
+      <div class="fg3" style="margin-bottom:20px;">
+        <div class="fg"><label class="fl" for="cmt">Max Teams</label><input class="fi" type="number" id="cmt" placeholder="e.g. 16" min="2"></div>
+        <div class="fg"><label class="fl" for="cts">Team Size</label><input class="fi" type="number" id="cts" placeholder="e.g. 5" min="1" max="10"></div>
+        <div class="fg"><label class="fl" for="crg">Region</label>
+          <select class="fs" id="crg">
+            <option value="">All Regions</option>
+            <option>Asia-Pacific</option><option>South Asia</option><option>North America</option>
+            <option>Europe</option><option>Middle East</option><option>Global</option>
+          </select>
+        </div>
+      </div>
+      <div class="fg1">
+        <div class="fg"><label class="fl" for="cd">Description <span class="r">*</span></label>
+          <textarea class="fta" id="cd" rows="4" placeholder="Describe your tournament — rules, schedule, eligibility, and prize conditions…" oninput="onChange()"></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="abar">
+      <div class="abar-l"><span class="fhint">Fill all required fields before publishing.</span></div>
+      <div class="abar-r">
+        <button class="btn btn-o" onclick="saveDraft()">💾 Save Draft</button>
+        <button class="btn btn-a" onclick="swTab('settings')">Next: Settings →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ SETTINGS ═══ -->
+  <div class="tab-panel" id="panel-settings">
+    <div class="sec-card">
+      <div class="sec-head">
+        <div class="sec-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg></div>
+        <div><div class="sec-title">Registration &amp; Access</div><div class="sec-desc">Control how players and teams join your competition</div></div>
+      </div>
+      <div class="trow"><div class="tinfo"><div class="tlbl">Open Registration</div><div class="tdesc">Any team can sign up without manual approval</div></div><label class="tsw"><input type="checkbox" id="t-oreg" checked><div class="ttrack"></div></label></div>
+      <div class="trow"><div class="tinfo"><div class="tlbl">Require Team Verification</div><div class="tdesc">Teams must be verified before they can register</div></div><label class="tsw"><input type="checkbox" id="t-ver"><div class="ttrack"></div></label></div>
+      <div class="trow"><div class="tinfo"><div class="tlbl">Publicly Listed</div><div class="tdesc">Show this competition on the public competitions page</div></div><label class="tsw"><input type="checkbox" id="t-pub" checked><div class="ttrack"></div></label></div>
+      <div class="trow"><div class="tinfo"><div class="tlbl">Enable Live Streaming</div><div class="tdesc">Allow matches to be streamed via the Watch Live section</div></div><label class="tsw"><input type="checkbox" id="t-str"><div class="ttrack"></div></label></div>
+      <div class="trow"><div class="tinfo"><div class="tlbl">Allow Dispute Filing</div><div class="tdesc">Participants can file match disputes for organizer review</div></div><label class="tsw"><input type="checkbox" id="t-dis" checked><div class="ttrack"></div></label></div>
+      <div class="trow"><div class="tinfo"><div class="tlbl">Auto-Publish Results</div><div class="tdesc">Match results are published immediately after submission</div></div><label class="tsw"><input type="checkbox" id="t-ap" checked><div class="ttrack"></div></label></div>
+    </div>
+    <div class="sec-card">
+      <div class="sec-head">
+        <div class="sec-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+        <div><div class="sec-title">Entry Fee &amp; Financial</div><div class="sec-desc">Configure participation fees and platform charges</div></div>
+      </div>
+      <div class="fg2">
+        <div class="fg"><label class="fl">Entry Fee (₹)</label><input class="fi" type="number" id="ef" placeholder="0 for free" min="0"><span class="fhint">Set to 0 for a free-to-enter competition</span></div>
+        <div class="fg"><label class="fl">Platform Fee (%)</label><input class="fi" type="number" id="pf" placeholder="e.g. 10" min="0" max="50" value="10"><span class="fhint">Percentage of entry fees retained by platform</span></div>
+      </div>
+    </div>
+    <div class="abar">
+      <div class="abar-l"><button class="btn btn-o" onclick="swTab('basic')">← Back</button></div>
+      <div class="abar-r">
+        <button class="btn btn-o" onclick="saveDraft()">💾 Save Draft</button>
+        <button class="btn btn-a" onclick="swTab('organizers')">Next: Organizers →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ ORGANIZERS ═══ -->
+  <div class="tab-panel" id="panel-organizers">
+    <div class="sec-card">
+      <div class="sec-head">
+        <div class="sec-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+        <div><div class="sec-title">Head Organizer</div><div class="sec-desc">Primary organizer responsible for this competition</div></div>
+      </div>
+      <div class="coorg-card" style="background:#0d1a00;border-color:rgba(198,255,51,0.2);">
+        <div class="coorg-av" id="hav">A</div>
+        <div class="coorg-info"><div class="coorg-name" id="hname">Loading…</div><div class="coorg-role" id="hemail">Organizer account</div></div>
+        <span class="badge ba">👑 Head Organizer</span>
+      </div>
+    </div>
+
+    <div class="sec-card">
+      <div class="sec-head">
+        <div class="sec-ico" style="background:rgba(251,146,60,0.12);border-color:rgba(251,146,60,0.25);color:#fb923c;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+        </div>
+        <div style="flex:1;"><div class="sec-title">Co-Organizers</div><div class="sec-desc">Additional organizers who help manage this competition</div></div>
+        <button class="btn btn-o btn-sm" id="add-btn" onclick="toggleAdd()">➕ Add Co-Organizer</button>
+      </div>
+
+      <div class="add-panel" id="add-panel">
+        <div style="font-size:13px;font-weight:700;color:var(--td);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px;">Search by Username or Email</div>
+        <div class="su-row">
+          <div class="fg"><input class="fi" type="text" id="cs-inp" placeholder="e.g. john_doe or john@example.com" oninput="srchUsers(this.value)"></div>
+          <button class="btn btn-o btn-sm" onclick="closeAdd()" style="flex-shrink:0;height:42px;">Cancel</button>
+        </div>
+        <div class="sres" id="sres"></div>
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+          <div style="font-size:13px;font-weight:700;color:var(--td);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px;">Or assign by username directly</div>
+          <div class="su-row">
+            <div class="fg"><input class="fi" type="text" id="cd-inp" placeholder="Enter exact username"></div>
+            <button class="btn btn-a btn-sm" onclick="addDirect()" style="flex-shrink:0;height:42px;">+ Assign</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="coorg-list" id="coorg-list">
+        <div class="empty" id="coorg-empty"><div class="empty-ico">👥</div><div class="empty-t">No co-organizers assigned</div><div class="empty-s">Click "+ Add Co-Organizer" to assign helpers</div></div>
+      </div>
+    </div>
+
+    <div class="sec-card">
+      <div class="sec-head">
+        <div class="sec-ico" style="background:rgba(239,68,68,0.1);border-color:rgba(239,68,68,0.2);color:#f87171;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <div><div class="sec-title">Co-Organizer Permissions</div><div class="sec-desc">Define what co-organizers are allowed to do</div></div>
+      </div>
+      <div class="trow"><div class="tinfo"><div class="tlbl">Can Manage Matches</div><div class="tdesc">Schedule and update match results</div></div><label class="tsw"><input type="checkbox" id="pm" checked><div class="ttrack"></div></label></div>
+      <div class="trow"><div class="tinfo"><div class="tlbl">Can Approve Teams</div><div class="tdesc">Accept or reject team registrations</div></div><label class="tsw"><input type="checkbox" id="pt" checked><div class="ttrack"></div></label></div>
+      <div class="trow"><div class="tinfo"><div class="tlbl">Can Review Disputes</div><div class="tdesc">View and action dispute filings</div></div><label class="tsw"><input type="checkbox" id="pd"><div class="ttrack"></div></label></div>
+      <div class="trow"><div class="tinfo"><div class="tlbl">Can Issue Warnings</div><div class="tdesc">Issue conduct warnings to players</div></div><label class="tsw"><input type="checkbox" id="pw"><div class="ttrack"></div></label></div>
+    </div>
+
+    <div class="abar">
+      <div class="abar-l"><button class="btn btn-o" onclick="swTab('settings')">← Back</button></div>
+      <div class="abar-r">
+        <button class="btn btn-o" onclick="saveDraft()">💾 Save Draft</button>
+        <button class="btn btn-a" onclick="swTab('prizes')">Next: Prize Pool →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ PRIZE POOL ═══ -->
+  <div class="tab-panel" id="panel-prizes">
+    <div class="sec-card">
+      <div class="sec-head">
+        <div class="sec-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg></div>
+        <div><div class="sec-title">Prize Pool Distribution</div><div class="sec-desc">Set prize amounts for each placement</div></div>
+      </div>
+      <div class="pr"><div class="pp">🥇</div><div class="pl">1st Place</div><input class="pi" type="number" id="p1" placeholder="₹ 0" min="0" oninput="updPrize()"></div>
+      <div class="pr"><div class="pp">🥈</div><div class="pl">2nd Place</div><input class="pi" type="number" id="p2" placeholder="₹ 0" min="0" oninput="updPrize()"></div>
+      <div class="pr"><div class="pp">🥉</div><div class="pl">3rd Place</div><input class="pi" type="number" id="p3" placeholder="₹ 0" min="0" oninput="updPrize()"></div>
+      <div class="pr"><div class="pp" style="font-size:14px;color:var(--tm);">4th</div><div class="pl">4th Place</div><input class="pi" type="number" id="p4" placeholder="₹ 0" min="0" oninput="updPrize()"></div>
+      <div class="divider"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div style="font-size:14px;font-weight:600;color:var(--td);">Total Prize Pool</div>
+        <div style="font-size:22px;font-weight:800;color:var(--accent);" id="ptotal">₹0</div>
+      </div>
+    </div>
+    <div class="sec-card">
+      <div class="sec-head">
+        <div class="sec-ico" style="background:rgba(251,146,60,0.1);border-color:rgba(251,146,60,0.2);color:#fb923c;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+        <div><div class="sec-title">Additional Prizes &amp; Incentives</div><div class="sec-desc">MVP awards, special recognition, and bonus rewards</div></div>
+      </div>
+      <div class="fg2" style="margin-bottom:20px;">
+        <div class="fg"><label class="fl">MVP Award</label><input class="fi" type="text" id="pmvp" placeholder="e.g. ₹5,000 + Trophy"></div>
+        <div class="fg"><label class="fl">Best Team Spirit Award</label><input class="fi" type="text" id="psp" placeholder="e.g. Merchandise Pack"></div>
+      </div>
+      <div class="fg1">
+        <div class="fg"><label class="fl">Sponsor / Prizes Note</label><textarea class="fta" id="pnt" rows="2" placeholder="Additional notes about prizes, sponsors, or delivery timelines…"></textarea></div>
+      </div>
+    </div>
+    <div class="abar">
+      <div class="abar-l"><button class="btn btn-o" onclick="swTab('organizers')">← Back</button></div>
+      <div class="abar-r">
+        <button class="btn btn-o" onclick="saveDraft()">💾 Save Draft</button>
+        <button class="btn btn-a" id="pub-btn" onclick="submitComp()">🚀 Create &amp; Publish Competition</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ MANAGE EXISTING ═══ -->
+  <div class="tab-panel" id="panel-manage">
+    <div class="sec-card">
+      <div class="sec-head">
+        <div class="sec-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/></svg></div>
+        <div style="flex:1;"><div class="sec-title">Your Competitions</div><div class="sec-desc">Edit, manage organizers, or archive existing competitions</div></div>
+        <input class="fi" type="text" id="msearch" placeholder="Search competitions…" oninput="filterML(this.value)" style="width:240px;">
+      </div>
+      <div class="ml" id="mlist"></div>
+    </div>
+  </div>
+
+</main>
+<div id="footer-mount"></div>
+</div>
+<div id="mct"></div>
+
+<script src="../../js/script.js"></script>
+<script src="../../js/pages/competitions-data.js"></script>
+<script>
+  document.getElementById('sidebar-mount').innerHTML = getSidebar('competitions', '../../');
+  document.getElementById('footer-mount').innerHTML = getFooter('../../');
+
+  let coOrgs = [], allComps = [];
+
+  // INIT
+  (function init() {
+    try {
+      const s = JSON.parse(localStorage.getItem('nexus.auth.session') || '{}');
+      const u = s.username || 'Organizer';
+      document.getElementById('hname').textContent = u;
+      document.getElementById('hemail').textContent = s.email || '';
+      document.getElementById('hav').textContent = u.charAt(0).toUpperCase();
+    } catch(e) {}
+    loadML();
+    const p = new URLSearchParams(location.search);
+    if (p.get('edit')) loadEdit(p.get('edit'));
+  })();
+
+  function swTab(n) {
+    document.querySelectorAll('.step-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('tab-'+n).classList.add('active');
+    document.getElementById('panel-'+n).classList.add('active');
+    if (n === 'manage') loadML();
+  }
+
+  function onChange() {
+    if (document.getElementById('cn').value.trim()) {
+      const sp = document.getElementById('spill');
+      sp.className = 'spill sp-pend'; sp.textContent = 'Modified';
+    }
+  }
+
+  /* ── ADD CO-ORG ── */
+  function toggleAdd() {
+    const panel = document.getElementById('add-panel');
+    if (panel.classList.contains('open')) { closeAdd(); }
+    else { panel.classList.add('open'); document.getElementById('cs-inp').focus(); document.getElementById('add-btn').textContent = '✕ Close'; }
+  }
+  function closeAdd() {
+    document.getElementById('add-panel').classList.remove('open');
+    document.getElementById('cs-inp').value = '';
+    document.getElementById('cd-inp').value = '';
+    const sr = document.getElementById('sres'); sr.classList.remove('vis'); sr.innerHTML = '';
+    document.getElementById('add-btn').textContent = '➕ Add Co-Organizer';
+  }
+  function srchUsers(q) {
+    const box = document.getElementById('sres');
+    if (!q || q.length < 2) { box.classList.remove('vis'); box.innerHTML = ''; return; }
+    let accs = [];
+    try { accs = JSON.parse(localStorage.getItem('nexus.auth.accounts') || '[]'); } catch(e) {}
+    const ql = q.toLowerCase();
+    const hits = accs.filter(a =>
+      ((a.username||'').toLowerCase().includes(ql) || (a.email||'').toLowerCase().includes(ql)) &&
+      a.role !== 'super_admin' && !coOrgs.some(c => c.username === a.username)
+    ).slice(0, 5);
+    if (!hits.length) { box.innerHTML = '<div class="sri"><div class="sri-n">No matching users found</div></div>'; box.classList.add('vis'); return; }
+    box.innerHTML = hits.map(a => `<div class="sri" onclick="addFromSearch('${a.username}','${a.email||''}')"><div><div class="sri-n">@${a.username}</div><div class="sri-e">${a.email||'No email'} · ${a.role||'user'}</div></div><button class="btn btn-a btn-sm">+ Add</button></div>`).join('');
+    box.classList.add('vis');
+  }
+  function addFromSearch(u, e) { addCoOrg(u, e); closeAdd(); }
+  function addDirect() {
+    const u = document.getElementById('cd-inp').value.trim();
+    if (!u) { toast('Please enter a username.','err'); return; }
+    if (coOrgs.some(c => c.username.toLowerCase() === u.toLowerCase())) { toast(`@${u} is already a co-organizer.`,'wrn'); return; }
+    addCoOrg(u, ''); closeAdd();
+  }
+  function addCoOrg(u, e) { coOrgs.push({username:u, email:e}); renderCoOrgs(); toast(`@${u} added as co-organizer.`); }
+  function removeCoOrg(u) { coOrgs = coOrgs.filter(c => c.username !== u); renderCoOrgs(); toast(`@${u} removed.`,'wrn'); }
+  function renderCoOrgs() {
+    const list = document.getElementById('coorg-list');
+    const empty = document.getElementById('coorg-empty');
+    if (!coOrgs.length) { list.innerHTML = ''; list.appendChild(empty); empty.style.display = 'block'; return; }
+    empty.style.display = 'none';
+    list.innerHTML = coOrgs.map((c,i) => `<div class="coorg-card"><div class="coorg-av">${c.username.charAt(0).toUpperCase()}</div><div class="coorg-info"><div class="coorg-name">@${c.username}</div><div class="coorg-role">${c.email||'Co-Organizer'}</div></div><div class="coorg-acts"><span class="badge bo">Co-Organizer</span><button class="btn btn-r btn-sm" onclick="removeCoOrg('${c.username}')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Remove</button></div></div>`).join('');
+  }
+
+  /* ── PRIZE ── */
+  function updPrize() {
+    const t = ['p1','p2','p3','p4'].reduce((s,id)=>s+(parseFloat(document.getElementById(id).value)||0),0);
+    document.getElementById('ptotal').textContent = '₹'+t.toLocaleString('en-IN');
+  }
+
+  /* ── DRAFT / SUBMIT ── */
+  function gatherData() {
+    return {
+      name: document.getElementById('cn').value.trim(),
+      game: document.getElementById('cg').value,
+      format: document.getElementById('cf').value,
+      startDate: document.getElementById('cs').value,
+      endDate: document.getElementById('ce').value,
+      maxTeams: document.getElementById('cmt').value||16,
+      teamSize: document.getElementById('cts').value||5,
+      region: document.getElementById('crg').value,
+      description: document.getElementById('cd').value.trim(),
+      openReg: document.getElementById('t-oreg').checked,
+      requireVerify: document.getElementById('t-ver').checked,
+      publicListed: document.getElementById('t-pub').checked,
+      streaming: document.getElementById('t-str').checked,
+      disputes: document.getElementById('t-dis').checked,
+      autoPublish: document.getElementById('t-ap').checked,
+      entryFee: document.getElementById('ef').value||0,
+      platformFee: document.getElementById('pf').value||10,
+      prizes: { first:document.getElementById('p1').value||0, second:document.getElementById('p2').value||0, third:document.getElementById('p3').value||0, fourth:document.getElementById('p4').value||0, mvp:document.getElementById('pmvp').value, spirit:document.getElementById('psp').value, note:document.getElementById('pnt').value },
+      coOrganizers: coOrgs,
+      permissions: { matches:document.getElementById('pm').checked, teams:document.getElementById('pt').checked, disputes:document.getElementById('pd').checked, warnings:document.getElementById('pw').checked }
+    };
+  }
+  function saveDraft() {
+    const d = gatherData(); d.status = 'draft';
+    localStorage.setItem('nexus_comp_draft', JSON.stringify(d));
+    const sp = document.getElementById('spill'); sp.className = 'spill sp-draft'; sp.textContent = 'Draft Saved';
+    toast('Competition saved as draft.');
+  }
+  function submitComp() {
+    const d = gatherData();
+    if (!d.name || !d.game || !d.format || !d.startDate) { toast('Please fill all required fields in Basic Info.','err'); swTab('basic'); return; }
+    d.status = 'pending'; d.id = 'comp-'+Date.now(); d.createdAt = new Date().toISOString();
+    if (window.NexusData && typeof window.NexusData.addCompetition === 'function') {
+      window.NexusData.addCompetition(d);
+    } else {
+      const cs = JSON.parse(localStorage.getItem('nexus_competitions')||'[]'); cs.unshift(d);
+      localStorage.setItem('nexus_competitions', JSON.stringify(cs));
+    }
+    const sp = document.getElementById('spill'); sp.className = 'spill sp-active'; sp.textContent = 'Published';
+    toast('🚀 Competition created and submitted for review!');
+    setTimeout(()=>{ location.href='dashboard.html'; }, 2000);
+  }
+
+  /* ── MANAGE LIST ── */
+  function loadML(q) {
+    try { allComps = JSON.parse(localStorage.getItem('nexus_competitions')||'[]'); } catch(e) { allComps=[]; }
+    renderML(q||'');
+  }
+  function filterML(q) { renderML(q); }
+  function renderML(q) {
+    const list = document.getElementById('mlist');
+    const filtered = q ? allComps.filter(c=>(c.name||'').toLowerCase().includes(q.toLowerCase())) : allComps;
+    if (!filtered.length) { list.innerHTML = '<div class="empty"><div class="empty-ico">🏆</div><div class="empty-t">No competitions found</div><div class="empty-s">Create a new competition using the tabs above</div></div>'; return; }
+    const em = {'Counter-Strike 2':'🎯','Valorant':'🎯','League of Legends':'⚔️','Dota 2':'🏹','Fortnite':'🎮','Rocket League':'🚀','PUBG Mobile':'🎮','Free Fire':'🔥'};
+    list.innerHTML = filtered.map(c => {
+      const sb = c.status==='active' ? '<span class="badge ba">⚡ Active</span>' : c.status==='pending' ? '<span class="badge bo">⏳ Pending</span>' : '<span class="badge" style="background:#1f1f1f;color:#737373;border:1px solid #333;">Draft</span>';
+      const nc = Array.isArray(c.coOrganizers) ? c.coOrganizers.length : 0;
+      return `<div class="mc"><div class="mc-ico">${em[c.game]||'🏆'}</div><div class="mc-info"><div class="mc-name">${c.name||'Untitled'}</div><div class="mc-meta">${c.game||'—'} · ${c.format||'—'} · ${nc} co-organizer${nc!==1?'s':''}</div></div><div style="display:flex;align-items:center;gap:8px;margin-right:12px;">${sb}</div><div class="mc-acts"><button class="btn btn-o btn-sm" onclick="loadEdit('${c.id}')">✏️ Edit</button><button class="btn btn-o btn-sm" onclick="editOrgs('${c.id}')">👥 Organizers</button><button class="btn btn-r btn-sm" onclick="archiveComp('${c.id}')">🗃️ Archive</button></div></div>`;
+    }).join('');
+  }
+  function loadEdit(id) {
+    const c = allComps.find(x=>x.id===id); if(!c) return;
+    document.getElementById('cn').value = c.name||'';
+    document.getElementById('cg').value = c.game||'';
+    document.getElementById('cf').value = c.format||'';
+    document.getElementById('cs').value = c.startDate||'';
+    document.getElementById('ce').value = c.endDate||'';
+    document.getElementById('cmt').value = c.maxTeams||'';
+    document.getElementById('cts').value = c.teamSize||'';
+    document.getElementById('crg').value = c.region||'';
+    document.getElementById('cd').value = c.description||'';
+    coOrgs = Array.isArray(c.coOrganizers) ? [...c.coOrganizers] : [];
+    renderCoOrgs();
+    if (c.prizes) {
+      document.getElementById('p1').value = c.prizes.first||'';
+      document.getElementById('p2').value = c.prizes.second||'';
+      document.getElementById('p3').value = c.prizes.third||'';
+      document.getElementById('p4').value = c.prizes.fourth||'';
+      document.getElementById('pmvp').value = c.prizes.mvp||'';
+      document.getElementById('psp').value = c.prizes.spirit||'';
+      document.getElementById('pnt').value = c.prizes.note||'';
+      updPrize();
+    }
+    const sp = document.getElementById('spill');
+    sp.className = 'spill '+(c.status==='active'?'sp-active':'sp-pend');
+    sp.textContent = c.status==='active'?'Active':'Editing';
+    document.getElementById('pub-btn').textContent = '✔ Update Competition';
+    swTab('basic');
+    toast(`Loaded "${c.name}" for editing.`);
+  }
+  function editOrgs(id) { loadEdit(id); swTab('organizers'); }
+  function archiveComp(id) {
+    if (!confirm('Archive this competition? It will be hidden from public listing.')) return;
+    const cs = JSON.parse(localStorage.getItem('nexus_competitions')||'[]');
+    const i = cs.findIndex(c=>c.id===id);
+    if (i!==-1) { cs[i].status='archived'; localStorage.setItem('nexus_competitions', JSON.stringify(cs)); }
+    loadML(); toast('Competition archived.','wrn');
+  }
+
+  /* ── TOAST ── */
+  let _tt;
+  function toast(msg, type) {
+    if (typeof showToast==='function') { showToast(msg, type==='err'?'error':undefined); return; }
+    const t = document.getElementById('mct');
+    t.textContent = msg; t.className = type||'';
+    clearTimeout(_tt);
+    requestAnimationFrame(()=>t.classList.add('show'));
+    _tt = setTimeout(()=>t.classList.remove('show'), 3200);
+  }
+</script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { CompetitionRepository } from './repositories/competition.repository';
 import { CreateCompetitionDto, UpdateCompetitionDto } from './dto/competition.dto';
-import { ICompetition } from '@/common/interfaces';
+import { ICompetition } from '../../common/interfaces';
 
 @Injectable()
 export class CompetitionsService {
@@ -86,5 +86,9 @@ export class CompetitionsService {
 
   async getActiveCompetitions(): Promise<ICompetition[]> {
     return this.competitionRepository.findByStatus('active');
+  }
+
+  async setApproval(id: string, decision: string, adminUsername: string): Promise<ICompetition> {
+    return this.competitionRepository.setApproval(id, decision, adminUsername);
   }
 }

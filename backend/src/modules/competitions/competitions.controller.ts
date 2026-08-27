@@ -13,11 +13,11 @@ import {
 import { ApiTags, ApiOperation, ApiResponse, ApiSecurity } from '@nestjs/swagger';
 import { CompetitionsService } from './competitions.service';
 import { CreateCompetitionDto, UpdateCompetitionDto, CompetitionResponseDto, AddCoOrganizerDto } from './dto/competition.dto';
-import { HeaderAuthGuard } from '@/common/decorators/header-auth.guard';
-import { RolesGuard } from '@/common/decorators/roles.guard';
-import { Roles } from '@/common/decorators/roles.decorator';
-import { CurrentUser } from '@/common/decorators/current-user.decorator';
-import { UserRole } from '@/common/interfaces';
+import { HeaderAuthGuard } from '../../common/decorators/header-auth.guard';
+import { RolesGuard } from '../../common/decorators/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { UserRole } from '../../common/interfaces';
 
 @Controller('competitions')
 @ApiTags('Competitions')
@@ -183,6 +183,22 @@ export class CompetitionsController {
     @Body() updateCompetitionDto: UpdateCompetitionDto,
   ): Promise<CompetitionResponseDto> {
     return this.competitionsService.updateCompetition(id, updateCompetitionDto);
+  }
+
+  @Patch(':id/approval')
+  @UseGuards(HeaderAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Approve or reject a competition',
+    description: 'Update competition approval status (Admin only)',
+  })
+  async setApproval(
+    @Param('id') id: string,
+    @Body() body: { decision: string },
+    @CurrentUser() user?: any,
+  ): Promise<CompetitionResponseDto> {
+    const adminUsername = user?.username || user?.id || 'admin';
+    return this.competitionsService.setApproval(id, body.decision, adminUsername);
   }
 
   @Delete(':id')

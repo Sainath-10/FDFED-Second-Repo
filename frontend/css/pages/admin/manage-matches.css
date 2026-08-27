@@ -55,8 +55,8 @@
 }
 
 .match-card-row {
-  background: var(--bg-card);
-  border: 1px solid rgba(255,255,255,0.07);
+  background: #0a0a0a;
+  border: 1px solid #262626;
   border-radius: 12px;
   padding: 20px;
   display: flex;

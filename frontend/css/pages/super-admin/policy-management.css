@@ -91,9 +91,20 @@
   justify-content: center;
 }
 
-.pm-stat-icon.green { background: rgba(34, 197, 94, 0.1); color: #22c55e; }
-.pm-stat-icon.orange { background: rgba(245, 73, 0, 0.1); color: #f54900; }
-.pm-stat-icon.blue { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
+.pm-stat-icon.green {
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
+}
+
+.pm-stat-icon.orange {
+  background: rgba(245, 73, 0, 0.1);
+  color: #f54900;
+}
+
+.pm-stat-icon.blue {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+}
 
 .pm-stat-label {
   font-size: 14px;
@@ -176,11 +187,30 @@
   flex-shrink: 0;
 }
 
-.policy-icon-box.financial { background: rgba(34, 197, 94, 0.1); color: #22c55e; }
-.policy-icon-box.conduct { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
-.policy-icon-box.eligibility { background: rgba(245, 73, 0, 0.1); color: #f54900; }
-.policy-icon-box.security { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
-.policy-icon-box.privacy { background: rgba(168, 85, 247, 0.1); color: #a855f7; }
+.policy-icon-box.financial {
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
+}
+
+.policy-icon-box.conduct {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+}
+
+.policy-icon-box.eligibility {
+  background: rgba(245, 73, 0, 0.1);
+  color: #f54900;
+}
+
+.policy-icon-box.security {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.policy-icon-box.privacy {
+  background: rgba(168, 85, 247, 0.1);
+  color: #a855f7;
+}
 
 .policy-details {
   flex: 1;
@@ -216,12 +246,35 @@
   border-radius: 4px;
 }
 
-.tag.financial { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
-.tag.conduct { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
-.tag.eligibility { background: rgba(245, 73, 0, 0.15); color: #f54900; }
-.tag.security { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
-.tag.privacy { background: rgba(168, 85, 247, 0.15); color: #a855f7; }
-.tag.version { background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.6); }
+.tag.financial {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+}
+
+.tag.conduct {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+}
+
+.tag.eligibility {
+  background: rgba(245, 73, 0, 0.15);
+  color: #f54900;
+}
+
+.tag.security {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.tag.privacy {
+  background: rgba(168, 85, 247, 0.15);
+  color: #a855f7;
+}
+
+.tag.version {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.6);
+}
 
 .policy-description {
   font-size: 14px;
@@ -329,12 +382,27 @@
 }
 
 @media (max-width: 1200px) {
-  .pm-stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .pm-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 @media (max-width: 768px) {
-  .pm-header { flex-direction: column; }
-  .pm-stats-grid { grid-template-columns: 1fr; }
-  .policy-card { flex-direction: column; }
-  .pm-tabs-bar { gap: 24px; overflow-x: auto; white-space: nowrap; }
+  .pm-header {
+    flex-direction: column;
+  }
+
+  .pm-stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .policy-card {
+    flex-direction: column;
+  }
+
+  .pm-tabs-bar {
+    gap: 24px;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
 }

@@ -36,11 +36,17 @@
         return;
       }
 
-      // Get reporter from session
+      // Get reporter from session & check if organizer
       let reporterName = 'Guest User';
+      let userRole = 'participant';
+      let isOrg = false;
       try {
         const session = JSON.parse(localStorage.getItem('nexus.auth.session') || '{}');
         reporterName = session.displayName || session.username || 'Anonymous';
+        userRole = String(session.role || '').toLowerCase();
+        if (userRole === 'organizer' || userRole === 'admin' || userRole === 'super-admin' || (comp && comp.createdBy === session.username)) {
+          isOrg = true;
+        }
       } catch(e){}
 
       const compName = comp.name || 'Competition';
@@ -59,8 +65,10 @@
         filedBy: reporterName,
         against: usernameAgainst,
         filedAt: timestamp,
-        status: 'open',
-        escalated: false,
+        status: isOrg ? 'escalated_to_admin' : 'open',
+        escalated: isOrg,
+        superAdminState: isOrg ? 'pending' : '',
+        escalationReason: isOrg ? 'Filed directly by Organizer — auto-escalated to Super Admin' : '',
         compId: compId,
         type: type,
         updatedAt: new Date().toISOString()
@@ -76,7 +84,7 @@
         console.error('Failed to save to admin store:', e);
       }
 
-      showToast('Dispute submitted successfully. Redirecting...', 'success');
+      showToast('Dispute submitted', 'success');
       setTimeout(() => {
         location.href = `comp-info.html?id=${compId || ''}`;
       }, 1500);

@@ -1,76 +1,150 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NEXUS ESPORTS — Summer Championship 2026</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Competition Overview</title>
   <link rel="stylesheet" href="../../css/styles.css">
   <link rel="stylesheet" href="../../css/pages/admin/competition-detail.css">
 </head>
 <body>
-<div id="sidebar-mount"></div>
-<div class="page-with-sidebar">
-  <main class="main-content">
-    <a href="dashboard.html" class="back-btn-alt">← Back to Dashboard</a>
-    <div class="admin-header-row">
-      <div>
-        <h1 class="admin-title-lg">Summer Championship 2026</h1>
-        <p class="admin-subtitle-accent">League of Legends · Upcoming · Jun 15–20, 2026</p>
-      </div>
-      <div class="header-actions-group">
-        <a href="manage-teams.html" class="btn-table-primary">Manage Teams</a>
-      </div>
-    </div>
 
-    <div class="admin-comp-tabs">
-      <a href="competition-detail.html" class="admin-tab active">Overview</a>
-      <a href="manage-teams.html"       class="admin-tab">Teams</a>
-      <a href="manage-matches.html"     class="admin-tab">Matches</a>
-      <a href="match-results.html"      class="admin-tab">Results</a>
-      <a href="view-standings.html"     class="admin-tab">Standings</a>
-    </div>
+  <!-- Admin Sidebar -->
+  <div id="sidebar-mount"></div>
 
-    <div class="dash-stats stats-grid-gap">
-      <div class="dash-stat-card"><div class="dash-stat-icon stat-icon-wrap">👥</div><div><div class="dash-stat-num">89</div><div class="dash-stat-lbl">Registered</div></div></div>
-      <div class="dash-stat-card"><div class="dash-stat-icon stat-icon-warn">⏳</div><div><div class="dash-stat-num">15</div><div class="dash-stat-lbl">Pending</div></div></div>
-      <div class="dash-stat-card"><div class="dash-stat-icon stat-icon-success">✅</div><div><div class="dash-stat-num">74</div><div class="dash-stat-lbl">Approved</div></div></div>
-      <div class="dash-stat-card"><div class="dash-stat-icon stat-icon-info">📅</div><div><div class="dash-stat-num">14</div><div class="dash-stat-lbl">Days Away</div></div></div>
-    </div>
+  <div class="page-with-sidebar">
+    <main class="main-content">
+      <a href="dashboard.html" class="back-btn-alt">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <path d="M12 8H4M4 8L8 12M4 8L8 4"/>
+        </svg>
+        Back to Dashboard
+      </a>
 
-    <div class="layout-wrapper">
-      <div class="content-stack">
+      <div id="cd-loading">Loading competition details...</div>
 
-        <div class="banner-card">
-          <img src="../../assets/7b04655f1d50a8b1b25ad53f36d80ff99cb3184e.png" class="banner-img-wide" alt="Banner">
-          <div class="banner-gradient-overlay"></div>
-          <div class="banner-text-content">
-            <div class="banner-label-sm">League of Legends</div>
-            <div class="banner-title-md">Summer Championship 2026</div>
+      <div id="cd-content" style="display:none;">
+        <div class="admin-header-row">
+          <div>
+            <h1 class="admin-title-lg" id="cd-title">—</h1>
+            <p class="admin-subtitle-accent" id="cd-subtitle">—</p>
           </div>
         </div>
-      </div>
 
-      <div class="sidebar-sticky-stack">
-        <div class="comp-sidebar-block">
-          <h3>Competition Details</h3>
-          <div class="info-row"><span class="key">Status</span><span class="val stat-val-accent">Upcoming</span></div>
-          <div class="info-row"><span class="key">Game</span><span class="val">League of Legends</span></div>
-          <div class="info-row"><span class="key">Format</span><span class="val">Group Stage + Playoffs</span></div>
-          <div class="info-row"><span class="key">Max Teams</span><span class="val">128</span></div>
-          <div class="info-row"><span class="key">Date</span><span class="val">Jun 15–20, 2026</span></div>
-          <div class="info-row"><span class="key">Location</span><span class="val">Online</span></div>
-          <div class="info-row"><span class="key">Prize Pool</span><span class="val prize-val-lg">$50,000</span></div>
+        <!-- Admin Navigation Tabs -->
+        <div class="admin-comp-tabs">
+          <a id="tab-overview"  href="competition-detail.html" class="admin-tab active">Overview</a>
+          <a id="tab-teams"     href="manage-teams.html" class="admin-tab">Teams</a>
+          <a id="tab-matches"   href="manage-matches.html" class="admin-tab">Matches</a>
+          <a id="tab-results"   href="match-results.html" class="admin-tab">Results</a>
+          <a id="tab-standings" href="view-standings.html" class="admin-tab">Standings</a>
         </div>
-        <div class="comp-sidebar-block sidebar-btns-stack">
-          <a href="manage-matches.html" class="btn-table-primary btn-sidebar-full">Manage Matches</a>
-          <a href="view-standings.html" class="btn-table-secondary btn-sidebar-full">View Standings</a>
-          <a href="match-results.html"  class="btn-table-secondary btn-sidebar-full">Match Results</a>
+
+        <!-- 2-Column Overview Body matching Design -->
+        <div class="cd-layout-wrapper">
+          
+          <!-- Left Main Column -->
+          <div class="cd-main-stack">
+            
+            <div class="comp-info-block">
+              <h2>About this Tournament</h2>
+              <p id="cd-description">Loading tournament description...</p>
+            </div>
+
+            <div class="comp-info-block">
+              <h2>Schedule</h2>
+              <div style="display:flex;flex-direction:column;">
+                <div class="info-row">
+                  <span class="key">Registration Opens</span>
+                  <span class="val" id="sched-reg-open">—</span>
+                </div>
+                <div class="info-row">
+                  <span class="key">Registration Closes</span>
+                  <span class="val" id="sched-reg-close">—</span>
+                </div>
+                <div class="info-row">
+                  <span class="key">Competition Dates</span>
+                  <span class="val" id="sched-dates">—</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="comp-info-block">
+              <h2>Competition Limits</h2>
+              <div style="display:flex;flex-direction:column;">
+                <div class="info-row">
+                  <span class="key">Max Teams</span>
+                  <span class="val" id="overview-max-teams">—</span>
+                </div>
+                <div class="info-row">
+                  <span class="key">Max Players per Team</span>
+                  <span class="val" id="overview-max-players">—</span>
+                </div>
+                <div class="info-row">
+                  <span class="key">Entry Fee</span>
+                  <span class="val" id="overview-entry-fee">—</span>
+                </div>
+                <div class="info-row">
+                  <span class="key">Location</span>
+                  <span class="val" id="overview-location">—</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Right Sidebar Column -->
+          <aside class="cd-sidebar-stack">
+            
+            <!-- Tournament Info -->
+            <div class="comp-sidebar-block">
+              <h3>Tournament Info</h3>
+              <div class="info-row">
+                <span class="key">Status</span>
+                <span class="val" id="info-status" style="color:var(--accent, #c6ff33);">—</span>
+              </div>
+              <div class="info-row">
+                <span class="key">Game</span>
+                <span class="val" id="info-game">—</span>
+              </div>
+              <div class="info-row">
+                <span class="key">Format</span>
+                <span class="val" id="info-format">—</span>
+              </div>
+              <div class="info-row">
+                <span class="key">Teams</span>
+                <span class="val" id="info-teams">—</span>
+              </div>
+              <div class="info-row">
+                <span class="key">Date</span>
+                <span class="val" id="info-date">—</span>
+              </div>
+              <div class="info-row">
+                <span class="key">Prize Pool</span>
+                <span class="val" id="info-prize" style="color:var(--accent, #c6ff33); font-size:16px;">—</span>
+              </div>
+            </div>
+
+            <!-- Prize Breakdown -->
+            <div class="comp-sidebar-block" id="prize-breakdown-block">
+              <h3>Prize Breakdown</h3>
+              <div class="prize-breakdown" id="comp-prize-breakdown">
+                <p style="color:var(--text-muted, #9aa4b2);font-size:14px;">No prize breakdown available.</p>
+              </div>
+            </div>
+
+          </aside>
+
         </div>
       </div>
-    </div>
-  </main>
-  <div id="footer-mount"></div>
-</div>
-<script src="../../js/script.js"></script>
-<script src="../../js/pages/admin/competition-detail.js"></script>
+    </main>
+
+    <!-- Footer -->
+    <div id="footer-mount"></div>
+  </div>
+
+  <script src="../../js/script.js"></script>
+  <script src="../../js/pages/competitions-data.js"></script>
+  <script src="../../js/pages/admin/competition-detail.js"></script>
 </body>
 </html>

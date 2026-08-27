@@ -4,7 +4,13 @@
 
 const PolicyPage = (() => {
 
-  const normalizePolicyStatus = (status) => (status === 'active' ? 'active' : 'draft');
+  const normalizePolicyStatus = (status) => {
+    status = String(status || '').trim().toLowerCase();
+    if (status === 'active' || status === 'draft' || status === 'archived') {
+      return status;
+    }
+    return 'draft';
+  };
 
   /* ── SHARED DATA ── */
   const DEFAULT_POLICIES = [
@@ -386,9 +392,11 @@ const PolicyPage = (() => {
       if (!validateForm(data)) return;
       const idx = policies.findIndex(p => p.id === id);
       if (idx !== -1) {
+        let statusToSave = data.status;
+        if (statusToSave === 'draft') statusToSave = 'active';
         const [maj, min] = (policy.version.replace('v','').split('.').map(Number));
         const newVer = `v${maj}.${min + 1}`;
-        policies[idx] = { ...policy, ...data, version: newVer, updatedAt: new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}), changelog: [{ ver: newVer, date: new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}), desc: 'Policy updated and published.' }, ...policy.changelog] };
+        policies[idx] = { ...policy, ...data, status: statusToSave, version: newVer, updatedAt: new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}), changelog: [{ ver: newVer, date: new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}), desc: 'Policy updated and published.' }, ...policy.changelog] };
         save();
       }
       toast('Policy updated successfully!');

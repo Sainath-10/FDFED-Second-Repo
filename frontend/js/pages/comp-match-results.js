@@ -197,6 +197,12 @@ function canStartMatch(match) {
   if (!match || match.status !== 'scheduled') return false;
   const hasLive = comp.matches.some(item => item.status === 'live');
   if (hasLive) return false;
+
+  // Prevent start if either team is banned in this competition
+  const isT1Banned = window.NexusData.isTeamBannedInComp(match.team1, comp);
+  const isT2Banned = window.NexusData.isTeamBannedInComp(match.team2, comp);
+  if (isT1Banned || isT2Banned) return false;
+
   if (!comp || !comp.startDate) return true;
   const start = new Date(comp.startDate);
   return !Number.isNaN(start.getTime()) && Date.now() >= start.getTime();

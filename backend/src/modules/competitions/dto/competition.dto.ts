@@ -101,13 +101,16 @@ export class CompetitionResponseDto {
   endDate: Date;
 
   @ApiProperty()
-  status: 'draft' | 'active' | 'completed';
+  status: string;
 
   @ApiProperty()
   createdBy: string;
 
   @ApiProperty({ example: ['organizer_1', 'co_organizer_2'] })
   organizers: string[];
+
+  @ApiProperty({ required: false })
+  approvalStatus?: string;
 
   @ApiProperty()
   createdAt: Date;

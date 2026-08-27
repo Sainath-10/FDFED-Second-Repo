@@ -277,7 +277,7 @@ ul   { list-style: none; }
    ================================================================ */
 .section-scope {
   background: var(--bg);
-  padding: 64px 344px;
+  padding: 64px 48px;
 }
 
 .section-scope .inner {

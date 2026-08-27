@@ -15,9 +15,11 @@
   const $ = id => document.getElementById(id);
 
   function fmtPrize(val) {
-    if (!val) return '—';
-    if (typeof val === 'string' && val.startsWith('₹')) return val;
-    return '₹' + Number(val).toLocaleString('en-IN');
+    if (!val || val === '—' || val === '-' || val === '₹0' || String(val).toLowerCase().includes('no prize')) {
+      return 'No Prize Pool';
+    }
+    const str = String(val).trim();
+    return str.toLowerCase().includes('prize pool') ? str : `${str} Prize Pool`;
   }
 
   function normalize(v) {
@@ -41,6 +43,17 @@
 
   /* ── Static competition metadata (read once) ──────────────── */
   const comp0       = freshComp();
+  const myTeam0     = freshMyTeam(comp0);
+
+  // If team is banned from this tournament, block access and redirect back to comp-info.html
+  if (myTeam0 && normalize(myTeam0.status) === 'banned') {
+    if (typeof showToast === 'function') {
+      showToast('Your team has been banned from this tournament.', 'error');
+    }
+    window.location.replace(`comp-info.html?id=${comp0.id || compId || ''}`);
+    return;
+  }
+
   const isLeague    = (comp0.type || 'league') === 'league';
   const compName    = comp0.name     || 'Competition';
   const compGame    = comp0.game     || 'Unknown Game';
@@ -50,8 +63,9 @@
   const compPrize   = comp0.prizePool|| comp0.prize || '₹0';
   const compDates   = comp0.dates    || 'TBD';
   const compParticipants = comp0.participants || comp0.registeredTeams || 0;
+  const compPrizeFormatted = fmtPrize(compPrize);
   const compDesc    = comp0.description
-    || `${compName} is a competitive ${compGame} ${isLeague ? 'league' : 'tournament'}. Teams battle across ${isLeague ? 'a structured league format with standings' : 'a knockout bracket'} competing for the ${fmtPrize(compPrize)} prize pool.`;
+    || `${compName} is a competitive ${compGame} ${isLeague ? 'league' : 'tournament'}. Teams battle across ${isLeague ? 'a structured league format with standings' : 'a knockout bracket'} competing for ${compPrizeFormatted.toLowerCase() === 'no prize pool' ? 'victory' : `the ${compPrizeFormatted}`}.`;
 
   /* ── HERO (static — built once) ───────────────────────────── */
   function buildHero() {
@@ -68,7 +82,7 @@
       </span>
       <span class="hero-meta-item">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-        ${fmtPrize(compPrize)} Prize Pool
+        ${compPrizeFormatted}
       </span>
       <span class="hero-meta-item">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg>
@@ -93,6 +107,10 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
         Back
       </a>
+      <button class="hero-btn hero-btn-secondary" style="border-color:rgba(248,113,113,0.5);color:#f87171;" onclick="openDisputeModal()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        Raise Dispute
+      </button>
       ${standingsBtn}`;
   }
 

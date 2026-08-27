@@ -235,6 +235,19 @@ function handleJoin(teamId) {
     return;
   }
 
+  const feeType = currentComp.feeType || 'free';
+  const entryFeeAmount = currentComp.entryFeeAmount || 0;
+
+  if (feeType === 'per_player' && entryFeeAmount > 0) {
+    showPlayerCheckoutModal(currentComp, entryFeeAmount, () => {
+      proceedJoinTeam(teamId);
+    });
+  } else {
+    proceedJoinTeam(teamId);
+  }
+}
+
+function proceedJoinTeam(teamId) {
   const result = window.NexusTeamWorkflow.submitJoinRequest({
     compId: currentComp.id,
     teamId: teamId
@@ -246,13 +259,55 @@ function handleJoin(teamId) {
   }
 
   if (typeof showToast === 'function') {
-    showToast('Join request sent successfully.');
+    showToast('Join request sent successfully!');
   }
 
   currentComp = window.NexusData.getCompetitionById(currentComp.id);
   initDynamicTeams(currentComp);
   renderPendingRequests(currentComp);
   filterTeams();
+}
+
+function showPlayerCheckoutModal(comp, feeAmount, onConfirm) {
+  const existing = document.getElementById('player-checkout-modal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'player-checkout-modal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.8);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;';
+  modal.innerHTML = `
+    <div style="background:#0f172a;border:1px solid #60a5fa;border-radius:16px;width:min(90vw,460px);padding:32px;box-shadow:0 20px 60px #000a;color:#f1f5f9;">
+      <h3 style="margin:0 0 4px;font-size:20px;color:#f1f5f9;">👤 Player Participation Fee</h3>
+      <p style="margin:0 0 20px;font-size:13px;color:#94a3b8;">Player Entry Fee for "${comp.name}".</p>
+
+      <div style="background:#1e293b;border-radius:12px;padding:16px;margin-bottom:20px;display:flex;flex-direction:column;gap:10px;">
+        <div style="display:flex;justify-content:space-between;font-size:14px;color:#cbd5e1;">
+          <span>Participation Fee Model:</span>
+          <span style="color:#60a5fa;font-weight:600;">Per Player (Individual Entry)</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:16px;color:#f1f5f9;border-top:1px dashed rgba(96,165,250,0.3);padding-top:10px;margin-top:2px;">
+          <strong>Total Player Entry Fee:</strong>
+          <strong style="color:#60a5fa;font-size:20px;">₹${feeAmount.toLocaleString('en-IN')}</strong>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;">
+        <button id="cancel-player-checkout-btn" style="flex:1;padding:12px;background:none;border:1px solid #334155;color:#94a3b8;border-radius:8px;cursor:pointer;font-size:14px;">
+          Cancel
+        </button>
+        <button id="confirm-player-checkout-btn" style="flex:2;padding:12px;background:#60a5fa;border:none;color:#fff;border-radius:8px;cursor:pointer;font-size:14px;font-weight:700;">
+          ✔ Pay ₹${feeAmount.toLocaleString('en-IN')} &amp; Send Request
+        </button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(modal);
+
+  document.getElementById('cancel-player-checkout-btn').addEventListener('click', () => modal.remove());
+  document.getElementById('confirm-player-checkout-btn').addEventListener('click', () => {
+    modal.remove();
+    if (typeof onConfirm === 'function') onConfirm();
+  });
 }
 
 document.addEventListener('DOMContentLoaded', () => {

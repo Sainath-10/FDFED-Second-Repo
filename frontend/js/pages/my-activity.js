@@ -15,6 +15,14 @@ const ICONS = {
   trophy: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#C6FF33" stroke-width="1.33" stroke-linecap="round"><path d="M4.5 1h7l-1 5a3.5 3.5 0 0 1-5 0L4.5 1z"/><path d="M2 1h2.5m9 0H14"/><path d="M8 9v5m-2 0h4"/></svg>`
 };
 
+function formatPrizePool(prize) {
+  if (!prize || prize === '—' || prize === '-' || prize === '₹0' || String(prize).toLowerCase().includes('no prize')) {
+    return 'No Prize Pool';
+  }
+  const str = String(prize).trim();
+  return str.toLowerCase().includes('prize pool') ? str : `${str} Prize Pool`;
+}
+
 function normalize(value) {
   return String(value || '').trim().toLowerCase();
 }
@@ -201,7 +209,9 @@ function buildCard(comp) {
   const participantLabel = comp.userCreated ? 'members' : 'participants';
   const participantValue = comp.participants || comp.members || 0;
   const approvalBadge = comp.role === 'organizer'
-    ? `<span class="act-badge act-approved">Auto-Approved (Live)</span>`
+    ? (comp.approvalStatus === 'pending'
+        ? `<span class="act-badge" style="background:rgba(251,146,60,0.15);border:1px solid #fb923c;color:#fb923c;">⏳ Pending Admin Approval</span>`
+        : `<span class="act-badge act-approved">Approved (Live)</span>`)
     : '';
 
   const teamRegBadge = comp.role === 'teamlead'
@@ -235,7 +245,7 @@ function buildCard(comp) {
       </div>
       <div class="act-card-footer">
         ${ICONS.trophy}
-        <span class="act-prize">${comp.prizePool || comp.prize || '-'} Prize Pool</span>
+        <span class="act-prize">${formatPrizePool(comp.prizePool || comp.prize)}</span>
       </div>
     </div>
   `;

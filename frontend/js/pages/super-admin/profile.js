@@ -22,7 +22,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   if (session) {
     const displayName = session.displayName || session.username || 'Super Admin';
-    const emailVal    = session.email || '';
+    const emailVal = session.email || '';
 
     const heroUsername = document.getElementById('sa-hero-username');
     if (heroUsername) heroUsername.textContent = displayName;
@@ -33,9 +33,29 @@ document.addEventListener('DOMContentLoaded', function () {
     const accountEmail = document.getElementById('account-email-value');
     if (accountEmail) accountEmail.textContent = emailVal;
 
+    const userIdEl = document.getElementById('sa-user-id');
+    if (userIdEl) {
+      const uname = session.username || 'SA-01';
+      // If username is already email-format (contains @), show as-is; otherwise prefix with @
+      userIdEl.textContent = uname.includes('@') ? uname : '@' + uname;
+    }
+
+    const lastLoginEl = document.getElementById('sa-last-login');
+    if (lastLoginEl) {
+      const loginTime = session.lastLoginAt || session.loggedInAt || Date.now();
+      const d = new Date(loginTime);
+      lastLoginEl.textContent = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' · ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    }
+
+    const joinedEl = document.getElementById('sa-joined-date');
+    if (joinedEl) {
+      const jTime = session.joinedAt ? new Date(session.joinedAt) : null;
+      joinedEl.textContent = jTime && !isNaN(jTime.getTime()) ? jTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Jan 2, 2026';
+    }
+
     // Also persist so the email-change modal starts with the correct value
     if (emailVal) {
-      try { localStorage.setItem('nexus.profile.email', emailVal); } catch (e) {}
+      try { localStorage.setItem('nexus.profile.email', emailVal); } catch (e) { }
     }
   }
 });

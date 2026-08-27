@@ -433,6 +433,62 @@ function removePlayerFromAllCompetitions(username) {
 }
 
 /**
+ * Notify every member of a matched team (leader + all players).
+ */
+function notifySATeamMembers(teamName, compId, title, body) {
+    try {
+        var comps = JSON.parse(localStorage.getItem('nexus_competitions') || '[]');
+        var members = [];
+        comps.forEach(function(comp) {
+            if (!Array.isArray(comp.teams)) return;
+            comp.teams.forEach(function(team) {
+                var nameMatch = (team.name || '').toLowerCase() === (teamName || '').toLowerCase();
+                var compMatch = !compId || comp.id === compId;
+                if (nameMatch && compMatch) {
+                    var leader = team.createdBy || team.leaderUsername || team.captain;
+                    if (leader && !members.includes(leader)) members.push(leader);
+                    if (Array.isArray(team.members)) {
+                        team.members.forEach(function(m) {
+                            var u = typeof m === 'string' ? m : (m && (m.username || m.name));
+                            if (u && !members.includes(u)) members.push(u);
+                        });
+                    }
+                }
+            });
+        });
+        members.forEach(function(u) {
+            pushNotif(u, title, body, 'dispute-outcome', 'rejected');
+        });
+    } catch(e) {}
+}
+
+/**
+ * Ban a team from their tournament — does NOT touch user accounts.
+ */
+function banSATeamFromTournament(teamName, compId) {
+    try {
+        var COMP_KEY = 'nexus_competitions';
+        var comps = JSON.parse(localStorage.getItem(COMP_KEY) || '[]');
+        var banned = false;
+        comps.forEach(function(comp) {
+            if (!Array.isArray(comp.teams)) return;
+            comp.teams.forEach(function(team) {
+                var nameMatch = (team.name || '').toLowerCase() === (teamName || '').toLowerCase();
+                var compMatch = !compId || comp.id === compId;
+                if (nameMatch && compMatch) {
+                    team.status = 'banned';
+                    team.bannedAt = new Date().toISOString();
+                    team.bannedReason = 'Banned following a super-admin resolved dispute.';
+                    banned = true;
+                }
+            });
+        });
+        if (banned) localStorage.setItem(COMP_KEY, JSON.stringify(comps));
+        return banned;
+    } catch(e) { return false; }
+}
+
+/**
  * BAN PLAYER handler
  */
 window.handleBanPlayer = function(cardId) {
@@ -446,68 +502,96 @@ window.handleBanPlayer = function(cardId) {
     var targetUser = dispute.userName || dispute.against || 'Unknown User';
     var reporter = dispute.reporter || dispute.filedBy || 'Unknown';
 
+    var isTeamTarget = (dispute.targetType === 'team' || dispute.targetType === 'opponent_team');
+    var modalTitle = isTeamTarget ? 'Confirm Team Ban' : 'Confirm Ban';
+    var modalBody  = isTeamTarget
+        ? 'Ban this team from the tournament? Player accounts will NOT be affected.'
+        : 'Confirm to ban player from the platform. Once banned this user cannot log in again.';
+
     window.showConfirmModal({
-        title: 'Confirm Ban',
-        body: 'Confirm to ban player. Once banned this user cannot log in again.',
+        title: modalTitle,
+        body: modalBody,
         type: 'danger',
         confirmText: 'Confirm',
         cancelText: 'Reject',
         onConfirm: function() {
-            console.log('[Action] Ban confirmed for:', targetUser);
+            console.log('[Action] Ban confirmed for:', targetUser, '| isTeam:', isTeamTarget);
 
-            // 1. Ban the user account + kill their active session
-            try {
-                var ACCOUNTS_KEY = 'nexus.auth.accounts';
-                var SESSION_KEY = 'nexus.auth.session';
+            if (isTeamTarget) {
+                // ── TEAM DISPUTE: ban team from tournament, not the user ──
+                banSATeamFromTournament(targetUser, dispute.compId || null);
 
-                var accounts = JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '[]');
-                var idx = accounts.findIndex(function(a) {
-                    return (a.username || '').toLowerCase() === targetUser.toLowerCase();
-                });
-                if (idx >= 0) {
-                    accounts[idx].banned = true;
-                    localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
-                    console.log('[Ban] Account flagged as banned');
-                } else {
-                    // Account not in stored list — add a ban record anyway
-                    accounts.push({ username: targetUser, banned: true, role: 'participant' });
-                    localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
-                    console.log('[Ban] New ban record added for:', targetUser);
+                notifySATeamMembers(
+                    targetUser,
+                    dispute.compId || null,
+                    '\uD83D\uDEAB Team Banned from Tournament',
+                    'Your team "' + targetUser + '" has been banned from the tournament following a resolved dispute. Your player accounts are unaffected.'
+                );
+
+                if (reporter && reporter !== 'Unknown') {
+                    pushNotif(reporter, 'Dispute Resolved \u2014 Team Banned',
+                        'Team "' + targetUser + '" has been banned from the tournament following your report: "' + (dispute.title || 'N/A') + '".',
+                        'system', 'approved');
                 }
 
-                // Kill their session if they're currently logged in
+                pushNotif('admin@nexus.gg', 'Super Admin Action \u2014 Team Banned',
+                    'Super Admin has banned team "' + targetUser + '" from the tournament. Dispute: "' + (dispute.title || 'N/A') + '".',
+                    'system', 'approved');
+
+                var updated = updateDisputeState(cardId, 'resolved', 'Team Banned from Tournament');
+                if (updated) {
+                    if (typeof showToast === 'function') showToast('Team ' + targetUser + ' has been banned from the tournament. Player accounts unaffected.', 'error');
+                    renderEscalations();
+                }
+
+            } else {
+                // ── PLAYER DISPUTE: ban the user account from the platform ──
                 try {
-                    var sess = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
-                    if (sess && (sess.username || '').toLowerCase() === targetUser.toLowerCase()) {
-                        localStorage.removeItem(SESSION_KEY);
-                        console.log('[Ban] Killed active session for:', targetUser);
+                    var ACCOUNTS_KEY = 'nexus.auth.accounts';
+                    var SESSION_KEY = 'nexus.auth.session';
+
+                    var accounts = JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '[]');
+                    var idx = accounts.findIndex(function(a) {
+                        return (a.username || '').toLowerCase() === targetUser.toLowerCase();
+                    });
+                    if (idx >= 0) {
+                        accounts[idx].banned = true;
+                        localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+                    } else {
+                        accounts.push({ username: targetUser, banned: true, role: 'participant' });
+                        localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
                     }
-                } catch(se) {}
 
-            } catch(e) {
-                console.error('[Ban] Failed to ban user in storage:', e);
-            }
+                    try {
+                        var sess = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+                        if (sess && (sess.username || '').toLowerCase() === targetUser.toLowerCase()) {
+                            localStorage.removeItem(SESSION_KEY);
+                        }
+                    } catch(se) {}
 
-            // 2. Remove from all competitions / teams
-            removePlayerFromAllCompetitions(targetUser);
+                } catch(e) {
+                    console.error('[Ban] Failed to ban user in storage:', e);
+                }
 
-            // 3. Notifications
-            pushNotif(targetUser, 'Account Permanently Banned',
-                'Your account has been permanently banned due to the dispute: "' + (dispute.title || 'N/A') + '". You will no longer be able to log in.',
-                'system-ban', 'rejected');
+                removePlayerFromAllCompetitions(targetUser);
 
-            pushNotif(reporter, 'Player Banned — Dispute Update',
-                'The player "' + targetUser + '" has been permanently banned and removed from all competitions regarding your report: "' + (dispute.title || 'N/A') + '".',
-                'system', 'approved');
+                pushNotif(targetUser, 'Account Permanently Banned',
+                    'Your account has been permanently banned due to the dispute: "' + (dispute.title || 'N/A') + '". You will no longer be able to log in.',
+                    'system-ban', 'rejected');
 
-            pushNotif('admin@nexus.gg', 'Super Admin Action — Player Banned',
-                'Super Admin has permanently banned "' + targetUser + '" and removed them from all competitions. Dispute: "' + (dispute.title || 'N/A') + '".',
-                'system', 'approved');
+                pushNotif(reporter, 'Player Banned \u2014 Dispute Update',
+                    'The player "' + targetUser + '" has been permanently banned and removed from all competitions regarding your report: "' + (dispute.title || 'N/A') + '".',
+                    'system', 'approved');
 
-            var updated = updateDisputeState(cardId, 'resolved', 'Player Banned');
-            if (updated) {
-                if (typeof showToast === 'function') showToast('Player ' + targetUser + ' has been permanently banned.', 'error');
-                renderEscalations();
+                pushNotif('admin@nexus.gg', 'Super Admin Action \u2014 Player Banned',
+                    'Super Admin has permanently banned "' + targetUser + '" and removed them from all competitions. Dispute: "' + (dispute.title || 'N/A') + '".',
+                    'system', 'approved');
+
+                var updated = updateDisputeState(cardId, 'resolved', 'Player Banned');
+                if (updated) {
+                    if (typeof showToast === 'function') showToast('Player ' + targetUser + ' has been permanently banned from the platform.', 'error');
+                    renderEscalations();
+                }
             }
         }
     });

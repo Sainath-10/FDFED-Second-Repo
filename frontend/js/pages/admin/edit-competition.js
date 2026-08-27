@@ -7,9 +7,22 @@ let currentComp = null;
 
 function loadCompData() {
   if (!window.NexusData) return;
-  const comp = window.NexusData.loadCompetitionById(compId);
+  const comp = window.NexusData.getCompetitionById(compId);
   if (!comp) return;
   currentComp = comp;
+
+  // Persist session compId and update all tab links
+  sessionStorage.setItem('last_admin_comp_id', comp.id);
+  const suffix = '?id=' + encodeURIComponent(comp.id);
+  const backBtn = document.querySelector('.back-btn-alt');
+  if (backBtn) {
+    backBtn.href = 'dashboard.html';
+    backBtn.textContent = '← Back to Dashboard';
+  }
+  document.querySelectorAll('.admin-comp-tabs .admin-tab').forEach(a => {
+    const baseHref = a.getAttribute('href').split('?')[0];
+    a.href = baseHref + suffix;
+  });
 
   // Populate basic info
   document.getElementById('edit-name').value = comp.name || '';

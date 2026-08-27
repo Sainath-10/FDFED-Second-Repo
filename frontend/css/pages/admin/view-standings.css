@@ -41,15 +41,16 @@
 }
 
 .standings-card-wrap {
-  background: var(--bg-card);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: #0a0a0a;
+  border: 1px solid #262626;
   border-radius: 14px;
   overflow: hidden;
 }
 
 .standings-card-header {
   padding: 16px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  background: #141414;
+  border-bottom: 1px solid #262626;
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 1px;

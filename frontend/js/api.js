@@ -1,6 +1,6 @@
 /**
  * Backend API Service
- * Handles all HTTP requests to the Nest.js backend
+ * Handles all HTTP requests to the Nest.js backend + PostgreSQL DB
  */
 
 (function (window) {
@@ -19,17 +19,13 @@
   function setToken(token) {
     try {
       localStorage.setItem(TOKEN_KEY, token);
-    } catch (err) {
-      // Ignore storage errors
-    }
+    } catch (err) {}
   }
 
   function removeToken() {
     try {
       localStorage.removeItem(TOKEN_KEY);
-    } catch (err) {
-      // Ignore storage errors
-    }
+    } catch (err) {}
   }
 
   function getUser() {
@@ -44,17 +40,13 @@
   function setUser(user) {
     try {
       localStorage.setItem(USER_KEY, JSON.stringify(user));
-    } catch (err) {
-      // Ignore storage errors
-    }
+    } catch (err) {}
   }
 
   function removeUser() {
     try {
       localStorage.removeItem(USER_KEY);
-    } catch (err) {
-      // Ignore storage errors
-    }
+    } catch (err) {}
   }
 
   async function makeRequest(endpoint, options = {}) {
@@ -62,15 +54,20 @@
     const config = {
       headers: {
         'Content-Type': 'application/json',
-        ...options.headers
+        ...options.headers,
       },
-      ...options
+      ...options,
     };
 
-    // Add token if available
+    // Add JWT bearer token & role header if available
     const token = getToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    const user = getUser();
+    if (user && user.role && !config.headers['x-user-role']) {
+      config.headers['x-user-role'] = user.role;
     }
 
     try {
@@ -78,26 +75,24 @@
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        console.error(`API Error ${response.status}:`, endpoint, data);
         return {
           ok: false,
           status: response.status,
           error: data.message || data.error || `Request failed (${response.status})`,
-          data: data
+          data: data,
         };
       }
 
       return {
         ok: true,
         status: response.status,
-        data: data
+        data: data,
       };
     } catch (err) {
-      console.error('Network error:', err);
       return {
         ok: false,
-        error: err.message || 'Network error - is the backend running?',
-        data: null
+        error: err.message || 'Network error — is the backend running?',
+        data: null,
       };
     }
   }
@@ -107,47 +102,52 @@
     async register(email, username, password, firstName, lastName, role = 'participant') {
       return makeRequest('/auth/register', {
         method: 'POST',
-        body: JSON.stringify({
-          email,
-          username,
-          password,
-          firstName,
-          lastName,
-          role
-        })
+        body: JSON.stringify({ email, username, password, firstName, lastName, role }),
       });
     },
 
     async login(emailOrUsername, password) {
-      console.log('AuthAPI.login called with:', { emailOrUsername, password: '***' });
-
       const result = await makeRequest('/auth/login', {
         method: 'POST',
-        body: JSON.stringify({
-          emailOrUsername,
-          password
-        })
+        body: JSON.stringify({ emailOrUsername, password }),
       });
 
-      console.log('AuthAPI.login response:', result);
-
       if (result.ok && result.data.access_token) {
-        console.log('Setting token and user...');
         setToken(result.data.access_token);
-        setUser({
-          id: result.data.user?.id,
-          email: result.data.user?.email,
-          username: result.data.user?.username,
-          firstName: result.data.user?.firstName,
-          lastName: result.data.user?.lastName,
-          role: result.data.user?.role
-        });
-        console.log('Token and user set successfully');
-      } else {
-        console.warn('No access token in response:', result);
+        setUser(result.data.user);
       }
 
       return result;
+    },
+
+    async getMe() {
+      return makeRequest('/auth/me', { method: 'GET' });
+    },
+
+    async getAllUsers() {
+      return makeRequest('/auth/users', { method: 'GET' });
+    },
+
+    async banUser(idOrUsername) {
+      return makeRequest(`/auth/users/${idOrUsername}/ban`, { method: 'PATCH' });
+    },
+
+    async warnUser(idOrUsername) {
+      return makeRequest(`/auth/users/${idOrUsername}/warn`, { method: 'PATCH' });
+    },
+
+    async updateProfile(updates) {
+      return makeRequest('/auth/profile', {
+        method: 'PATCH',
+        body: JSON.stringify(updates),
+      });
+    },
+
+    async changePassword(currentPassword, newPassword) {
+      return makeRequest('/auth/password', {
+        method: 'PATCH',
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
     },
 
     logout() {
@@ -161,7 +161,7 @@
 
     isAuthenticated() {
       return !!getToken() && !!getUser();
-    }
+    },
   };
 
   // ============ COMPETITIONS API ============
@@ -178,30 +178,47 @@
       return makeRequest(`/competitions/${id}`, { method: 'GET' });
     },
 
-    async create(name, description, startDate, endDate) {
+    async getByOrganizer(organizerId) {
+      return makeRequest(`/competitions/organizer/${organizerId}`, { method: 'GET' });
+    },
+
+    async create(name, description, startDate, endDate, coOrganizers = []) {
       return makeRequest('/competitions', {
         method: 'POST',
-        body: JSON.stringify({
-          name,
-          description,
-          startDate,
-          endDate
-        })
+        body: JSON.stringify({ name, description, startDate, endDate, coOrganizers }),
       });
     },
 
     async update(id, data) {
       return makeRequest(`/competitions/${id}`, {
         method: 'PATCH',
-        body: JSON.stringify(data)
+        body: JSON.stringify(data),
+      });
+    },
+
+    async setApproval(id, decision) {
+      return makeRequest(`/competitions/${id}/approval`, {
+        method: 'PATCH',
+        body: JSON.stringify({ decision }),
+      });
+    },
+
+    async addCoOrganizer(id, organizerId) {
+      return makeRequest(`/competitions/${id}/organizers`, {
+        method: 'POST',
+        body: JSON.stringify({ organizerId }),
+      });
+    },
+
+    async removeCoOrganizer(id, organizerId) {
+      return makeRequest(`/competitions/${id}/organizers/${organizerId}`, {
+        method: 'DELETE',
       });
     },
 
     async delete(id) {
-      return makeRequest(`/competitions/${id}`, {
-        method: 'DELETE'
-      });
-    }
+      return makeRequest(`/competitions/${id}`, { method: 'DELETE' });
+    },
   };
 
   // ============ TEAMS API ============
@@ -221,39 +238,84 @@
     async create(name, competitionId, members = []) {
       return makeRequest('/teams', {
         method: 'POST',
-        body: JSON.stringify({
-          name,
-          competitionId,
-          members
-        })
+        body: JSON.stringify({ name, competitionId, members }),
       });
     },
 
     async update(id, data) {
       return makeRequest(`/teams/${id}`, {
         method: 'PATCH',
-        body: JSON.stringify(data)
+        body: JSON.stringify(data),
+      });
+    },
+
+    async setStatus(id, status) {
+      return makeRequest(`/teams/${id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
       });
     },
 
     async addMember(id, memberId) {
       return makeRequest(`/teams/${id}/members`, {
         method: 'POST',
-        body: JSON.stringify({ memberId })
+        body: JSON.stringify({ memberId }),
       });
     },
 
     async removeMember(id, memberId) {
       return makeRequest(`/teams/${id}/members/${memberId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+      });
+    },
+
+    async addWarning(id) {
+      return makeRequest(`/teams/${id}/warnings`, { method: 'POST' });
+    },
+
+    async banTeam(id) {
+      return makeRequest(`/teams/${id}/ban`, { method: 'PATCH' });
+    },
+
+    async createJoinRequest(teamId, competitionId, fromUsername, message) {
+      return makeRequest(`/teams/${teamId}/join-requests`, {
+        method: 'POST',
+        body: JSON.stringify({ competitionId, fromUsername, message }),
+      });
+    },
+
+    async getJoinRequests(teamId) {
+      return makeRequest(`/teams/${teamId}/join-requests`, { method: 'GET' });
+    },
+
+    async updateJoinRequest(reqId, status, reviewedBy) {
+      return makeRequest(`/teams/join-requests/${reqId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status, reviewedBy }),
+      });
+    },
+
+    async createInvite(teamId, competitionId, toUsername, fromUsername) {
+      return makeRequest(`/teams/${teamId}/invites`, {
+        method: 'POST',
+        body: JSON.stringify({ competitionId, toUsername, fromUsername }),
+      });
+    },
+
+    async getInvites(username) {
+      return makeRequest(`/teams/invites/${username}`, { method: 'GET' });
+    },
+
+    async updateInvite(inviteId, status) {
+      return makeRequest(`/teams/invites/${inviteId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
       });
     },
 
     async delete(id) {
-      return makeRequest(`/teams/${id}`, {
-        method: 'DELETE'
-      });
-    }
+      return makeRequest(`/teams/${id}`, { method: 'DELETE' });
+    },
   };
 
   // ============ DISPUTES API ============
@@ -262,12 +324,12 @@
       return makeRequest('/disputes', { method: 'GET' });
     },
 
-    async getOpen() {
-      return makeRequest('/disputes/open', { method: 'GET' });
+    async getOrganizerQueue() {
+      return makeRequest('/disputes/organizer-queue', { method: 'GET' });
     },
 
-    async getEscalated() {
-      return makeRequest('/disputes/escalated', { method: 'GET' });
+    async getAdminQueue() {
+      return makeRequest('/disputes/admin-queue', { method: 'GET' });
     },
 
     async getByCompetition(competitionId) {
@@ -278,32 +340,129 @@
       return makeRequest(`/disputes/${id}`, { method: 'GET' });
     },
 
-    async create(competitionId, teamId, description) {
+    async create(payload) {
       return makeRequest('/disputes', {
         method: 'POST',
-        body: JSON.stringify({
-          competitionId,
-          teamId,
-          description
-        })
+        body: JSON.stringify(payload),
       });
     },
 
-    async update(id, status, notes) {
-      return makeRequest(`/disputes/${id}`, {
+    async organizerReview(id, action, notes, requestBan = false) {
+      return makeRequest(`/disputes/${id}/organizer-review`, {
         method: 'PATCH',
-        body: JSON.stringify({
-          status,
-          notes
-        })
+        body: JSON.stringify({ action, notes, requestBan }),
+      });
+    },
+
+    async adminResolve(id, action, resolutionNotes, targetUsernameToBan) {
+      return makeRequest(`/disputes/${id}/admin-resolve`, {
+        method: 'PATCH',
+        body: JSON.stringify({ action, resolutionNotes, targetUsernameToBan }),
       });
     },
 
     async delete(id) {
-      return makeRequest(`/disputes/${id}`, {
-        method: 'DELETE'
+      return makeRequest(`/disputes/${id}`, { method: 'DELETE' });
+    },
+  };
+
+  // ============ NOTIFICATIONS API ============
+  const NotificationsAPI = {
+    async create(toUsername, title, body = '', type = 'system', status = 'pending', meta = {}) {
+      return makeRequest('/notifications', {
+        method: 'POST',
+        body: JSON.stringify({ toUsername, title, body, type, status, meta }),
       });
-    }
+    },
+
+    async getForUser(username) {
+      return makeRequest(`/notifications/${username}`, { method: 'GET' });
+    },
+
+    async getUnreadCount(username) {
+      return makeRequest(`/notifications/${username}/unread-count`, { method: 'GET' });
+    },
+
+    async markRead(id) {
+      return makeRequest(`/notifications/${id}/read`, { method: 'PATCH' });
+    },
+
+    async markAllRead(username) {
+      return makeRequest(`/notifications/read-all/${username}`, { method: 'PATCH' });
+    },
+
+    async delete(id) {
+      return makeRequest(`/notifications/${id}`, { method: 'DELETE' });
+    },
+  };
+
+  // ============ POLICIES API ============
+  const PoliciesAPI = {
+    async getAll(activeOnly = false) {
+      return makeRequest(`/policies${activeOnly ? '?active=true' : ''}`, { method: 'GET' });
+    },
+
+    async getById(id) {
+      return makeRequest(`/policies/${id}`, { method: 'GET' });
+    },
+
+    async create(title, content, category, version, createdBy, compliance) {
+      return makeRequest('/policies', {
+        method: 'POST',
+        body: JSON.stringify({ title, content, category, version, createdBy, compliance }),
+      });
+    },
+
+    async update(id, updates) {
+      return makeRequest(`/policies/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(updates),
+      });
+    },
+
+    async archive(id) {
+      return makeRequest(`/policies/${id}/archive`, { method: 'PATCH' });
+    },
+
+    async delete(id) {
+      return makeRequest(`/policies/${id}`, { method: 'DELETE' });
+    },
+  };
+
+  // ============ MATCHES API ============
+  const MatchesAPI = {
+    async getByCompetition(competitionId) {
+      return makeRequest(`/matches/competition/${competitionId}`, { method: 'GET' });
+    },
+
+    async getById(id) {
+      return makeRequest(`/matches/${id}`, { method: 'GET' });
+    },
+
+    async create(competitionId, team1Id, team2Id, team1Name, team2Name, scheduledAt, round, notes) {
+      return makeRequest('/matches', {
+        method: 'POST',
+        body: JSON.stringify({ competitionId, team1Id, team2Id, team1Name, team2Name, scheduledAt, round, notes }),
+      });
+    },
+
+    async update(id, updates) {
+      return makeRequest(`/matches/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(updates),
+      });
+    },
+
+    async recordResult(id, winnerId, winnerName, score) {
+      return makeRequest(`/matches/${id}/result`, {
+        method: 'PATCH',
+        body: JSON.stringify({ winnerId, winnerName, score }),
+      });
+    },
+
+    async delete(id) {
+      return makeRequest(`/matches/${id}`, { method: 'DELETE' });
+    },
   };
 
   // Export API
@@ -312,11 +471,14 @@
     Competitions: CompetitionsAPI,
     Teams: TeamsAPI,
     Disputes: DisputesAPI,
+    Notifications: NotificationsAPI,
+    Policies: PoliciesAPI,
+    Matches: MatchesAPI,
     getToken,
     setToken,
     removeToken,
     getUser,
     setUser,
-    removeUser
+    removeUser,
   };
 })(window);

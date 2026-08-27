@@ -67,8 +67,17 @@ export class TeamResponseDto {
   @ApiProperty()
   leaderId: string;
 
-  @ApiProperty()
-  members: string[];
+  @ApiProperty({ required: false })
+  members?: string[];
+
+  @ApiProperty({ required: false })
+  memberUsernames?: string[];
+
+  @ApiProperty({ required: false })
+  status?: string;
+
+  @ApiProperty({ required: false })
+  warningsCount?: number;
 
   @ApiProperty()
   createdAt: Date;

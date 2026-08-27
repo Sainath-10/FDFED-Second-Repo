@@ -563,11 +563,12 @@ function getTeamSidebar(activePage, activeTab, base = '../../') {
 }
 
 /**
- * Admin sidebar: Home, Users, Profile
+ * Admin sidebar: Home, Disputes, Users, Profile
  */
 function getAdminSidebar(activePage, base = '../../') {
   const items = [
     { id: 'home', label: 'Home', href: base + 'pages/admin/dashboard.html', icon: homeIcon() },
+    { id: 'disputes', label: 'Disputes', href: base + 'pages/admin/disputes.html', icon: shieldIcon() },
     { id: 'users', label: 'Users', href: base + 'pages/admin/users.html', icon: usersIcon() },
     { id: 'profile', label: 'Profile', href: base + 'pages/admin/admin-profile.html', icon: profileIcon() },
   ];
@@ -580,13 +581,13 @@ function getAdminSidebar(activePage, base = '../../') {
       <div class="logo-sub">ESPORTS</div>
     </div>
     <nav class="sidebar-nav">
-      ${items.slice(0, 2).map(item => `
+      ${items.slice(0, 3).map(item => `
         <a href="${item.href}" class="nav-item ${activePage === item.id ? 'active' : ''}">
           ${item.icon}<span>${item.label}</span>
         </a>`).join('')}
     </nav>
     <div class="sidebar-nav-bottom">
-      ${items.slice(2).map(item => `
+      ${items.slice(3).map(item => `
         <a href="${item.href}" class="nav-item ${activePage === item.id ? 'active' : ''}">
           ${item.icon}<span>${item.label}</span>
         </a>`).join('')}
@@ -595,15 +596,14 @@ function getAdminSidebar(activePage, base = '../../') {
 }
 
 /**
- * Super Admin sidebar (admin-style shell): Dashboard, Disputes, Policy, Profile
+ * Super Admin sidebar: Dashboard, Policy, Users, Profile (no Disputes — admin handles those)
  */
 function getSuperAdminSidebar(activePage, base = '../../') {
   const items = [
-    { id: 'dashboard', label: 'Dashboard', href: base + 'pages/super-admin/super-dashboard.html', icon: homeIcon() },
-    { id: 'disputes', label: 'Disputes', href: base + 'pages/super-admin/resolve-disputes.html', icon: shieldIcon() },
-    { id: 'policy', label: 'Policy', href: base + 'pages/super-admin/policy-management.html', icon: checkCircleIcon() },
-    { id: 'users', label: 'Users', href: base + 'pages/super-admin/users.html', icon: usersIcon() },
-    { id: 'profile', label: 'Profile', href: base + 'pages/super-admin/profile.html', icon: profileIcon() },
+    { id: 'dashboard', label: 'Dashboard',  href: base + 'pages/super-admin/super-dashboard.html', icon: homeIcon() },
+    { id: 'policy',    label: 'Policy',     href: base + 'pages/super-admin/policy-management.html', icon: checkCircleIcon() },
+    { id: 'users',     label: 'Users',      href: base + 'pages/super-admin/users.html', icon: usersIcon() },
+    { id: 'profile',   label: 'Profile',    href: base + 'pages/super-admin/profile.html', icon: profileIcon() },
   ];
 
   return `
@@ -614,13 +614,13 @@ function getSuperAdminSidebar(activePage, base = '../../') {
       <div class="logo-sub">ESPORTS</div>
     </div>
     <nav class="sidebar-nav">
-      ${items.slice(0, 4).map(item => `
+      ${items.slice(0, 3).map(item => `
         <a href="${item.href}" class="nav-item ${activePage === item.id ? 'active' : ''}">
           ${item.icon}<span>${item.label}</span>
         </a>`).join('')}
     </nav>
     <div class="sidebar-nav-bottom">
-      ${items.slice(4).map(item => `
+      ${items.slice(3).map(item => `
         <a href="${item.href}" class="nav-item ${activePage === item.id ? 'active' : ''}">
           ${item.icon}<span>${item.label}</span>
         </a>`).join('')}
@@ -733,13 +733,114 @@ function getAdminCompTabs(activeTab, variant) {
       var accounts = JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '[]');
       var uname = session.username.trim().toLowerCase();
       var account = accounts.find(function(a) { return (a.username || '').trim().toLowerCase() === uname; });
+
+      // ── Step 1: Check live team status in competitions ──
+      var comps = JSON.parse(localStorage.getItem('nexus_competitions') || '[]');
+      var bannedTeamInfo = null;
+
+      // ── Step 1: Check if user is part of a banned team ──
+      var bannedTeamInfo = null;
+      comps.forEach(function(comp) {
+        if (!comp || !Array.isArray(comp.teams)) return;
+        comp.teams.forEach(function(t) {
+          if (!t) return;
+          var tStatus = String(t.status || '').toLowerCase();
+          if (tStatus === 'banned') {
+            var isMember = false;
+            var checkUname = function(val) {
+              if (!val) return false;
+              var normalizedVal = (typeof val === 'string' ? val : (val.username || val.name || '')).trim().toLowerCase();
+              return normalizedVal === uname;
+            };
+            if (checkUname(t.createdBy) || checkUname(t.leaderId) || checkUname(t.leaderUsername) || checkUname(t.captain)) {
+              isMember = true;
+            }
+            if (Array.isArray(t.members)) {
+              t.members.forEach(function(m) {
+                if (checkUname(m)) isMember = true;
+              });
+            }
+            if (Array.isArray(t.players)) {
+              t.players.forEach(function(p) {
+                if (checkUname(p)) isMember = true;
+              });
+            }
+            if (isMember) {
+              bannedTeamInfo = { team: t, comp: comp };
+            }
+          }
+        });
+      });
+
+      // If user's team has been banned from a competition:
+      if (bannedTeamInfo) {
+        var dismissKey = 'nexus.banned_modal_seen.' + (bannedTeamInfo.team.id || bannedTeamInfo.team.name || 'default');
+        var alreadySeenBanModal = localStorage.getItem(dismissKey);
+
+        // Mark any pending warnings for this user as seen so stale warning popups don't show
+        if (account && Array.isArray(account.warnings)) {
+          var modified = false;
+          account.warnings.forEach(function(w) {
+            if (!w.seen) { w.seen = true; modified = true; }
+          });
+          if (modified) localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+        }
+
+        if (!alreadySeenBanModal) {
+          var banOverlay = document.createElement('div');
+          banOverlay.id = 'nexus-team-banned-overlay';
+          banOverlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:99999;display:flex;align-items:center;justify-content:center;';
+
+          var banModal = document.createElement('div');
+          banModal.style.cssText = 'background:#1a1015;border:2px solid #ef4444;border-radius:16px;padding:40px;max-width:480px;width:90%;text-align:center;box-shadow:0 0 60px rgba(239,68,68,0.3);';
+
+          banModal.innerHTML = '<div style="font-size:48px;margin-bottom:16px;">🚫</div>'
+            + '<h2 style="color:#ef4444;font-size:22px;margin-bottom:12px;font-weight:800;">TEAM BANNED FROM TOURNAMENT</h2>'
+            + '<p style="color:#e2e8f0;font-size:15px;line-height:1.6;margin-bottom:8px;">Your team <strong style="color:#fff;">"' + (bannedTeamInfo.team.name || 'Team') + '"</strong> has been banned from <strong style="color:#c6ff33;">' + (bannedTeamInfo.comp.name || 'the tournament') + '</strong>.</p>'
+            + '<p style="color:#94a3b8;font-size:13px;line-height:1.5;margin-bottom:24px;">Reason: <strong style="color:#f87171;">' + (bannedTeamInfo.team.bannedReason || 'Banned following a resolved dispute.') + '</strong><br><br><span style="color:#c6ff33;font-weight:600;">Note: Your individual player account remains active on the platform.</span></p>'
+            + '<button id="nexus-ban-ok-btn" style="background:#ef4444;color:#fff;border:none;padding:12px 48px;font-size:15px;font-weight:700;border-radius:8px;cursor:pointer;text-transform:uppercase;letter-spacing:1px;">I UNDERSTAND</button>';
+
+          banOverlay.appendChild(banModal);
+          document.body.appendChild(banOverlay);
+
+          document.getElementById('nexus-ban-ok-btn').addEventListener('click', function() {
+            localStorage.setItem(dismissKey, 'true');
+            banOverlay.remove();
+          });
+          return;
+        }
+      }
+
+      // ── Step 2: Render unseen account warning if team is not banned ──
       if (!account || !Array.isArray(account.warnings)) return;
 
-      // Find first unseen warning
       var unseenIdx = account.warnings.findIndex(function(w) { return !w.seen; });
       if (unseenIdx < 0) return;
 
       var warning = account.warnings[unseenIdx];
+      var isTeamWarning = warning.targetType === 'team' || !!warning.teamName || (warning.reason || '').toLowerCase().includes('team') || (warning.reason || '').toLowerCase().includes('organizer warning');
+
+      var totalWarnCount = account.warnings.length;
+      var teamWarnCount = warning.teamWarnCount || account.warnings.filter(function(w) {
+        return (w.targetType === 'team' || !!w.teamName) && w.teamName === warning.teamName && w.compId === warning.compId;
+      }).length;
+
+      // On receiving 3/3 warning, they are banned, so skip showing warning popup if step 1 hasn't already shown the ban modal
+      if (isTeamWarning && teamWarnCount >= 3) {
+        // Mark as seen and return
+        account.warnings[unseenIdx].seen = true;
+        localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+        return;
+      }
+
+      var titleText = isTeamWarning ? 'TEAM WARNING (' + teamWarnCount + '/3)' : 'PLATFORM WARNING (' + totalWarnCount + '/3)';
+      var bodyText  = isTeamWarning
+        ? 'Your team has received a competition warning (' + teamWarnCount + '/3).'
+        : 'You have received a platform warning (' + totalWarnCount + '/3).';
+
+      var noteText = isTeamWarning
+        ? 'Note: Repeated team warnings may result in your team being banned from the tournament.'
+        : 'Note: After 3 warnings your account will be permanently banned.';
 
       // Create and show warning overlay
       var overlay = document.createElement('div');
@@ -750,16 +851,15 @@ function getAdminCompTabs(activeTab, variant) {
       modal.style.cssText = 'background:#1a1a2e;border:2px solid #f59e0b;border-radius:16px;padding:40px;max-width:480px;width:90%;text-align:center;box-shadow:0 0 60px rgba(245,158,11,0.3);';
 
       modal.innerHTML = '<div style="font-size:48px;margin-bottom:16px;">⚠️</div>'
-        + '<h2 style="color:#f59e0b;font-size:22px;margin-bottom:12px;font-weight:800;">PLATFORM WARNING</h2>'
-        + '<p style="color:#e2e8f0;font-size:15px;line-height:1.6;margin-bottom:8px;">You have received a formal warning from the Super Admin.</p>'
-        + '<p style="color:#94a3b8;font-size:13px;line-height:1.5;margin-bottom:24px;">Reason: <strong style="color:#f59e0b;">' + (warning.reason || 'Platform violation') + '</strong><br>Further violations may result in a permanent ban.</p>'
-        + '<button id="nexus-warning-ok-btn" style="background:#f59e0b;color:#000;border:none;padding:12px 48px;font-size:15px;font-weight:700;border-radius:8px;cursor:pointer;text-transform:uppercase;letter-spacing:1px;">OK</button>';
+        + '<h2 style="color:#f59e0b;font-size:22px;margin-bottom:12px;font-weight:800;">' + titleText + '</h2>'
+        + '<p style="color:#e2e8f0;font-size:15px;line-height:1.6;margin-bottom:8px;">' + bodyText + '</p>'
+        + '<p style="color:#94a3b8;font-size:13px;line-height:1.5;margin-bottom:24px;">Reason: <strong style="color:#f59e0b;">' + (warning.reason || 'Violation of tournament rules') + '</strong><br><br><span style="color:#f87171;font-weight:600;">' + noteText + '</span></p>'
+        + '<button id="nexus-warning-ok-btn" style="background:#f59e0b;color:#000;border:none;padding:12px 48px;font-size:15px;font-weight:700;border-radius:8px;cursor:pointer;text-transform:uppercase;letter-spacing:1px;">I UNDERSTAND</button>';
 
       overlay.appendChild(modal);
       document.body.appendChild(overlay);
 
       document.getElementById('nexus-warning-ok-btn').addEventListener('click', function() {
-        // Mark warning as seen
         account.warnings[unseenIdx].seen = true;
         localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
         overlay.remove();

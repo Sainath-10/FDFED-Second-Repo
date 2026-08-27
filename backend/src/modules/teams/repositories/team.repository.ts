@@ -1,118 +1,161 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { ITeam } from '@/common/interfaces';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { TeamEntity } from '../../../entities/team.entity';
+import { TeamJoinRequestEntity } from '../../../entities/team-join-request.entity';
+import { TeamInviteEntity } from '../../../entities/team-invite.entity';
 
 @Injectable()
 export class TeamRepository {
-  private teams: Map<string, ITeam> = new Map();
-  private competitionTeamsIndex: Map<string, string[]> = new Map();
-  private nextId = 1;
+  constructor(
+    @InjectRepository(TeamEntity)
+    private readonly repo: Repository<TeamEntity>,
+    @InjectRepository(TeamJoinRequestEntity)
+    private readonly joinRepo: Repository<TeamJoinRequestEntity>,
+    @InjectRepository(TeamInviteEntity)
+    private readonly inviteRepo: Repository<TeamInviteEntity>,
+  ) {}
+
+  // ─── Teams ─────────────────────────────────────────────────────────────────
 
   async create(
     name: string,
     competitionId: string,
+    leaderId: string,
     members: string[] = [],
-  ): Promise<ITeam> {
-    const id = String(this.nextId++);
-
-    const team: ITeam = {
-      id,
+  ): Promise<TeamEntity> {
+    const memberSet = new Set([leaderId, ...members]);
+    const team = this.repo.create({
       name,
       competitionId,
-      leaderId: 'system',
-      members: ['system', ...members],
-      createdAt: new Date(),
-    };
-
-    this.teams.set(id, team);
-
-    // Update competition index
-    if (!this.competitionTeamsIndex.has(competitionId)) {
-      this.competitionTeamsIndex.set(competitionId, []);
-    }
-    this.competitionTeamsIndex.get(competitionId).push(id);
-
-    return team;
+      leaderId,
+      leaderUsername: leaderId,
+      createdBy: leaderId,
+      memberUsernames: Array.from(memberSet),
+      status: 'pending',
+      warningsCount: 0,
+    });
+    return this.repo.save(team);
   }
 
-  async findById(id: string): Promise<ITeam | null> {
-    return this.teams.get(id) || null;
+  async findById(id: string): Promise<TeamEntity | null> {
+    return this.repo.findOne({ where: { id } });
   }
 
-  async findAll(): Promise<ITeam[]> {
-    return Array.from(this.teams.values());
+  async findAll(): Promise<TeamEntity[]> {
+    return this.repo.find({ order: { createdAt: 'DESC' } });
   }
 
-  async findByCompetition(competitionId: string): Promise<ITeam[]> {
-    const teamIds = this.competitionTeamsIndex.get(competitionId) || [];
-    return teamIds
-      .map((id) => this.teams.get(id))
-      .filter((team) => team !== undefined);
+  async findByCompetition(competitionId: string): Promise<TeamEntity[]> {
+    return this.repo.find({ where: { competitionId }, order: { createdAt: 'ASC' } });
   }
 
-  async findByLeader(leaderId: string): Promise<ITeam[]> {
-    return Array.from(this.teams.values()).filter((team) => team.leaderId === leaderId);
+  async findByLeader(leaderId: string): Promise<TeamEntity[]> {
+    return this.repo.find({ where: { leaderId }, order: { createdAt: 'DESC' } });
   }
 
-  async update(id: string, updates: Partial<ITeam>): Promise<ITeam> {
-    const team = this.teams.get(id);
-    if (!team) {
-      throw new NotFoundException(`Team with ID ${id} not found`);
-    }
-
-    const updated: ITeam = {
-      ...team,
-      ...updates,
-      id: team.id,
-      competitionId: team.competitionId,
-      leaderId: team.leaderId,
-      createdAt: team.createdAt,
-    };
-
-    this.teams.set(id, updated);
-    return updated;
+  async findByCompetitionAndStatus(competitionId: string, status: string): Promise<TeamEntity[]> {
+    return this.repo.find({ where: { competitionId, status } });
   }
 
-  async addMember(teamId: string, memberId: string): Promise<ITeam> {
-    const team = this.teams.get(teamId);
-    if (!team) {
-      throw new NotFoundException(`Team with ID ${teamId} not found`);
-    }
+  async update(id: string, updates: Partial<TeamEntity>): Promise<TeamEntity> {
+    const team = await this.repo.findOne({ where: { id } });
+    if (!team) throw new NotFoundException(`Team ${id} not found`);
+    const { id: _id, createdAt: _ca, ...safeUpdates } = updates as any;
+    await this.repo.update(id, safeUpdates);
+    return this.repo.findOne({ where: { id } });
+  }
 
-    if (team.members.includes(memberId)) {
+  async addMember(teamId: string, username: string): Promise<TeamEntity> {
+    const team = await this.repo.findOne({ where: { id: teamId } });
+    if (!team) throw new NotFoundException(`Team ${teamId} not found`);
+    if (team.memberUsernames.includes(username)) {
       throw new BadRequestException('Member already in team');
     }
-
-    team.members.push(memberId);
-    this.teams.set(teamId, team);
-    return team;
+    const memberUsernames = [...team.memberUsernames, username];
+    await this.repo.update(teamId, { memberUsernames });
+    return this.repo.findOne({ where: { id: teamId } });
   }
 
-  async removeMember(teamId: string, memberId: string): Promise<ITeam> {
-    const team = this.teams.get(teamId);
-    if (!team) {
-      throw new NotFoundException(`Team with ID ${teamId} not found`);
-    }
-
-    if (team.leaderId === memberId) {
+  async removeMember(teamId: string, username: string): Promise<TeamEntity> {
+    const team = await this.repo.findOne({ where: { id: teamId } });
+    if (!team) throw new NotFoundException(`Team ${teamId} not found`);
+    if (team.leaderId === username) {
       throw new BadRequestException('Cannot remove team leader');
     }
+    const memberUsernames = team.memberUsernames.filter((m) => m !== username);
+    await this.repo.update(teamId, { memberUsernames });
+    return this.repo.findOne({ where: { id: teamId } });
+  }
 
-    team.members = team.members.filter((id) => id !== memberId);
-    this.teams.set(teamId, team);
-    return team;
+  async addWarning(teamId: string, issuedBy: string): Promise<{ warningsCount: number; banned: boolean }> {
+    const team = await this.repo.findOne({ where: { id: teamId } });
+    if (!team) throw new NotFoundException(`Team ${teamId} not found`);
+
+    const newCount = (team.warningsCount || 0) + 1;
+    const banned = newCount >= 3;
+    const status = banned ? 'banned' : team.status;
+    await this.repo.update(teamId, {
+      warningsCount: newCount,
+      status,
+      statusUpdatedBy: issuedBy,
+      statusUpdatedAt: new Date(),
+    });
+    return { warningsCount: newCount, banned };
+  }
+
+  async banTeam(teamId: string, issuedBy: string): Promise<TeamEntity> {
+    await this.repo.update(teamId, {
+      status: 'banned',
+      statusUpdatedBy: issuedBy,
+      statusUpdatedAt: new Date(),
+    });
+    return this.repo.findOne({ where: { id: teamId } });
+  }
+
+  async setStatus(teamId: string, status: string, issuedBy: string): Promise<TeamEntity> {
+    await this.repo.update(teamId, {
+      status,
+      statusUpdatedBy: issuedBy,
+      statusUpdatedAt: new Date(),
+    });
+    return this.repo.findOne({ where: { id: teamId } });
   }
 
   async delete(id: string): Promise<boolean> {
-    const team = this.teams.get(id);
-    if (!team) return false;
+    const result = await this.repo.delete(id);
+    return (result.affected ?? 0) > 0;
+  }
 
-    // Remove from competition index
-    const competitionTeams = this.competitionTeamsIndex.get(team.competitionId) || [];
-    this.competitionTeamsIndex.set(
-      team.competitionId,
-      competitionTeams.filter((teamId) => teamId !== id),
-    );
+  // ─── Join Requests ─────────────────────────────────────────────────────────
 
-    return this.teams.delete(id);
+  async createJoinRequest(teamId: string, competitionId: string, fromUsername: string, message?: string): Promise<TeamJoinRequestEntity> {
+    const req = this.joinRepo.create({ teamId, competitionId, fromUsername, message });
+    return this.joinRepo.save(req);
+  }
+
+  async getJoinRequestsByTeam(teamId: string): Promise<TeamJoinRequestEntity[]> {
+    return this.joinRepo.find({ where: { teamId }, order: { createdAt: 'DESC' } });
+  }
+
+  async updateJoinRequest(id: string, status: string, reviewedBy: string): Promise<TeamJoinRequestEntity> {
+    await this.joinRepo.update(id, { status, reviewedBy });
+    return this.joinRepo.findOne({ where: { id } });
+  }
+
+  // ─── Invites ───────────────────────────────────────────────────────────────
+
+  async createInvite(teamId: string, competitionId: string, toUsername: string, fromUsername: string): Promise<TeamInviteEntity> {
+    const invite = this.inviteRepo.create({ teamId, competitionId, toUsername, fromUsername });
+    return this.inviteRepo.save(invite);
+  }
+
+  async getInvitesByUser(toUsername: string): Promise<TeamInviteEntity[]> {
+    return this.inviteRepo.find({ where: { toUsername }, order: { createdAt: 'DESC' } });
+  }
+
+  async updateInvite(id: string, status: string): Promise<TeamInviteEntity> {
+    await this.inviteRepo.update(id, { status });
+    return this.inviteRepo.findOne({ where: { id } });
   }
 }

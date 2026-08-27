@@ -12,11 +12,11 @@ import {
 import { ApiTags, ApiOperation, ApiResponse, ApiSecurity } from '@nestjs/swagger';
 import { TeamsService } from './teams.service';
 import { CreateTeamDto, UpdateTeamDto, AddTeamMemberDto, TeamResponseDto } from './dto/team.dto';
-import { HeaderAuthGuard } from '@/common/decorators/header-auth.guard';
-import { RolesGuard } from '@/common/decorators/roles.guard';
-import { Roles } from '@/common/decorators/roles.decorator';
-import { CurrentUser } from '@/common/decorators/current-user.decorator';
-import { UserRole } from '@/common/interfaces';
+import { HeaderAuthGuard } from '../../common/decorators/header-auth.guard';
+import { RolesGuard } from '../../common/decorators/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { UserRole } from '../../common/interfaces';
 
 @Controller('teams')
 @ApiTags('Teams')
@@ -171,6 +171,85 @@ export class TeamsController {
     @Param('memberId') memberId: string,
   ): Promise<TeamResponseDto> {
     return this.teamsService.removeMember(id, memberId);
+  }
+
+  @Patch(':id/status')
+  @UseGuards(HeaderAuthGuard, RolesGuard)
+  @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Update team registration status (Approve / Reject)' })
+  async setStatus(
+    @Param('id') id: string,
+    @Body() body: { status: string },
+    @CurrentUser() user?: any,
+  ) {
+    const updater = user?.username || user?.id || 'organizer';
+    return this.teamsService.setStatus(id, body.status, updater);
+  }
+
+  @Post(':id/warnings')
+  @UseGuards(HeaderAuthGuard, RolesGuard)
+  @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Issue warning to team' })
+  async addWarning(@Param('id') id: string, @CurrentUser() user?: any) {
+    const issuer = user?.username || user?.id || 'organizer';
+    return this.teamsService.addWarning(id, issuer);
+  }
+
+  @Patch(':id/ban')
+  @UseGuards(HeaderAuthGuard, RolesGuard)
+  @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Ban a team from tournament' })
+  async banTeam(@Param('id') id: string, @CurrentUser() user?: any) {
+    const issuer = user?.username || user?.id || 'organizer';
+    return this.teamsService.banTeam(id, issuer);
+  }
+
+  @Post(':id/join-requests')
+  @ApiOperation({ summary: 'Player requests to join a team' })
+  async createJoinRequest(
+    @Param('id') teamId: string,
+    @Body() body: { competitionId: string; fromUsername: string; message?: string },
+  ) {
+    return this.teamsService.createJoinRequest(teamId, body.competitionId, body.fromUsername, body.message);
+  }
+
+  @Get(':id/join-requests')
+  @ApiOperation({ summary: 'Get join requests for a team' })
+  async getJoinRequests(@Param('id') teamId: string) {
+    return this.teamsService.getJoinRequestsByTeam(teamId);
+  }
+
+  @Patch('join-requests/:reqId')
+  @ApiOperation({ summary: 'Accept or reject join request' })
+  async updateJoinRequest(
+    @Param('reqId') reqId: string,
+    @Body() body: { status: string; reviewedBy: string },
+  ) {
+    return this.teamsService.updateJoinRequest(reqId, body.status, body.reviewedBy);
+  }
+
+  @Post(':id/invites')
+  @ApiOperation({ summary: 'Invite player to team' })
+  async createInvite(
+    @Param('id') teamId: string,
+    @Body() body: { competitionId: string; toUsername: string; fromUsername: string },
+  ) {
+    return this.teamsService.createInvite(teamId, body.competitionId, body.toUsername, body.fromUsername);
+  }
+
+  @Get('invites/:username')
+  @ApiOperation({ summary: 'Get invites for a user' })
+  async getInvites(@Param('username') username: string) {
+    return this.teamsService.getInvitesByUser(username);
+  }
+
+  @Patch('invites/:inviteId')
+  @ApiOperation({ summary: 'Accept or decline team invite' })
+  async updateInvite(
+    @Param('inviteId') inviteId: string,
+    @Body() body: { status: string },
+  ) {
+    return this.teamsService.updateInvite(inviteId, body.status);
   }
 
   @Delete(':id')

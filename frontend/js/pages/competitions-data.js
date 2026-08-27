@@ -282,6 +282,16 @@ function updateCompetition(updated) {
   else all.push(updated);
   forgetDeletedCompetitionId(updated.id);
   saveCompetitions(all);
+
+  // Sync to PostgreSQL backend
+  if (window.NexusAPI && window.NexusAPI.Competitions && updated.id) {
+    window.NexusAPI.Competitions.update(updated.id, {
+      name: updated.name,
+      description: updated.description,
+      status: updated.status,
+      endDate: updated.endDate,
+    }).catch(() => {});
+  }
 }
 
 function deleteCompetition(id) {
@@ -306,6 +316,11 @@ function deleteCompetition(id) {
       }
     }
   } catch (e) { }
+
+  // Sync delete to PostgreSQL backend
+  if (window.NexusAPI && window.NexusAPI.Competitions) {
+    window.NexusAPI.Competitions.delete(id).catch(() => {});
+  }
 
   return true;
 }
@@ -335,6 +350,27 @@ function addCompetition(comp) {
   forgetDeletedCompetitionId(comp.id);
   all.unshift(comp);
   saveCompetitions(all);
+
+  // Sync create to PostgreSQL backend
+  if (window.NexusAPI && window.NexusAPI.Competitions) {
+    window.NexusAPI.Competitions.create(
+      comp.name,
+      comp.description || 'No description provided.',
+      comp.startDate || new Date().toISOString(),
+      comp.endDate || new Date(Date.now() + 14 * 86400000).toISOString(),
+      comp.organizers || []
+    ).then(res => {
+      if (res && res.ok && res.data && res.data.id && res.data.id !== comp.id) {
+        // Update local competition id with the real PostgreSQL UUID
+        const currentAll = loadCompetitions();
+        const found = currentAll.find(c => c.id === comp.id);
+        if (found) {
+          found.dbId = res.data.id;
+          saveCompetitions(currentAll);
+        }
+      }
+    }).catch(() => {});
+  }
 }
 
 function addCoOrganizerToComp(compId, organizerUsername) {
@@ -395,7 +431,7 @@ function saveSystemNotifications(items) {
 function pushSystemNotification(entry) {
   if (!entry || !entry.toUsername) return;
   const list = loadSystemNotifications();
-  list.unshift({
+  const notifObj = {
     id: 'notif-' + Math.random().toString(36).slice(2, 10),
     toUsername: String(entry.toUsername || '').trim(),
     type: entry.type || 'system',
@@ -405,8 +441,21 @@ function pushSystemNotification(entry) {
     createdAt: entry.createdAt || new Date().toISOString(),
     read: false,
     meta: entry.meta || {}
-  });
+  };
+  list.unshift(notifObj);
   saveSystemNotifications(list);
+
+  // Sync to PostgreSQL backend
+  if (window.NexusAPI && window.NexusAPI.Notifications) {
+    window.NexusAPI.Notifications.create(
+      notifObj.toUsername,
+      notifObj.title,
+      notifObj.body,
+      notifObj.type,
+      notifObj.status,
+      notifObj.meta
+    ).catch(() => {});
+  }
 }
 
 function setCompetitionApproval(compId, decision, adminUsername) {
@@ -467,6 +516,28 @@ function setTeamRegistrationStatus(compId, teamId, decision, organizerUsername) 
   all[compIdx] = comp;
   saveCompetitions(all);
 
+  // Update any stale pending notifications for this team
+  try {
+    const notifItems = JSON.parse(localStorage.getItem(NOTIFICATIONS_KEY) || '[]');
+    let notifModified = false;
+    notifItems.forEach(n => {
+      if (n && n.meta && n.meta.compId === compId && n.meta.teamId === teamId && n.status === 'pending') {
+        n.status = next;
+        if (next === 'approved') {
+          n.title = '✔ Team Registration Approved';
+          n.body = 'Your team "' + (team.name || 'Team') + '" has been approved for ' + (comp.name || 'the competition') + '.';
+        } else if (next === 'rejected') {
+          n.title = '✖ Team Registration Rejected';
+          n.body = 'Your team "' + (team.name || 'Team') + '" was rejected for ' + (comp.name || 'the competition') + '.';
+        }
+        notifModified = true;
+      }
+    });
+    if (notifModified) {
+      localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(notifItems));
+    }
+  } catch (e) {}
+
   const captain = team.createdBy || team.leaderUsername;
   const notified = new Set();
   if (captain) {
@@ -501,7 +572,7 @@ function setTeamRegistrationStatus(compId, teamId, decision, organizerUsername) 
 }
 
 function getCompetitionsForPublic() {
-  return loadCompetitions().filter(c => c.status === 'active' || getApprovalStatus(c) === 'approved');
+  return loadCompetitions().filter(c => getApprovalStatus(c) === 'approved');
 }
 
 // Fetch active competitions from backend API
@@ -559,6 +630,430 @@ function goToParticipant(id) {
   window.location.href = `comp-participant.html?id=${id}`;
 }
 
+// ─── Notification & Warning Helpers ──────────────────────────────────────────
+function sendNotificationHelper(toTarget, title, body, type = 'dispute', status = 'pending', compId = null) {
+  if (!toTarget) return;
+
+  const targets = new Set();
+  targets.add(String(toTarget).trim());
+
+  if (compId) {
+    const comp = getCompetitionById(compId);
+    if (comp && Array.isArray(comp.teams)) {
+      const team = comp.teams.find(t => t.name && t.name.toLowerCase() === String(toTarget).trim().toLowerCase());
+      if (team) {
+        if (team.createdBy) targets.add(team.createdBy);
+        if (Array.isArray(team.members)) {
+          team.members.forEach(m => {
+            if (typeof m === 'string') targets.add(m);
+            else if (m && m.username) targets.add(m.username);
+          });
+        }
+      }
+    }
+  }
+
+  targets.forEach(user => {
+    const entry = {
+      id: 'notif-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+      toUsername: String(user).trim(),
+      type: type,
+      status: status,
+      title: title,
+      body: body,
+      createdAt: new Date().toISOString(),
+      read: false,
+    };
+
+    if (window.NexusTeamWorkflow && typeof window.NexusTeamWorkflow.pushNotification === 'function') {
+      window.NexusTeamWorkflow.pushNotification(entry);
+    } else {
+      try {
+        const NOTIFS_KEY = 'nexus.notifications.items';
+        const items = JSON.parse(localStorage.getItem(NOTIFS_KEY) || '[]');
+        items.unshift(entry);
+        localStorage.setItem(NOTIFS_KEY, JSON.stringify(items));
+      } catch(e) {}
+    }
+  });
+}
+
+function registerAccountWarning(targetUserOrTeam, reason, issuedBy, compId = null) {
+  if (!targetUserOrTeam) return 0;
+
+  const targets = new Set();
+  targets.add(String(targetUserOrTeam).trim());
+
+  let isTeam = false;
+  let teamWarnCount = 0;
+  if (compId) {
+    const comps = loadCompetitions();
+    const comp = comps.find(c => c.id === compId);
+    if (comp && Array.isArray(comp.teams)) {
+      const team = comp.teams.find(t => t.name && t.name.toLowerCase() === String(targetUserOrTeam).trim().toLowerCase());
+      if (team) {
+        isTeam = true;
+        team.warningsCount = (team.warningsCount || 0) + 1;
+        teamWarnCount = team.warningsCount;
+        if (teamWarnCount >= 3) {
+          team.status = 'banned';
+          team.bannedAt = new Date().toISOString();
+          team.bannedReason = `Banned from the tournament after receiving ${teamWarnCount} warnings.`;
+        }
+        updateCompetition(comp);
+
+        if (team.createdBy) targets.add(team.createdBy);
+        // Include leaderId or captain if present
+        if (team.leaderId) targets.add(team.leaderId);
+        if (team.leaderUsername) targets.add(team.leaderUsername);
+        if (team.captain) targets.add(team.captain);
+        if (Array.isArray(team.members)) {
+          team.members.forEach(m => {
+            if (typeof m === 'string') targets.add(m);
+            else if (m && m.username) targets.add(m.username);
+          });
+        }
+        if (Array.isArray(team.players)) {
+          team.players.forEach(p => {
+            if (typeof p === 'string') targets.add(p);
+            else if (p && p.username) targets.add(p.username);
+          });
+        }
+      }
+    }
+  }
+
+  const ACCOUNTS_KEY = 'nexus.auth.accounts';
+  let maxWarnings = 0;
+
+  try {
+    let accounts = JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '[]');
+
+    targets.forEach(target => {
+      const norm = String(target).trim().toLowerCase();
+      let account = accounts.find(a => (a.username || '').toLowerCase() === norm || (a.email || '').toLowerCase() === norm);
+      if (!account) {
+        account = { username: target, email: `${norm}@nexus.com`, warnings: [], banned: false };
+        accounts.push(account);
+      }
+      account.warnings = account.warnings || [];
+      account.warnings.push({
+        id: 'warn-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+        reason: reason || 'Violation of tournament/platform rules',
+        seen: false,
+        date: new Date().toISOString(),
+        issuedBy: issuedBy || 'Tournament Organizer',
+        targetType: isTeam ? 'team' : 'player',
+        teamName: isTeam ? targetUserOrTeam : null,
+        compId: compId || null,
+        teamWarnCount: isTeam ? teamWarnCount : null
+      });
+      if (account.warnings.length > maxWarnings) maxWarnings = account.warnings.length;
+
+      // Only auto-ban platform-wide if 3+ individual PLAYER warnings exist (not team warnings)
+      const playerWarnings = account.warnings.filter(w => w.targetType !== 'team');
+      if (!isTeam && playerWarnings.length >= 3) {
+        account.banned = true;
+        banUserPlatformWide(target);
+      }
+    });
+
+    localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+  } catch(e) {
+    console.error('Error registering warning:', e);
+  }
+
+  return isTeam ? teamWarnCount : maxWarnings;
+}
+
+// ─── Dispute Store ─────────────────────────────────────────────────────────────
+const DISPUTES_KEY = 'nexus.disputes';
+
+function loadDisputes() {
+  try { return JSON.parse(localStorage.getItem(DISPUTES_KEY) || '[]'); } catch (e) { return []; }
+}
+
+function saveDisputes(disputes) {
+  localStorage.setItem(DISPUTES_KEY, JSON.stringify(disputes));
+}
+
+function addDispute(disputeData) {
+  const disputes = loadDisputes();
+  const id = 'disp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+
+  // Check if filed by organizer
+  let isOrg = disputeData.isOrganizer || disputeData.reportedByRole === 'organizer' || disputeData.filedByRole === 'organizer';
+  if (!isOrg) {
+    try {
+      const sess = JSON.parse(localStorage.getItem('nexus.auth.session') || '{}');
+      const role = String(sess.role || '').toLowerCase();
+      if (role === 'organizer' || role === 'admin' || role === 'super-admin') {
+        isOrg = true;
+      } else if (sess.username && disputeData.competitionId) {
+        const comp = getCompetitionById(disputeData.competitionId);
+        if (comp && (comp.createdBy === sess.username || (Array.isArray(comp.organizers) && comp.organizers.includes(sess.username)))) {
+          isOrg = true;
+        }
+      }
+    } catch(e) {}
+  }
+
+  const initialStatus = isOrg ? 'escalated_to_admin' : (disputeData.status || 'open');
+  const newDispute = {
+    id,
+    ...disputeData,
+    status: initialStatus,
+    escalated: isOrg || !!disputeData.escalated,
+    superAdminState: isOrg ? 'pending' : (disputeData.superAdminState || ''),
+    escalatedReason: isOrg ? 'Dispute raised directly by Organizer — auto-escalated to Super Admin' : (disputeData.escalatedReason || '')
+  };
+
+  disputes.unshift(newDispute);
+  saveDisputes(disputes);
+
+  // Also sync directly to admin store (nexus_admin_disputes)
+  try {
+    const adminKey = 'nexus_admin_disputes';
+    const adminDisputes = JSON.parse(localStorage.getItem(adminKey) || '[]');
+    adminDisputes.unshift({
+      ...newDispute,
+      cardId: 'disp-' + Date.now(),
+      disputeId: '#DISP-' + (new Date().getFullYear()) + '-' + Math.floor(1000 + Math.random() * 9000),
+      competition: disputeData.matchName || disputeData.competition || 'Competition',
+      filedBy: disputeData.reportedBy || disputeData.submitter || 'Organizer',
+      against: disputeData.targetUserOrTeam || disputeData.against || 'Target'
+    });
+    localStorage.setItem(adminKey, JSON.stringify(adminDisputes));
+  } catch(e) {}
+
+  // Send notification to target user/team that a dispute was raised against them
+  if (disputeData.targetUserOrTeam) {
+    sendNotificationHelper(
+      disputeData.targetUserOrTeam,
+      '⚠️ Dispute Raised Against You',
+      `A dispute has been raised against you by @${disputeData.reportedBy || 'a participant'} in competition ${disputeData.competitionId || 'tournament'}. Reason: ${disputeData.reason}`,
+      'dispute',
+      'pending',
+      disputeData.competitionId
+    );
+  }
+
+  return id;
+}
+
+function getDisputesByStatus(status) {
+  return loadDisputes().filter(d => d.status === status);
+}
+
+function getDisputesByCompetition(compId) {
+  return loadDisputes().filter(d => d.competitionId === compId);
+}
+
+function updateDisputeStatus(id, updates) {
+  const disputes = loadDisputes();
+  const idx = disputes.findIndex(d => d.id === id);
+  if (idx === -1) return false;
+
+  const oldDispute = disputes[idx];
+  disputes[idx] = { ...oldDispute, ...updates, updatedAt: new Date().toISOString() };
+  saveDisputes(disputes);
+
+  const updatedDispute = disputes[idx];
+
+  // When a dispute is resolved -> notify both the creator (reportedBy) and target (targetUserOrTeam)
+  if (updates.status === 'resolved') {
+    const notes = updates.organizerNotes || updates.adminNotes || updates.notes || 'Dispute resolved by authority.';
+
+    // 1. Notify reporter (creator)
+    if (updatedDispute.reportedBy) {
+      sendNotificationHelper(
+        updatedDispute.reportedBy,
+        '✔ Dispute Resolved',
+        `Your dispute regarding "${updatedDispute.targetUserOrTeam}" in competition ${updatedDispute.competitionId} has been resolved. Resolution: ${notes}`,
+        'dispute',
+        'approved',
+        updatedDispute.competitionId
+      );
+    }
+
+    // 2. Notify target user/team
+    if (updatedDispute.targetUserOrTeam) {
+      sendNotificationHelper(
+        updatedDispute.targetUserOrTeam,
+        '✔ Dispute Resolved',
+        `The dispute raised against you by @${updatedDispute.reportedBy || 'a participant'} in competition ${updatedDispute.competitionId} has been resolved. Resolution: ${notes}`,
+        'dispute',
+        'approved',
+        updatedDispute.competitionId
+      );
+    }
+  }
+
+  return true;
+}
+
+function getCompetitionParticipants(compId) {
+  const comp = getCompetitionById(compId);
+  if (!comp) return { teams: [], players: [], organizer: 'organizer' };
+
+  const teams = (comp.teams || []).map(t => ({ id: t.id, name: t.name, status: t.status }));
+  const playerSet = new Set();
+
+  (comp.teams || []).forEach(t => {
+    if (t.createdBy) playerSet.add(t.createdBy);
+    if (Array.isArray(t.members)) {
+      t.members.forEach(m => {
+        if (typeof m === 'string') playerSet.add(m);
+        else if (m && m.username) playerSet.add(m.username);
+      });
+    }
+  });
+
+  const organizer = (Array.isArray(comp.organizers) && comp.organizers[0]) || comp.organizerId || comp.createdBy || 'organizer';
+  return {
+    teams,
+    players: Array.from(playerSet).filter(Boolean),
+    organizer,
+  };
+}
+
+function banUserPlatformWide(usernameOrEmail) {
+  const norm = String(usernameOrEmail).trim().toLowerCase();
+  ['nexus.accounts', 'nexus.auth.accounts'].forEach(key => {
+    try {
+      const accounts = JSON.parse(localStorage.getItem(key) || '[]');
+      let updated = false;
+      accounts.forEach(a => {
+        if ((a.username && a.username.toLowerCase() === norm) || (a.email && a.email.toLowerCase() === norm)) {
+          a.banned = true;
+          updated = true;
+        }
+      });
+      if (updated) localStorage.setItem(key, JSON.stringify(accounts));
+    } catch(e) {}
+  });
+
+  try {
+    const banned = JSON.parse(localStorage.getItem('nexus.banned.users') || '[]');
+    if (!banned.includes(usernameOrEmail)) banned.push(usernameOrEmail);
+    localStorage.setItem('nexus.banned.users', JSON.stringify(banned));
+  } catch(e) {}
+}
+
+function issueOrganizerWarning(disputeId, reason) {
+  const disputes = loadDisputes();
+  const d = disputes.find(x => x.id === disputeId);
+  if (!d) return null;
+
+  d.organizerWarnings = (d.organizerWarnings || 0) + 1;
+  d.organizerNotes = reason || d.organizerNotes;
+  d.updatedAt = new Date().toISOString();
+
+  // 1. Register warning on target user's account so warning popup triggers on next login
+  const warnCount = registerAccountWarning(d.targetUserOrTeam, `Organizer Warning (${d.competitionId}): ${reason}`, 'Tournament Organizer', d.competitionId);
+
+  // 2. Send warning notification to target user
+  sendNotificationHelper(
+    d.targetUserOrTeam,
+    `⚠️ Tournament Organizer Warning (${warnCount}/3)`,
+    `You received a warning from the organizer in competition ${d.competitionId}. Reason: ${reason}`,
+    'warning',
+    'pending',
+    d.competitionId
+  );
+
+  let autoEscalated = false;
+  // After 2 warnings -> auto-escalate to admin!
+  if (d.organizerWarnings >= 2) {
+    d.status = 'escalated_to_admin';
+    d.banRequested = true;
+    d.escalatedReason = `Auto-escalated to admin after 2 organizer warnings: ${reason}`;
+    autoEscalated = true;
+  }
+
+  saveDisputes(disputes);
+  return { warningCount: d.organizerWarnings, autoEscalated, dispute: d };
+}
+
+function issueAdminWarning(disputeId, reason, targetUsername) {
+  const disputes = loadDisputes();
+  const d = disputes.find(x => x.id === disputeId);
+  const target = targetUsername || d?.targetUserOrTeam;
+  if (!target) return null;
+
+  const totalWarnings = registerAccountWarning(target, `Admin Warning: ${reason}`, 'Platform Admin', d?.competitionId);
+  
+  // Check if it is a team target
+  let isTeam = false;
+  if (d) {
+    isTeam = d.targetType === 'team' || d.targetType === 'opponent_team';
+  }
+  
+  let autoBanned = false;
+  if (isTeam) {
+    if (d?.competitionId) {
+      const comp = getCompetitionById(d.competitionId);
+      const team = comp?.teams?.find(t => t.name && t.name.toLowerCase() === target.toLowerCase());
+      if (team) {
+        autoBanned = (team.warningsCount || 0) >= 3;
+      }
+    }
+  } else {
+    autoBanned = totalWarnings >= 3;
+  }
+
+  // Send notification to target user
+  sendNotificationHelper(
+    target,
+    isTeam ? `⚠️ Team Warning (${totalWarnings}/3)` : `⚠️ Platform Warning (${totalWarnings}/3)`,
+    autoBanned
+      ? (isTeam
+          ? `Your team received its 3rd warning: "${reason}". Your team has been banned from the tournament.`
+          : `You received your 3rd warning: "${reason}". Your account has been permanently banned.`)
+      : (isTeam
+          ? `Your team received a tournament warning (${totalWarnings}/3): "${reason}". Note: After 3 warnings your team will be banned from the tournament.`
+          : `You received a platform warning (${totalWarnings}/3): "${reason}". Note: After 3 warnings your account will be permanently banned.`),
+    'warning',
+    'pending',
+    d?.competitionId
+  );
+
+  if (d) {
+    d.adminNotes = `Admin Warning (${totalWarnings}/3): ${reason}`;
+    if (autoBanned) {
+      d.status = 'resolved';
+      d.banApplied = true;
+      d.resolvedBy = 'Platform Admin';
+      if (isTeam) {
+        d.teamBanned = true;
+      }
+    }
+    saveDisputes(disputes);
+  }
+
+  return { totalWarnings, autoBanned };
+}
+
+function isTeamBannedInComp(teamName, compIdOrData) {
+  if (!teamName) return false;
+  let comp = compIdOrData;
+  if (typeof compIdOrData === 'string') {
+    comp = getCompetitionById(compIdOrData);
+  }
+  if (!comp || !Array.isArray(comp.teams)) return false;
+  const team = comp.teams.find(t => (t.name || '').toLowerCase() === (teamName || '').toLowerCase());
+  return !!(team && team.status === 'banned');
+}
+
+function calculatePlatformFee(prizePoolAmount) {
+  const amt = parseFloat(prizePoolAmount) || 0;
+  if (amt <= 0) return 0;
+  if (amt <= 700) {
+    return 50;
+  }
+  return Math.round(amt * 0.07);
+}
+
 // Expose globally
 window.NexusData = {
   loadCompetitions, saveCompetitions, getCompetitionById,
@@ -569,6 +1064,12 @@ window.NexusData = {
   removeCoOrganizer: removeCoOrganizerFromComp,
   setTeamRegistrationStatus,
   seedShowcaseCompetitions,
+  calculatePlatformFee,
+  isTeamBannedInComp,
+  // Disputes
+  addDispute, loadDisputes, saveDisputes,
+  getDisputesByStatus, getDisputesByCompetition, updateDisputeStatus,
+  getCompetitionParticipants, issueOrganizerWarning, issueAdminWarning, banUserPlatformWide,
 };
 
 // -- Ended-competition helpers ---------------------------------

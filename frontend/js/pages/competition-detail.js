@@ -22,6 +22,14 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
+function formatPrizePool(prize) {
+  if (!prize || prize === '—' || prize === '-' || prize === '₹0' || String(prize).toLowerCase().includes('no prize')) {
+    return 'No Prize Pool';
+  }
+  const str = String(prize).trim();
+  return str.toLowerCase().includes('prize pool') ? str : `${str} Prize Pool`;
+}
+
 function render(comp) {
   renderHero(comp);
   renderStats(comp);
@@ -70,7 +78,7 @@ function renderHero(comp) {
     </span>
     <span class="hero-meta-item">
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4.5 1h7l-1 5a3.5 3.5 0 0 1-5 0L4.5 1z"/><path d="M2 1h2.5m9 0H14"/><path d="M8 9v5m-2 0h4"/></svg>
-      ${comp.prizePool} Prize Pool
+      ${formatPrizePool(comp.prizePool)}
     </span>
     <span class="hero-meta-item">
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>
@@ -84,6 +92,20 @@ function renderHero(comp) {
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
       VIEW STANDINGS
     </a>`;
+
+  // Count disputes that need organizer review
+  let pendingDisputesCount = 0;
+  if (window.NexusData && typeof window.NexusData.loadDisputes === 'function') {
+    const allDisputes = window.NexusData.loadDisputes();
+    pendingDisputesCount = allDisputes.filter(d =>
+      d.competitionId === comp.id &&
+      (d.status === 'open_organizer' || d.status === 'under_review' || d.status === 'open' || d.status === 'awaiting')
+    ).length;
+  } else if (Array.isArray(comp.disputes)) {
+    pendingDisputesCount = comp.disputes.filter(d =>
+      d.status === 'open_organizer' || d.status === 'under_review' || d.status === 'open' || d.status === 'awaiting'
+    ).length;
+  }
 
   // If ended: only show view-only actions, hide edit/manage
   const actionButtons = isEnded
@@ -100,13 +122,13 @@ function renderHero(comp) {
        MANAGE MATCHES
      </a>
      ${standingsAction}
-     <button type="button" class="hero-btn hero-btn-secondary" onclick="openOrganizersModal()" style="border-color:rgba(198,255,51,0.4);color:#c6ff33;cursor:pointer;">
-       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-       + ADD / MANAGE ORGANIZERS (${Array.isArray(comp.organizers) && comp.organizers.length > 0 ? comp.organizers.length : 1})
-     </button>
+     <a href="comp-manage-organizers.html?id=${comp.id}" class="hero-btn hero-btn-secondary" style="border-color:rgba(198,255,51,0.4);color:#c6ff33;cursor:pointer;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        + ADD / MANAGE ORGANIZERS (${Array.isArray(comp.organizers) && comp.organizers.length > 0 ? comp.organizers.length : 1})
+      </a>
      <a href="comp-dispute-review.html?id=${comp.id}" class="hero-btn hero-btn-secondary" style="border-color:rgba(239,68,68,0.4);color:#fca5a5;">
        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-       DISPUTES (${(comp.disputes || []).filter(d => d.status !== 'resolved').length})
+       DISPUTES (${pendingDisputesCount})
      </a>
      <a href="edit-competition.html?id=${comp.id}" class="hero-btn hero-btn-secondary">
        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -307,13 +329,19 @@ function renderLeagueBracket(comp) {
       const isComp = m.status === 'completed';
       const isLive = m.status === 'live';
       const liveChip = isLive ? '<span style="background:#c6ff33;color:#000;font-size:9px;padding:1px 6px;border-radius:999px;font-weight:800;margin-left:6px;">LIVE</span>' : '';
+
+      const isT1Banned = window.NexusData.isTeamBannedInComp(m.team1, comp);
+      const isT2Banned = window.NexusData.isTeamBannedInComp(m.team2, comp);
+      const t1Name = isT1Banned ? `<del style="color:#ef4444;">${m.team1}</del> <span style="color:#ef4444;font-size:10px;font-weight:700;">(BANNED)</span>` : m.team1;
+      const t2Name = isT2Banned ? `<del style="color:#ef4444;">${m.team2}</del> <span style="color:#ef4444;font-size:10px;font-weight:700;">(BANNED)</span>` : m.team2;
+
       html += `
         <div class="bracket-match ${isLive ? 'bracket-match-live' : ''}">
           <div class="bracket-team ${isComp && m.score1 > m.score2 ? 'bracket-winner' : ''}">
-            <span>${m.team1}</span>${isComp ? `<span>${m.score1}</span>` : ''}
+            <span>${t1Name}</span>${isComp ? `<span>${m.score1}</span>` : ''}
           </div>
           <div class="bracket-team ${isComp && m.score2 > m.score1 ? 'bracket-winner' : ''}">
-            <span>${m.team2}</span>${isComp ? `<span>${m.score2}</span>` : ''}
+            <span>${t2Name}</span>${isComp ? `<span>${m.score2}</span>` : ''}
           </div>
           ${isLive ? liveChip : ''}
         </div>`;
@@ -405,13 +433,19 @@ function renderBracket(comp) {
     html += `<div class="bracket-round"><div class="bracket-round-label">${round}</div>`;
     rounds[round].forEach(m => {
       const isComp = m.status === 'completed';
+
+      const isT1Banned = window.NexusData.isTeamBannedInComp(m.team1, comp);
+      const isT2Banned = window.NexusData.isTeamBannedInComp(m.team2, comp);
+      const t1Name = isT1Banned ? `<del style="color:#ef4444;">${m.team1}</del> <span style="color:#ef4444;font-size:10px;font-weight:700;">(BANNED)</span>` : m.team1;
+      const t2Name = isT2Banned ? `<del style="color:#ef4444;">${m.team2}</del> <span style="color:#ef4444;font-size:10px;font-weight:700;">(BANNED)</span>` : m.team2;
+
       html += `
         <div class="bracket-match">
           <div class="bracket-team ${isComp && m.score1 > m.score2 ? 'bracket-winner' : ''}">
-            <span>${m.team1}</span> ${isComp ? `<span>${m.score1}</span>` : ''}
+            <span>${t1Name}</span> ${isComp ? `<span>${m.score1}</span>` : ''}
           </div>
           <div class="bracket-team ${isComp && m.score2 > m.score1 ? 'bracket-winner' : ''}">
-            <span>${m.team2}</span> ${isComp ? `<span>${m.score2}</span>` : ''}
+            <span>${t2Name}</span> ${isComp ? `<span>${m.score2}</span>` : ''}
           </div>
         </div>`;
     });

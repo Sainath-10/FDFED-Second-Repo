@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -15,7 +16,7 @@
       try {
         const parsed = JSON.parse(sessionRaw);
         role = String(parsed && parsed.role || '').toLowerCase();
-      } catch (err) {}
+      } catch (err) { }
     }
     const isSuperAdmin = role === 'super-admin' || role === 'super_admin';
     if (!isSuperAdmin) {
@@ -23,6 +24,7 @@
     }
   </script>
 </head>
+
 <body class="super-admin-body">
 
   <aside class="sa-sidebar-v2">
@@ -72,327 +74,331 @@
     </nav>
   </aside>
 
-<div class="sa-main-v2 sa-profile-main">
-  <main class="profile-v2-page">
-    <header class="profile-v2-head">
-      <div>
-        <h1>Profile <span>Page</span></h1>
-        <p>Manage your super admin account settings and preferences.</p>
-      </div>
-      <div class="save-wrap">
-        <a href="super-dashboard.html" class="profile-dashboard-btn">Go to Dashboard</a>
-        <button type="button" class="profile-logout-btn" id="logout-btn">Log Out</button>
-        <button type="button" class="profile-save-btn" id="save-profile-btn">Save Changes</button>
-        <span id="save-feedback" class="save-feedback" aria-live="polite"></span>
-      </div>
-    </header>
-
-    <section class="profile-card cut-card profile-hero-card">
-      <div class="hero-top-row">
-        <div class="avatar-wrap">
-          <img
-            src="../../assets/88bb61dd411e2e781af6284e0036a9672ba8ef32.png"
-            alt="Profile avatar"
-            onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22120%22 height=%22120%22><rect width=%22120%22 height=%22120%22 rx=%2260%22 fill=%22%23222%22/><text x=%2260%22 y=%2274%22 text-anchor=%22middle%22 fill=%22%23c6ff33%22 font-size=%2248%22>A</text></svg>'"
-          >
-          <span class="avatar-online" aria-hidden="true"></span>
+  <div class="sa-main-v2 sa-profile-main">
+    <main class="profile-v2-page">
+      <header class="profile-v2-head">
+        <div>
+          <h1>Profile <span>Page</span></h1>
+          <p>Manage your super admin account settings and preferences.</p>
         </div>
+        <div class="save-wrap">
+          <a href="super-dashboard.html" class="profile-dashboard-btn">Go to Dashboard</a>
+          <button type="button" class="profile-logout-btn" id="logout-btn">Log Out</button>
+          <button type="button" class="profile-save-btn" id="save-profile-btn">Save Changes</button>
+          <span id="save-feedback" class="save-feedback" aria-live="polite"></span>
+        </div>
+      </header>
 
-        <div class="hero-identity">
-          <div class="hero-title-row">
-            <h2 id="sa-hero-username">Super Admin</h2>
-            <span class="pill">Super Admin</span>
+      <section class="profile-card cut-card profile-hero-card">
+        <div class="hero-top-row">
+          <div class="avatar-wrap">
+            <img src="../../assets/88bb61dd411e2e781af6284e0036a9672ba8ef32.png" alt="Profile avatar"
+              onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22120%22 height=%22120%22><rect width=%22120%22 height=%22120%22 rx=%2260%22 fill=%22%23222%22/><text x=%2260%22 y=%2274%22 text-anchor=%22middle%22 fill=%22%23c6ff33%22 font-size=%2248%22>A</text></svg>'">
+            <span class="avatar-online" aria-hidden="true"></span>
           </div>
-          <p id="hero-email">Loading...</p>
-        </div>
-      </div>
 
-      <div class="hero-stats-grid">
-        <div class="hero-stat-box">
-          <span>User ID</span>
-          <strong>U1241219</strong>
-        </div>
-        <div class="hero-stat-box">
-          <span>Last Login</span>
-          <strong>March 6, 2026</strong>
-        </div>
-        <div class="hero-stat-box">
-          <span>Joined Date</span>
-          <strong>Jan 2, 2026</strong>
-        </div>
-        <div class="hero-stat-box">
-          <span>Max Privilege</span>
-          <strong>Super Admin</strong>
-        </div>
-      </div>
-    </section>
-
-    <section class="profile-grid-two section-gap-md">
-      <article class="profile-card cut-card">
-        <div class="card-head">
-          <h3>Account Settings</h3>
-        </div>
-
-        <div class="setting-row">
-          <div>
-            <h4>Email Address</h4>
-            <p>The email address associated with your admin account.</p>
-          </div>
-          <button type="button" class="outline-control email-edit-btn" id="email-edit-btn" aria-label="Edit account email">
-            <span id="account-email-value">Loading...</span>
-            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-              <path d="M12.75 3.75L16.25 7.25M4.25 15.75L7.25 15.5L15.5 7.25C16 6.75 16 5.75 15.5 5.25L14.75 4.5C14.25 4 13.25 4 12.75 4.5L4.5 12.75L4.25 15.75Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </button>
-        </div>
-
-        <div class="setting-row">
-          <div>
-            <h4>Password</h4>
-            <p>Last changed 3 months ago. Strong password recommended.</p>
-          </div>
-          <button type="button" class="outline-control" id="update-password-btn">Update Password</button>
-        </div>
-
-        <div class="setting-row">
-          <div>
-            <h4>Two Factor Authentication</h4>
-            <p>Secure your account with 2FA using Google Authenticator.</p>
-          </div>
-          <div class="toggle-line">
-            <label class="switch" for="two-factor">
-              <input type="checkbox" id="two-factor" checked>
-              <span class="slider"></span>
-            </label>
-            <span class="toggle-text" id="two-factor-label">Enabled</span>
-          </div>
-        </div>
-      </article>
-
-      <article class="profile-card cut-card">
-        <div class="card-head">
-          <h3>Preferences</h3>
-        </div>
-
-        <div class="prefs-block">
-          <label for="language">Language</label>
-          <select id="language" class="select-control">
-            <option selected>English (US)</option>
-            <option>English (UK)</option>
-            <option>Hindi</option>
-          </select>
-        </div>
-
-        <div class="prefs-list">
-          <div class="pref-item">
-            <span>Email Alerts</span>
-            <label class="switch" for="pref-email-alerts">
-              <input type="checkbox" id="pref-email-alerts" checked>
-              <span class="slider"></span>
-            </label>
-          </div>
-          <div class="pref-item">
-            <span>Push Notifications</span>
-            <label class="switch" for="pref-push">
-              <input type="checkbox" id="pref-push" checked>
-              <span class="slider"></span>
-            </label>
-          </div>
-          <div class="pref-item">
-            <span>Marketing</span>
-            <label class="switch" for="pref-marketing">
-              <input type="checkbox" id="pref-marketing" checked>
-              <span class="slider"></span>
-            </label>
-          </div>
-          <div class="pref-item">
-            <span>Messages</span>
-            <label class="switch" for="pref-messages">
-              <input type="checkbox" id="pref-messages" checked>
-              <span class="slider"></span>
-            </label>
-          </div>
-        </div>
-      </article>
-    </section>
-
-    <section class="profile-grid-two section-gap-sm">
-      <article class="profile-card cut-card">
-        <div class="card-head between">
-          <h3>Recent Activity</h3>
-          <a href="#">View all logs</a>
-        </div>
-
-        <div class="activity-list">
-          <div class="activity-item">
-            <div class="activity-icon">✦</div>
-            <div>
-              <h4>Edited tournament Spring Cup 2026</h4>
-              <p>Updated prize pool distribution and schedule.</p>
+          <div class="hero-identity">
+            <div class="hero-title-row">
+              <h2 id="sa-hero-username">Super Admin</h2>
+              <span class="pill">Super Admin</span>
             </div>
-            <time datetime="2026-03-30T12:00">2 hours ago</time>
-          </div>
-
-          <div class="activity-item">
-            <div class="activity-icon activity-ok">✓</div>
-            <div>
-              <h4>Successful login from 192.168.1.42</h4>
-              <p>MacOS - Chrome</p>
-            </div>
-            <time datetime="2026-03-30T09:00">5 hours ago</time>
-          </div>
-
-          <div class="activity-item">
-            <div class="activity-icon">✦</div>
-            <div>
-              <h4>Updated player eligibility rules</h4>
-              <p>Global rule changes applied to all ranked tournaments.</p>
-            </div>
-            <time datetime="2026-03-30T06:00">8 hours ago</time>
-          </div>
-
-          <div class="activity-item">
-            <div class="activity-icon">✦</div>
-            <div>
-              <h4>Security Audit Completed</h4>
-              <p>Automated system check passed successfully.</p>
-            </div>
-            <time datetime="2026-03-30T04:00">10 hours ago</time>
+            <p id="hero-email">Loading...</p>
           </div>
         </div>
 
-        <div class="activity-foot">
-          <div>
-            <span>Recent Login History</span>
-            <p>Chrome on Laptop - Sricity, India</p>
+        <div class="hero-stats-grid">
+          <div class="hero-stat-box">
+            <span>Username</span>
+            <strong id="sa-user-id">U1241219</strong>
           </div>
-          <span class="pill">Active</span>
+          <div class="hero-stat-box">
+            <span>Last Login</span>
+            <strong id="sa-last-login">March 6, 2026</strong>
+          </div>
+          <div class="hero-stat-box">
+            <span>Joined Date</span>
+            <strong id="sa-joined-date">Jan 2, 2026</strong>
+          </div>
+          <div class="hero-stat-box">
+            <span>Max Privilege</span>
+            <strong id="sa-max-privilege">Super Admin</strong>
+          </div>
         </div>
-      </article>
+      </section>
 
-      <article class="profile-card cut-card">
-        <div class="card-head">
-          <h3>Active Sessions</h3>
-        </div>
+      <section class="profile-grid-two section-gap-md">
+        <article class="profile-card cut-card">
+          <div class="card-head">
+            <h3>Account Settings</h3>
+          </div>
 
-        <div class="sessions-list">
-          <div class="session-item">
-            <div class="session-icon">🖥</div>
+          <div class="setting-row">
             <div>
-              <h4>Laptop - Sricity, India</h4>
-              <p>Current Session</p>
+              <h4>Email Address</h4>
+              <p>The email address associated with your admin account.</p>
+            </div>
+            <button type="button" class="outline-control email-edit-btn" id="email-edit-btn"
+              aria-label="Edit account email">
+              <span id="account-email-value">Loading...</span>
+              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path
+                  d="M12.75 3.75L16.25 7.25M4.25 15.75L7.25 15.5L15.5 7.25C16 6.75 16 5.75 15.5 5.25L14.75 4.5C14.25 4 13.25 4 12.75 4.5L4.5 12.75L4.25 15.75Z"
+                  stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <h4>Password</h4>
+              <p>Last changed 3 months ago. Strong password recommended.</p>
+            </div>
+            <button type="button" class="outline-control" id="update-password-btn">Update Password</button>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <h4>Two Factor Authentication</h4>
+              <p>Secure your account with 2FA using Google Authenticator.</p>
+            </div>
+            <div class="toggle-line">
+              <label class="switch" for="two-factor">
+                <input type="checkbox" id="two-factor" checked>
+                <span class="slider"></span>
+              </label>
+              <span class="toggle-text" id="two-factor-label">Enabled</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="profile-card cut-card">
+          <div class="card-head">
+            <h3>Preferences</h3>
+          </div>
+
+          <div class="prefs-block">
+            <label for="language">Language</label>
+            <select id="language" class="select-control">
+              <option selected>English (US)</option>
+              <option>English (UK)</option>
+              <option>Hindi</option>
+            </select>
+          </div>
+
+          <div class="prefs-list">
+            <div class="pref-item">
+              <span>Email Alerts</span>
+              <label class="switch" for="pref-email-alerts">
+                <input type="checkbox" id="pref-email-alerts" checked>
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="pref-item">
+              <span>Push Notifications</span>
+              <label class="switch" for="pref-push">
+                <input type="checkbox" id="pref-push" checked>
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="pref-item">
+              <span>Marketing</span>
+              <label class="switch" for="pref-marketing">
+                <input type="checkbox" id="pref-marketing" checked>
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="pref-item">
+              <span>Messages</span>
+              <label class="switch" for="pref-messages">
+                <input type="checkbox" id="pref-messages" checked>
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="profile-grid-two section-gap-sm">
+        <article class="profile-card cut-card">
+          <div class="card-head between">
+            <h3>Recent Activity</h3>
+            <a href="#">View all logs</a>
+          </div>
+
+          <div class="activity-list">
+            <div class="activity-item">
+              <div class="activity-icon">✦</div>
+              <div>
+                <h4>Edited tournament Spring Cup 2026</h4>
+                <p>Updated prize pool distribution and schedule.</p>
+              </div>
+              <time datetime="2026-03-30T12:00">2 hours ago</time>
+            </div>
+
+            <div class="activity-item">
+              <div class="activity-icon activity-ok">✓</div>
+              <div>
+                <h4>Successful login from 192.168.1.42</h4>
+                <p>MacOS - Chrome</p>
+              </div>
+              <time datetime="2026-03-30T09:00">5 hours ago</time>
+            </div>
+
+            <div class="activity-item">
+              <div class="activity-icon">✦</div>
+              <div>
+                <h4>Updated player eligibility rules</h4>
+                <p>Global rule changes applied to all ranked tournaments.</p>
+              </div>
+              <time datetime="2026-03-30T06:00">8 hours ago</time>
+            </div>
+
+            <div class="activity-item">
+              <div class="activity-icon">✦</div>
+              <div>
+                <h4>Security Audit Completed</h4>
+                <p>Automated system check passed successfully.</p>
+              </div>
+              <time datetime="2026-03-30T04:00">10 hours ago</time>
             </div>
           </div>
 
-          <div class="session-item">
-            <div class="session-icon">📱</div>
+          <div class="activity-foot">
             <div>
-              <h4>iPhone 15 Pro - Chennai, India</h4>
-              <p class="logout-link">Logged Out</p>
+              <span>Recent Login History</span>
+              <p>Chrome on Laptop - Sricity, India</p>
+            </div>
+            <span class="pill">Active</span>
+          </div>
+        </article>
+
+        <article class="profile-card cut-card">
+          <div class="card-head">
+            <h3>Active Sessions</h3>
+          </div>
+
+          <div class="sessions-list">
+            <div class="session-item">
+              <div class="session-icon">🖥</div>
+              <div>
+                <h4>Laptop - Sricity, India</h4>
+                <p>Current Session</p>
+              </div>
+            </div>
+
+            <div class="session-item">
+              <div class="session-icon">📱</div>
+              <div>
+                <h4>iPhone 15 Pro - Chennai, India</h4>
+                <p class="logout-link">Logged Out</p>
+              </div>
             </div>
           </div>
-        </div>
-      </article>
-    </section>
-  </main>
+        </article>
+      </section>
+    </main>
 
-  <footer class="profile-v2-footer">
-    <div class="footer-inner">
-      <div class="foot-brand">
-        <div class="foot-logo-line">
-          <img src="../../assets/f03e2b11537e425d8544ee3ca732bf73af5137c0.png" alt="Nexus Logo">
-          <div>
-            <h4>NEXUS</h4>
-            <span>ESPORTS</span>
+    <footer class="profile-v2-footer">
+      <div class="footer-inner">
+        <div class="foot-brand">
+          <div class="foot-logo-line">
+            <img src="../../assets/f03e2b11537e425d8544ee3ca732bf73af5137c0.png" alt="Nexus Logo">
+            <div>
+              <h4>NEXUS</h4>
+              <span>ESPORTS</span>
+            </div>
+          </div>
+          <p>The world's leading platform for competitive gaming and live match tracking. Join millions of players
+            worldwide.</p>
+        </div>
+
+        <div class="foot-col">
+          <h5>Platform</h5>
+          <a href="../about.html">About Us</a>
+          <a href="../competitions.html">Tournaments</a>
+          <a href="../watch-live.html">Live Streams</a>
+        </div>
+
+        <div class="foot-col">
+          <h5>Legal</h5>
+          <a href="#">Terms of Service</a>
+          <a href="#">Privacy Policy</a>
+          <a href="#">Cookie Policy</a>
+          <a href="#">Contact Support</a>
+        </div>
+
+        <div class="foot-col">
+          <h5>Follow Us</h5>
+          <div class="social-row">
+            <a href="#" aria-label="X">X</a>
+            <a href="#" aria-label="Discord">D</a>
+            <a href="#" aria-label="Telegram">T</a>
           </div>
         </div>
-        <p>The world's leading platform for competitive gaming and live match tracking. Join millions of players worldwide.</p>
       </div>
 
-      <div class="foot-col">
-        <h5>Platform</h5>
-        <a href="../about.html">About Us</a>
-        <a href="../competitions.html">Tournaments</a>
-        <a href="../watch-live.html">Live Streams</a>
+      <div class="footer-bottom-line">
+        <span>© 2026 NEXUS ESPORTS. All rights reserved.</span>
+        <span class="server-status"><i></i>Server Status: Operational</span>
+      </div>
+    </footer>
+  </div>
+
+  <div class="popup-overlay" id="password-modal" aria-hidden="true">
+    <div class="popup-card" role="dialog" aria-modal="true" aria-labelledby="password-modal-title">
+      <button type="button" class="popup-close" data-close-popup="password-modal"
+        aria-label="Close password dialog">×</button>
+      <h3 id="password-modal-title">Update Password</h3>
+      <p>Set a new secure password for your account.</p>
+
+      <div class="popup-form-group">
+        <label for="current-password">Current Password</label>
+        <input type="password" id="current-password" autocomplete="current-password">
+      </div>
+      <div class="popup-form-group">
+        <label for="new-password">New Password</label>
+        <input type="password" id="new-password" autocomplete="new-password">
+      </div>
+      <div class="popup-form-group">
+        <label for="confirm-password">Confirm New Password</label>
+        <input type="password" id="confirm-password" autocomplete="new-password">
       </div>
 
-      <div class="foot-col">
-        <h5>Legal</h5>
-        <a href="#">Terms of Service</a>
-        <a href="#">Privacy Policy</a>
-        <a href="#">Cookie Policy</a>
-        <a href="#">Contact Support</a>
+      <div class="popup-message" id="password-popup-message" aria-live="polite"></div>
+
+      <div class="popup-actions">
+        <button type="button" class="popup-btn ghost" data-close-popup="password-modal">Cancel</button>
+        <button type="button" class="popup-btn solid" id="save-password-btn">Update Password</button>
       </div>
-
-      <div class="foot-col">
-        <h5>Follow Us</h5>
-        <div class="social-row">
-          <a href="#" aria-label="X">X</a>
-          <a href="#" aria-label="Discord">D</a>
-          <a href="#" aria-label="Telegram">T</a>
-        </div>
-      </div>
-    </div>
-
-    <div class="footer-bottom-line">
-      <span>© 2026 NEXUS ESPORTS. All rights reserved.</span>
-      <span class="server-status"><i></i>Server Status: Operational</span>
-    </div>
-  </footer>
-</div>
-
-<div class="popup-overlay" id="password-modal" aria-hidden="true">
-  <div class="popup-card" role="dialog" aria-modal="true" aria-labelledby="password-modal-title">
-    <button type="button" class="popup-close" data-close-popup="password-modal" aria-label="Close password dialog">×</button>
-    <h3 id="password-modal-title">Update Password</h3>
-    <p>Set a new secure password for your account.</p>
-
-    <div class="popup-form-group">
-      <label for="current-password">Current Password</label>
-      <input type="password" id="current-password" autocomplete="current-password">
-    </div>
-    <div class="popup-form-group">
-      <label for="new-password">New Password</label>
-      <input type="password" id="new-password" autocomplete="new-password">
-    </div>
-    <div class="popup-form-group">
-      <label for="confirm-password">Confirm New Password</label>
-      <input type="password" id="confirm-password" autocomplete="new-password">
-    </div>
-
-    <div class="popup-message" id="password-popup-message" aria-live="polite"></div>
-
-    <div class="popup-actions">
-      <button type="button" class="popup-btn ghost" data-close-popup="password-modal">Cancel</button>
-      <button type="button" class="popup-btn solid" id="save-password-btn">Update Password</button>
     </div>
   </div>
-</div>
 
-<div class="popup-overlay" id="email-modal" aria-hidden="true">
-  <div class="popup-card" role="dialog" aria-modal="true" aria-labelledby="email-modal-title">
-    <button type="button" class="popup-close" data-close-popup="email-modal" aria-label="Close email dialog">×</button>
-    <h3 id="email-modal-title">Update Email Address</h3>
-    <p>Enter a new email address for your account.</p>
+  <div class="popup-overlay" id="email-modal" aria-hidden="true">
+    <div class="popup-card" role="dialog" aria-modal="true" aria-labelledby="email-modal-title">
+      <button type="button" class="popup-close" data-close-popup="email-modal"
+        aria-label="Close email dialog">×</button>
+      <h3 id="email-modal-title">Update Email Address</h3>
+      <p>Enter a new email address for your account.</p>
 
-    <div class="popup-form-group">
-      <label for="new-email">Email Address</label>
-      <input type="email" id="new-email" autocomplete="email">
-    </div>
+      <div class="popup-form-group">
+        <label for="new-email">Email Address</label>
+        <input type="email" id="new-email" autocomplete="email">
+      </div>
 
-    <div class="popup-message" id="email-popup-message" aria-live="polite"></div>
+      <div class="popup-message" id="email-popup-message" aria-live="polite"></div>
 
-    <div class="popup-actions">
-      <button type="button" class="popup-btn ghost" data-close-popup="email-modal">Cancel</button>
-      <button type="button" class="popup-btn solid" id="save-email-btn">Save Email</button>
+      <div class="popup-actions">
+        <button type="button" class="popup-btn ghost" data-close-popup="email-modal">Cancel</button>
+        <button type="button" class="popup-btn solid" id="save-email-btn">Save Email</button>
+      </div>
     </div>
   </div>
-</div>
 
-<script src="../../js/script.js"></script>
-<script src="../../js/data/auth-accounts.js"></script>
-<script src="../../js/auth.js"></script>
-<script src="../../js/pages/super-admin/profile.js"></script>
+  <script src="../../js/script.js"></script>
+  <script src="../../js/data/auth-accounts.js"></script>
+  <script src="../../js/auth.js"></script>
+  <script src="../../js/pages/super-admin/profile.js"></script>
 
 </body>
+
 </html>

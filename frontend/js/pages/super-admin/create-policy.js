@@ -342,7 +342,7 @@ const PolicyPage = (() => {
       const data = collectForm(clauseEditor, tagInput);
       if (!validateForm(data)) return;
       const newId = 'pol-' + Date.now();
-      policies.push({ id: newId, version: 'v1.0', updatedBy: 'Admin', updatedAt: new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}), changelog: [{ ver:'v1.0', date: new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}), desc: 'Policy published.' }], ...data, status: data.status || 'active' });
+      policies.push({ id: newId, version: 'v1.0', updatedBy: 'Admin', updatedAt: new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}), changelog: [{ ver:'v1.0', date: new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}), desc: 'Policy published.' }], ...data, status: 'active' });
       save();
       toast('Policy published successfully!');
       setTimeout(() => { window.location.href = 'policy-management.html'; }, 1400);

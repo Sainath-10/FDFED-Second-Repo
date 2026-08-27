@@ -1,6 +1,6 @@
-import { IsEmail, IsString, IsEnum, IsOptional } from 'class-validator';
+import { IsEmail, IsString, IsEnum, IsOptional, MinLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { UserRole } from '@/common/interfaces';
+import { UserRole } from '../../../common/interfaces';
 
 export class RegisterDto {
   @ApiProperty({
@@ -32,6 +32,15 @@ export class RegisterDto {
   lastName: string;
 
   @ApiProperty({
+    description: 'User password',
+    example: 'secret123',
+    minLength: 6,
+  })
+  @IsString()
+  @MinLength(6)
+  password: string;
+
+  @ApiProperty({
     description: 'User role',
     enum: UserRole,
     example: UserRole.PARTICIPANT,
@@ -39,6 +48,46 @@ export class RegisterDto {
   @IsEnum(UserRole)
   @IsOptional()
   role?: UserRole;
+}
+
+export class LoginDto {
+  @ApiProperty({
+    description: 'User email or username',
+    example: 'regular@nexus.gg',
+  })
+  @IsString()
+  emailOrUsername: string;
+
+  @ApiProperty({
+    description: 'User password',
+    example: 'regular123',
+  })
+  @IsString()
+  password: string;
+}
+
+export class LoginResponseDto {
+  @ApiProperty()
+  user: {
+    id: string;
+    email: string;
+    username: string;
+    firstName: string;
+    lastName: string;
+    role: UserRole;
+  };
+
+  @ApiProperty({
+    description: 'JWT or authentication access token',
+    example: 'token_1_1724699999',
+  })
+  access_token: string;
+
+  @ApiProperty({
+    description: 'Status message',
+    example: 'Login successful',
+  })
+  message: string;
 }
 
 export class AuthResponseDto {
@@ -58,3 +107,4 @@ export class AuthResponseDto {
   })
   message: string;
 }
+

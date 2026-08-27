@@ -60,9 +60,69 @@
 
   function getNotificationsForUser(username) {
     const user = normalize(username);
-    return loadNotifications()
+    const notifications = loadNotifications()
       .filter(item => normalize(item.toUsername) === user)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    // Dynamically update stale notifications with live competition/team status
+    try {
+      const comps = (window.NexusData && typeof window.NexusData.loadCompetitions === 'function')
+        ? window.NexusData.loadCompetitions()
+        : [];
+
+      notifications.forEach(item => {
+        if (!item.meta || !item.meta.compId || !item.meta.teamId) return;
+        const comp = comps.find(c => c && c.id === item.meta.compId);
+        if (!comp || !Array.isArray(comp.teams)) return;
+        const team = comp.teams.find(t => t && t.id === item.meta.teamId);
+        if (!team) return;
+
+        const liveTeamStatus = String(team.status || 'pending').toLowerCase();
+
+        // Resolve stale team-registration pending notifications
+        if (item.status === 'pending' && (item.type === 'team-registration' || item.type === 'team-created')) {
+          if (liveTeamStatus === 'approved') {
+            item.status = 'approved';
+            item.title = '✔ Team Registration Approved';
+            item.body = `Your team "${team.name || 'Team'}" has been approved for ${comp.name || 'this competition'}.`;
+          } else if (liveTeamStatus === 'rejected') {
+            item.status = 'rejected';
+            item.title = '✖ Team Registration Rejected';
+            item.body = `Your team "${team.name || 'Team'}" was rejected for ${comp.name || 'this competition'}.`;
+          } else if (liveTeamStatus === 'banned') {
+            item.status = 'rejected';
+            item.title = '🚫 Team Banned from Competition';
+            item.body = `Your team "${team.name || 'Team'}" was banned from ${comp.name || 'this competition'} due to a dispute.`;
+          }
+        }
+
+        // Resolve join requests
+        if (item.meta.requestId && Array.isArray(team.joinRequests)) {
+          const req = team.joinRequests.find(r => r && r.id === item.meta.requestId);
+          if (req && req.status && req.status !== 'pending') {
+            const reqStatus = req.status === 'accepted' ? 'approved' : 'rejected';
+            item.status = reqStatus;
+            item.title = 'Join request ' + (reqStatus === 'approved' ? 'accepted' : 'declined');
+            item.body = 'Your request to join ' + team.name + ' was ' + req.status + '.';
+          }
+        }
+
+        // Resolve invites
+        if (item.meta.inviteId && Array.isArray(team.invites)) {
+          const inv = team.invites.find(i => i && i.id === item.meta.inviteId);
+          if (inv && inv.status && inv.status !== 'pending') {
+            const invStatus = inv.status === 'accepted' ? 'approved' : 'rejected';
+            item.status = invStatus;
+            item.title = 'Team invitation ' + (invStatus === 'approved' ? 'accepted' : 'declined');
+            item.body = 'Invitation to join ' + team.name + ' was ' + inv.status + '.';
+          }
+        }
+      });
+    } catch (e) {
+      // Safe fallback — don't break notification rendering
+    }
+
+    return notifications;
   }
 
   function getNotificationById(notificationId, username) {
@@ -360,6 +420,10 @@
       return { ok: false, error: 'You are already part of a team in this competition.' };
     }
 
+    const entryFeeAmount = comp.entryFeeAmount || 0;
+    const feeType = comp.feeType || 'free';
+    const isTeamPaid = feeType === 'per_team' && entryFeeAmount > 0;
+
     const team = {
       id: makeId('team'),
       name,
@@ -371,12 +435,16 @@
       leaderUsername: session.username,
       competitionId: comp.id,
       created: isoNow(),
+      paymentStatus: isTeamPaid ? 'paid' : 'free',
+      feePaid: isTeamPaid ? entryFeeAmount : 0,
+      feeType: feeType,
       members: [
         {
           username: session.username,
           displayName: session.displayName || session.username,
           role: 'captain',
-          joinedAt: isoNow()
+          joinedAt: isoNow(),
+          feePaid: (feeType === 'per_player') ? entryFeeAmount : 0
         }
       ],
       invites: [],
@@ -546,13 +614,19 @@
       return { ok: false, error: 'You already sent a join request to this team.' };
     }
 
+    const entryFeeAmount = comp.entryFeeAmount || 0;
+    const feeType = comp.feeType || 'free';
+    const isPlayerPaid = feeType === 'per_player' && entryFeeAmount > 0;
+
     const request = {
       id: makeId('joinreq'),
       username: session.username,
       displayName: session.displayName || session.username,
       message: String(opts.message || '').trim(),
       requestedAt: isoNow(),
-      status: 'pending'
+      status: 'pending',
+      feePaid: isPlayerPaid ? entryFeeAmount : 0,
+      paymentStatus: isPlayerPaid ? 'paid' : 'free'
     };
 
     team.joinRequests.unshift(request);
@@ -615,6 +689,21 @@
     team.players = team.members.length;
 
     saveCompetition(comp);
+
+    // Update any stale pending notifications for this join request
+    try {
+      const notifItems = JSON.parse(localStorage.getItem(NOTIFICATIONS_KEY) || '[]');
+      let notifModified = false;
+      notifItems.forEach(n => {
+        if (n && n.meta && n.meta.requestId === request.id && n.status === 'pending') {
+          n.status = action === 'accepted' ? 'approved' : 'rejected';
+          n.title = 'Join request ' + (action === 'accepted' ? 'accepted' : 'declined');
+          n.body = 'Your request to join ' + team.name + ' was ' + action + '.';
+          notifModified = true;
+        }
+      });
+      if (notifModified) saveNotifications(notifItems);
+    } catch (e) {}
 
     pushNotification({
       toUsername: request.username,
@@ -688,6 +777,21 @@
     invite.handledAt = isoNow();
     team.players = team.members.length;
     saveCompetition(comp);
+
+    // Update any stale pending notifications for this invite
+    try {
+      const notifItems = JSON.parse(localStorage.getItem(NOTIFICATIONS_KEY) || '[]');
+      let notifModified = false;
+      notifItems.forEach(n => {
+        if (n && n.meta && n.meta.inviteId === invite.id && n.status === 'pending') {
+          n.status = action === 'accepted' ? 'approved' : 'rejected';
+          n.title = 'Team invitation ' + (action === 'accepted' ? 'accepted' : 'declined');
+          n.body = 'Your invitation to join ' + team.name + ' was ' + action + '.';
+          notifModified = true;
+        }
+      });
+      if (notifModified) saveNotifications(notifItems);
+    } catch (e) {}
 
     pushNotification({
       toUsername: team.createdBy,

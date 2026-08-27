@@ -204,8 +204,9 @@
               Create a New Team
             </button>
             <button id="btn-dispute" class="btn-outline"
-              style="width:100%;text-align:center;display:none;padding:13px;font-size:14px;cursor:pointer;background:none; border-color: #f87171; color: #f87171;">
-              Dispute
+              style="width:100%;text-align:center;display:block;padding:13px;font-size:14px;cursor:pointer;background:none; border-color: #f87171; color: #f87171; font-weight:600;"
+              onclick="openDisputeModal()">
+              ⚠ Raise Dispute
             </button>
             <button id="btn-share-comp" class="btn-outline"
               style="width:100%;text-align:center;display:block;padding:11px;font-size:13px;cursor:pointer;background:none;opacity:0.8;">
@@ -224,6 +225,63 @@
 
   </div>
 
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- RAISE DISPUTE MODAL                                                -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <div id="modal-raise-dispute" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);align-items:center;justify-content:center;">
+    <div style="background:#0f172a;border:1px solid #1e293b;border-radius:16px;width:min(96vw,520px);padding:32px;position:relative;box-shadow:0 20px 60px #000a;">
+      <button onclick="closeDisputeModal()" style="position:absolute;top:16px;right:18px;background:none;border:none;color:#9aa4b2;font-size:20px;cursor:pointer;">✕</button>
+      <h2 style="margin:0 0 6px;color:#f1f5f9;font-size:20px;">⚠ Raise a Dispute</h2>
+      <p style="margin:0 0 24px;color:#64748b;font-size:13px;">Select whether the dispute is against a Team, a Player, or the Organizer.</p>
+
+      <form id="dispute-form" onsubmit="submitDispute(event)">
+        <div style="margin-bottom:16px;">
+          <label style="display:block;color:#94a3b8;font-size:13px;margin-bottom:6px;">Dispute Against *</label>
+          <select id="dispute-target-type" required
+            style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;padding:10px 12px;border-radius:8px;font-size:14px;">
+            <option value="">— Select Target Entity —</option>
+            <option value="team">Team (Opponent)</option>
+            <option value="player">Player (Participant)</option>
+            <option value="organizer">Tournament Organizer</option>
+          </select>
+          <p id="dispute-routing-hint" style="margin:6px 0 0;font-size:12px;color:#64748b;display:none;"></p>
+        </div>
+
+        <div style="margin-bottom:16px;" id="target-select-container">
+          <label id="target-select-label" style="display:block;color:#94a3b8;font-size:13px;margin-bottom:6px;">Choose Target *</label>
+          <select id="dispute-target-user" required
+            style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;padding:10px 12px;border-radius:8px;font-size:14px;">
+            <option value="">— Select Category First —</option>
+          </select>
+        </div>
+
+        <div style="margin-bottom:16px;">
+          <label style="display:block;color:#94a3b8;font-size:13px;margin-bottom:6px;">Reason / Description *</label>
+          <textarea id="dispute-reason" required rows="4" placeholder="Describe the issue in detail (min. 10 characters)..."
+            style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;padding:10px 12px;border-radius:8px;font-size:14px;resize:vertical;box-sizing:border-box;"></textarea>
+        </div>
+
+        <div style="margin-bottom:24px;">
+          <label style="display:block;color:#94a3b8;font-size:13px;margin-bottom:6px;">Evidence Links (optional)</label>
+          <input id="dispute-evidence" type="text" placeholder="e.g. https://imgur.com/screenshot, https://youtube.com/clip"
+            style="width:100%;background:#1e293b;border:1px solid #334155;color:#f1f5f9;padding:10px 12px;border-radius:8px;font-size:14px;box-sizing:border-box;">
+          <p style="margin:5px 0 0;font-size:11px;color:#64748b;">Separate multiple links with a comma</p>
+        </div>
+
+        <div style="display:flex;gap:12px;">
+          <button type="button" onclick="closeDisputeModal()"
+            style="flex:1;padding:12px;background:none;border:1px solid #334155;color:#94a3b8;border-radius:8px;cursor:pointer;font-size:14px;">
+            Cancel
+          </button>
+          <button type="submit"
+            style="flex:1;padding:12px;background:#f87171;border:none;color:#fff;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;">
+            Submit Dispute
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script src="../js/script.js"></script>
   <script src="../js/pages/competitions-data.js"></script>
   <script src="../js/pages/team/team-workflow.js"></script>
@@ -231,6 +289,140 @@
   <script>
     document.getElementById('sidebar-mount').innerHTML = getSidebar('competitions', '../');
     document.getElementById('footer-mount').innerHTML = getFooter('../');
+
+    function openDisputeModal() {
+      const modal = document.getElementById('modal-raise-dispute');
+      modal.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+      populateTargetDropdown();
+    }
+
+    function closeDisputeModal() {
+      const modal = document.getElementById('modal-raise-dispute');
+      modal.style.display = 'none';
+      document.body.style.overflow = '';
+      document.getElementById('dispute-form').reset();
+      document.getElementById('dispute-routing-hint').style.display = 'none';
+    }
+
+    function populateTargetDropdown() {
+      const params = new URLSearchParams(window.location.search);
+      const compId = params.get('id') || sessionStorage.getItem('last_comp_id') || 'unknown';
+      const targetType = document.getElementById('dispute-target-type').value;
+      const targetSelect = document.getElementById('dispute-target-user');
+      const label = document.getElementById('target-select-label');
+      const hint = document.getElementById('dispute-routing-hint');
+
+      targetSelect.innerHTML = '';
+
+      // Get current user to prevent self-disputes
+      let currentUsername = '';
+      let currentTeamName = '';
+      try {
+        const session = JSON.parse(localStorage.getItem('nexus.auth.session') || '{}');
+        currentUsername = (session.username || '').toLowerCase();
+        const comps = JSON.parse(localStorage.getItem('nexus_competitions') || '[]');
+        const comp = comps.find(c => c.id === compId);
+        if (comp && Array.isArray(comp.teams)) {
+          const myTeam = comp.teams.find(t => (Array.isArray(t.players) && t.players.some(pl => (pl.username || pl || '').toLowerCase() === currentUsername)) || (t.leaderId && t.leaderId.toLowerCase() === currentUsername));
+          if (myTeam) currentTeamName = (myTeam.name || '').toLowerCase();
+        }
+      } catch(e) {}
+
+      if (!targetType) {
+        label.textContent = 'Choose Target *';
+        targetSelect.innerHTML = '<option value="">— Select Category First —</option>';
+        hint.style.display = 'none';
+        return;
+      }
+
+      const p = window.NexusData ? window.NexusData.getCompetitionParticipants(compId) : { teams: [], players: [], organizer: 'organizer' };
+
+      if (targetType === 'team') {
+        label.textContent = 'Choose Tournament Team *';
+        hint.textContent = '📋 Dispute sent to Tournament Organizer for review.';
+        hint.style.color = '#94a3b8';
+        hint.style.display = 'block';
+        const teams = p.teams.filter(t => (t.name || '').toLowerCase() !== currentTeamName);
+        if (teams.length === 0) {
+          targetSelect.innerHTML = '<option value="">— No other teams available —</option>';
+        } else {
+          targetSelect.innerHTML = '<option value="">— Select a Team —</option>' +
+            teams.map(t => `<option value="${t.name}">${t.name} (${t.status || 'registered'})</option>`).join('');
+        }
+      } else if (targetType === 'player') {
+        label.textContent = 'Choose Tournament Player *';
+        hint.textContent = '📋 Dispute sent to Tournament Organizer for review.';
+        hint.style.color = '#94a3b8';
+        hint.style.display = 'block';
+        const players = p.players.filter(u => (u || '').toLowerCase() !== currentUsername);
+        if (players.length === 0) {
+          targetSelect.innerHTML = '<option value="">— No other players available —</option>';
+        } else {
+          targetSelect.innerHTML = '<option value="">— Select a Player —</option>' +
+            players.map(u => `<option value="${u}">@${u}</option>`).join('');
+        }
+      } else if (targetType === 'organizer') {
+        label.textContent = 'Tournament Organizer *';
+        hint.textContent = '📢 Dispute against Organizer is routed directly to Platform Admin.';
+        hint.style.color = '#fb923c';
+        hint.style.display = 'block';
+        targetSelect.innerHTML = `<option value="${p.organizer}" selected>${p.organizer} (Organizer)</option>`;
+      }
+    }
+
+    document.getElementById('dispute-target-type').addEventListener('change', populateTargetDropdown);
+
+    function submitDispute(e) {
+      e.preventDefault();
+      const params = new URLSearchParams(window.location.search);
+      const compId = params.get('id') || sessionStorage.getItem('last_comp_id') || 'unknown';
+      const targetType = document.getElementById('dispute-target-type').value;
+      const targetUserOrTeam = document.getElementById('dispute-target-user').value.trim();
+      const reason = document.getElementById('dispute-reason').value.trim();
+      const evidenceRaw = document.getElementById('dispute-evidence').value.trim();
+      const evidenceUrls = evidenceRaw ? evidenceRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+      if (!targetType || !targetUserOrTeam || reason.length < 10) {
+        if (typeof showToast === 'function') showToast('Please fill in all required fields (target and min. 10 chars reason).', 'error');
+        return;
+      }
+
+      // Prevent self-dispute
+      let currentUsername = '';
+      try { const s = JSON.parse(localStorage.getItem('nexus.auth.session') || '{}'); currentUsername = (s.username || '').toLowerCase(); } catch(e) {}
+      if (currentUsername && (targetUserOrTeam || '').toLowerCase() === currentUsername) {
+        if (typeof showToast === 'function') showToast('You cannot raise a dispute against yourself.', 'error');
+        return;
+      }
+
+      if (window.NexusData && typeof window.NexusData.addDispute === 'function') {
+        const sessionRaw = localStorage.getItem('nexus.auth.session');
+        let session = null;
+        try { if (sessionRaw) session = JSON.parse(sessionRaw); } catch(e) {}
+        window.NexusData.addDispute({
+          competitionId: compId,
+          reportedBy: session?.username || 'anonymous',
+          targetType,
+          targetUserOrTeam,
+          reason,
+          evidenceUrls,
+          status: targetType === 'organizer' ? 'open_admin' : 'open_organizer',
+          organizerWarnings: 0,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
+      closeDisputeModal();
+      if (typeof showToast === 'function') {
+        showToast('Dispute submitted');
+      }
+    }
+
+    document.getElementById('modal-raise-dispute').addEventListener('click', function(e) {
+      if (e.target === this) closeDisputeModal();
+    });
   </script>
 
 </body>
