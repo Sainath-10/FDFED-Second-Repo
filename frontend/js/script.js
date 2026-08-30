@@ -562,48 +562,24 @@ function getTeamSidebar(activePage, activeTab, base = '../../') {
   </aside>`;
 }
 
-/**
- * Admin sidebar: Home, Users, Profile
- */
-function getAdminSidebar(activePage, base = '../../') {
-  const items = [
-    { id: 'home', label: 'Home', href: base + 'pages/admin/dashboard.html', icon: homeIcon() },
-    { id: 'users', label: 'Users', href: base + 'pages/admin/users.html', icon: usersIcon() },
-    { id: 'profile', label: 'Profile', href: base + 'pages/admin/admin-profile.html', icon: profileIcon() },
-  ];
-
-  return `
-  <aside class="sidebar">
-    <div class="sidebar-logo">
-      <img src="${base}assets/f03e2b11537e425d8544ee3ca732bf73af5137c0.png" alt="Nexus Logo">
-      <div class="logo-title">NEXUS</div>
-      <div class="logo-sub">ESPORTS</div>
-    </div>
-    <nav class="sidebar-nav">
-      ${items.slice(0, 2).map(item => `
-        <a href="${item.href}" class="nav-item ${activePage === item.id ? 'active' : ''}">
-          ${item.icon}<span>${item.label}</span>
-        </a>`).join('')}
-    </nav>
-    <div class="sidebar-nav-bottom">
-      ${items.slice(2).map(item => `
-        <a href="${item.href}" class="nav-item ${activePage === item.id ? 'active' : ''}">
-          ${item.icon}<span>${item.label}</span>
-        </a>`).join('')}
-    </div>
-  </aside>`;
+function revenueIcon() {
+  return `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.67" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="2" y="4" width="16" height="12" rx="2"/>
+    <circle cx="10" cy="10" r="3"/>
+    <path d="M6 10h.01M14 10h.01"/>
+  </svg>`;
 }
 
 /**
- * Super Admin sidebar (admin-style shell): Dashboard, Disputes, Policy, Profile
+ * Admin sidebar: Home (Dashboard), Disputes, Revenue, Users, Profile
  */
-function getSuperAdminSidebar(activePage, base = '../../') {
+function getAdminSidebar(activePage, base = '../../') {
   const items = [
-    { id: 'dashboard', label: 'Dashboard', href: base + 'pages/super-admin/super-dashboard.html', icon: homeIcon() },
-    { id: 'disputes', label: 'Disputes', href: base + 'pages/super-admin/resolve-disputes.html', icon: shieldIcon() },
-    { id: 'policy', label: 'Policy', href: base + 'pages/super-admin/policy-management.html', icon: checkCircleIcon() },
-    { id: 'users', label: 'Users', href: base + 'pages/super-admin/users.html', icon: usersIcon() },
-    { id: 'profile', label: 'Profile', href: base + 'pages/super-admin/profile.html', icon: profileIcon() },
+    { id: 'home', label: 'Dashboard', href: base + 'pages/admin/dashboard.html', icon: homeIcon() },
+    { id: 'disputes', label: 'Disputes', href: base + 'pages/admin/disputes.html', icon: shieldIcon() },
+    { id: 'revenue', label: 'Revenue', href: base + 'pages/admin/revenue.html', icon: revenueIcon() },
+    { id: 'users', label: 'Users', href: base + 'pages/admin/users.html', icon: usersIcon() },
+    { id: 'profile', label: 'Profile', href: base + 'pages/admin/admin-profile.html', icon: profileIcon() },
   ];
 
   return `
@@ -621,6 +597,39 @@ function getSuperAdminSidebar(activePage, base = '../../') {
     </nav>
     <div class="sidebar-nav-bottom">
       ${items.slice(4).map(item => `
+        <a href="${item.href}" class="nav-item ${activePage === item.id ? 'active' : ''}">
+          ${item.icon}<span>${item.label}</span>
+        </a>`).join('')}
+    </div>
+  </aside>`;
+}
+
+/**
+ * Super Admin sidebar: Dashboard, Policy, Users, Profile
+ */
+function getSuperAdminSidebar(activePage, base = '../../') {
+  const items = [
+    { id: 'dashboard', label: 'Dashboard', href: base + 'pages/super-admin/super-dashboard.html', icon: homeIcon() },
+    { id: 'policy', label: 'Policy', href: base + 'pages/super-admin/policy-management.html', icon: checkCircleIcon() },
+    { id: 'users', label: 'Users', href: base + 'pages/super-admin/users.html', icon: usersIcon() },
+    { id: 'profile', label: 'Profile', href: base + 'pages/super-admin/profile.html', icon: profileIcon() },
+  ];
+
+  return `
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <img src="${base}assets/f03e2b11537e425d8544ee3ca732bf73af5137c0.png" alt="Nexus Logo">
+      <div class="logo-title">NEXUS</div>
+      <div class="logo-sub">SUPER ADMIN</div>
+    </div>
+    <nav class="sidebar-nav">
+      ${items.slice(0, 3).map(item => `
+        <a href="${item.href}" class="nav-item ${activePage === item.id ? 'active' : ''}">
+          ${item.icon}<span>${item.label}</span>
+        </a>`).join('')}
+    </nav>
+    <div class="sidebar-nav-bottom">
+      ${items.slice(3).map(item => `
         <a href="${item.href}" class="nav-item ${activePage === item.id ? 'active' : ''}">
           ${item.icon}<span>${item.label}</span>
         </a>`).join('')}

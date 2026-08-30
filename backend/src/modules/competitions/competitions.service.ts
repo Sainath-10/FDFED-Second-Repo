@@ -2,10 +2,14 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { CompetitionRepository } from './repositories/competition.repository';
 import { CreateCompetitionDto, UpdateCompetitionDto } from './dto/competition.dto';
 import { ICompetition } from '@/common/interfaces';
+import { WebhookNotifierService } from '../partner/webhook-notifier.service';
 
 @Injectable()
 export class CompetitionsService {
-  constructor(private competitionRepository: CompetitionRepository) {}
+  constructor(
+    private competitionRepository: CompetitionRepository,
+    private webhookNotifier: WebhookNotifierService,
+  ) {}
 
   async createCompetition(
     createCompetitionDto: CreateCompetitionDto,
@@ -32,7 +36,7 @@ export class CompetitionsService {
       throw new BadRequestException('Tournament End Date must be strictly after Start Date.');
     }
 
-    return this.competitionRepository.create(
+    const competition = await this.competitionRepository.create(
       name.trim(),
       description.trim(),
       sDate,
@@ -40,6 +44,18 @@ export class CompetitionsService {
       createdBy,
       coOrganizers || [],
     );
+
+    // B2B Consume — notify external partner system via webhook (fire-and-forget)
+    this.webhookNotifier.notifyCompetitionCreated({
+      id: competition.id,
+      name: competition.name,
+      status: competition.status,
+      startDate: competition.startDate,
+      endDate: competition.endDate,
+      createdBy: competition.createdBy,
+    });
+
+    return competition;
   }
 
   async getCompetitionById(id: string): Promise<ICompetition> {

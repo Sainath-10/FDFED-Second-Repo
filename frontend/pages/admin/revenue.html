@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Platform Revenue &amp; Financials</title>
+  <link rel="stylesheet" href="../../css/styles.css">
+  <link rel="stylesheet" href="../../css/pages/admin/dashboard.css">
+  <style>
+    .rev-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .rev-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+    }
+    .rev-card-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+    .rev-card-val {
+      font-size: 28px;
+      font-weight: 800;
+      color: var(--accent-neon);
+    }
+    .rev-card-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+    .rev-rule-box {
+      background: rgba(198,255,51,0.06);
+      border: 1px solid rgba(198,255,51,0.25);
+      border-radius: 12px;
+      padding: 18px 24px;
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .rev-rule-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 4px;
+    }
+    .rev-rule-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .rev-calc-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    .rev-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    .rev-table th, .rev-table td {
+      padding: 12px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .rev-table th {
+      color: var(--text-muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+  </style>
+</head>
+<body>
+<div id="sidebar-mount"></div>
+<div class="page-with-sidebar">
+  <main class="admin-page">
+
+    <div class="admin-header-block">
+      <h1 class="admin-title-xl">Revenue Model &amp; Financial Engine</h1>
+      <p class="admin-subtitle-muted">Real-time platform revenue tracking, organizer fee calculations, and transaction records.</p>
+    </div>
+
+    <!-- Pricing Policy Banner -->
+    <div class="rev-rule-box">
+      <div>
+        <div class="rev-rule-title">⚡ Platform Revenue Logic: max(₹50, 7% of Prize Pool)</div>
+        <div class="rev-rule-desc">When an organizer creates a tournament, the platform fee is whichever is higher: ₹50 flat minimum or 7% of the total prize pool.</div>
+      </div>
+      <div>
+        <span class="status-pill completed" style="font-size:13px;padding:6px 14px;background:rgba(198,255,51,0.15);color:var(--accent-neon);border-color:var(--accent-neon);">Formula Active</span>
+      </div>
+    </div>
+
+    <!-- Stat Cards -->
+    <div class="rev-grid">
+      <div class="rev-card">
+        <div class="rev-card-title">Platform Fees Earned</div>
+        <div class="rev-card-val" id="stat-platform-fees">₹0</div>
+        <div class="rev-card-sub" id="stat-platform-count">0 fee transactions completed</div>
+      </div>
+      <div class="rev-card">
+        <div class="rev-card-title">Total Prize Pools Configured</div>
+        <div class="rev-card-val" id="stat-prize-pools">₹0</div>
+        <div class="rev-card-sub">Across all live tournaments</div>
+      </div>
+      <div class="rev-card">
+        <div class="rev-card-title">Entry Fees Processed</div>
+        <div class="rev-card-val" id="stat-entry-fees">₹0</div>
+        <div class="rev-card-sub" id="stat-entry-count">0 team registrations</div>
+      </div>
+      <div class="rev-card">
+        <div class="rev-card-title">Prize Payouts Released</div>
+        <div class="rev-card-val" id="stat-payouts">₹0</div>
+        <div class="rev-card-sub" id="stat-payout-count">0 tournament winners paid</div>
+      </div>
+    </div>
+
+    <!-- Fee Configuration & Live Calculator -->
+    <div class="rev-calc-panel">
+      <h2 style="font-size:18px;margin-bottom:16px;color:var(--text-main);">Tournament Fee Calculator &amp; Setup</h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:16px;margin-bottom:16px;">
+        <div>
+          <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:6px;">Select Tournament</label>
+          <select id="calc-comp-select" class="sa-select-field" style="width:100%;height:40px;background:var(--bg-main);border:1px solid var(--border-color);border-radius:6px;color:#fff;padding:0 12px;">
+            <option value="">Select a tournament...</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:6px;">Total Prize Pool (₹ INR)</label>
+          <input type="number" id="calc-prize-pool" placeholder="e.g. 10000" value="5000" min="0" oninput="calculateFeeLive()" style="width:100%;height:40px;background:var(--bg-main);border:1px solid var(--border-color);border-radius:6px;color:#fff;padding:0 12px;box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:6px;">Entry Fee per Team (₹ INR)</label>
+          <input type="number" id="calc-entry-fee" placeholder="e.g. 200" value="250" min="0" style="width:100%;height:40px;background:var(--bg-main);border:1px solid var(--border-color);border-radius:6px;color:#fff;padding:0 12px;box-sizing:border-box;">
+        </div>
+      </div>
+
+      <!-- Live Calculation Result -->
+      <div id="calc-result-box" style="background:var(--bg-main);border:1px solid var(--border-color);border-radius:8px;padding:16px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+        <div>
+          <div style="font-size:13px;color:var(--text-muted);">Calculated Platform Fee:</div>
+          <div style="font-size:24px;font-weight:800;color:var(--accent-neon);" id="calc-result-fee">₹350</div>
+          <div style="font-size:12px;color:var(--text-muted);" id="calc-result-explanation">7% of ₹5,000 = ₹350 (Higher than ₹50 minimum)</div>
+        </div>
+        <div style="display:flex;gap:10px;">
+          <button class="btn-primary" onclick="saveTournamentFeeConfig()" style="padding:10px 20px;font-size:14px;">Save Fee Configuration</button>
+          <button class="btn-table-primary" onclick="recordPlatformFeePaid()" style="padding:10px 20px;font-size:14px;">Record Fee Payment</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Financial Transactions Log -->
+    <div class="tournaments-section">
+      <div class="tournaments-section-header" style="margin-bottom:16px;">
+        <h2 class="table-title-md">Platform Financial Ledger &amp; Transactions</h2>
+        <button class="btn-table-secondary" onclick="loadRevenueData()">🔄 Refresh Ledger</button>
+      </div>
+
+      <div style="overflow-x:auto;background:var(--bg-card);border:1px solid var(--border-color);border-radius:12px;">
+        <table class="rev-table">
+          <thead>
+            <tr>
+              <th>Txn ID</th>
+              <th>Type</th>
+              <th>Amount</th>
+              <th>Description</th>
+              <th>Status</th>
+              <th>Timestamp</th>
+            </tr>
+          </thead>
+          <tbody id="transactions-table-body">
+            <tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:30px;">Loading financial records...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+  <div id="footer-mount"></div>
+</div>
+
+<script src="../../js/api.js"></script>
+<script src="../../js/script.js"></script>
+<script src="../../js/pages/admin/revenue.js"></script>
+</body>
+</html>

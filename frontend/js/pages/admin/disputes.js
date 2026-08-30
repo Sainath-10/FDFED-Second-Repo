@@ -1,210 +1,197 @@
 initAdminSidebar('disputes');
 initFooter('../../');
 
-const DISPUTE_STORE_KEY = 'nexus_admin_disputes';
+let currentFilter = 'all';
+let disputesList = [];
 
-function safeParse(json, fallback) {
+// Sample seed disputes if DB is initially empty
+const defaultSeedDisputes = [
+  {
+    id: 'disp-org-1',
+    targetType: 'organizer',
+    title: 'Dispute against Organizer — Tournament Schedule Delay',
+    description: 'Tournament organizer delayed semi-finals by 4 hours without notice and altered bracket rules unfairly.',
+    reportedBy: 'Team_Vanguard',
+    targetId: 'organizer_alpha',
+    status: 'escalated',
+    competitionName: 'World Championship 2026',
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'disp-usr-1',
+    targetType: 'user',
+    title: 'Dispute against Player — Exploiting Dust2 Map Glitch',
+    description: 'Opponent player used illegal smoke bug during Round 18 giving unfair sight advantages. Demo evidence attached.',
+    reportedBy: 'Inferno_Squad',
+    targetId: 'Storm_Riders',
+    status: 'open',
+    competitionName: 'Pro League Season 5',
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'disp-org-2',
+    targetType: 'organizer',
+    title: 'Dispute against Organizer — Prize Pool Distribution Delay',
+    description: 'Organizer has not initiated winner prize payout 14 days after tournament completion.',
+    reportedBy: 'Apex_Predators',
+    targetId: 'esports_org_india',
+    status: 'open',
+    competitionName: 'Regional Cup 2026',
+    createdAt: new Date().toISOString(),
+  },
+];
+
+async function loadDisputes() {
+  if (window.NexusAPI && window.NexusAPI.Disputes) {
+    const res = await window.NexusAPI.Disputes.getAll();
+    if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
+      disputesList = res.data;
+      updateStats();
+      renderDisputes();
+      return;
+    }
+  }
+
+  // Fallback to local storage or seed
   try {
-    const parsed = JSON.parse(json);
-    return parsed ?? fallback;
-  } catch (err) {
-    return fallback;
+    const stored = JSON.parse(localStorage.getItem('nexus_admin_disputes') || 'null');
+    disputesList = (Array.isArray(stored) && stored.length) ? stored : defaultSeedDisputes;
+  } catch (e) {
+    disputesList = defaultSeedDisputes;
   }
+  updateStats();
+  renderDisputes();
 }
 
-function saveDisputes(disputes) {
-  localStorage.setItem(DISPUTE_STORE_KEY, JSON.stringify(disputes));
+function updateStats() {
+  const orgCount = disputesList.filter(d => (d.targetType || '').toLowerCase() === 'organizer').length;
+  const userCount = disputesList.filter(d => (d.targetType || 'user').toLowerCase() === 'user').length;
+  const escalatedCount = disputesList.filter(d => (d.status || '').toLowerCase() === 'escalated').length;
+  const resolvedCount = disputesList.filter(d => (d.status || '').toLowerCase() === 'resolved').length;
+
+  const setVal = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = String(val);
+  };
+
+  setVal('stat-organizer', orgCount);
+  setVal('stat-user', userCount);
+  setVal('stat-escalated', escalatedCount);
+  setVal('stat-resolved', resolvedCount);
 }
 
-function extractMetaValue(items, label) {
-  const target = items.find(text => text.toLowerCase().startsWith(label.toLowerCase()));
-  if (!target) return '';
-  const idx = target.indexOf(':');
-  return idx === -1 ? '' : target.slice(idx + 1).trim();
+function filterDisputes(filter, btn) {
+  currentFilter = filter;
+  document.querySelectorAll('.filter-tab').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderDisputes();
 }
-
-function seedDisputesFromDOM() {
-  const cards = Array.from(document.querySelectorAll('.dispute-full-card'));
-
-  return cards.map((card, index) => {
-    const metaTexts = Array.from(card.querySelectorAll('.dfc-meta-row span')).map(el => el.textContent.trim());
-    const disputeIdText = card.querySelector('.dispute-id')?.textContent.trim() || `#DISP-${index + 1}`;
-
-    return {
-      cardId: card.id,
-      disputeId: disputeIdText,
-      competition: card.querySelector('.dfc-competition')?.textContent.trim() || 'Unknown Competition',
-      title: card.querySelector('.dfc-title')?.textContent.trim() || 'Untitled Dispute',
-      description: card.querySelector('.dfc-desc')?.textContent.trim() || '',
-      filedBy: extractMetaValue(metaTexts, 'Filed by'),
-      against: extractMetaValue(metaTexts, 'Against'),
-      filedAt: extractMetaValue(metaTexts, 'Filed') || extractMetaValue(metaTexts, 'Escalated'),
-      status: (card.dataset.status || 'open').toLowerCase(),
-      escalated: card.classList.contains('dispute-card-escalated') || (card.dataset.status || '').toLowerCase() === 'escalated',
-      superAdminState: card.classList.contains('dispute-card-escalated') ? 'pending' : '',
-      superAdminDecision: '',
-      updatedAt: new Date().toISOString()
-    };
-  });
-}
-
-function loadDisputes() {
-  const stored = safeParse(localStorage.getItem(DISPUTE_STORE_KEY), null);
-  if (Array.isArray(stored) && stored.length > 0) {
-    return stored;
-  }
-  // If empty, seed from DOM once then save
-  const seeded = seedDisputesFromDOM();
-  if (seeded.length > 0) {
-    saveDisputes(seeded);
-  }
-  return seeded;
-}
-
-let disputes = loadDisputes();
 
 function renderDisputes() {
   const container = document.getElementById('disputes-list');
   if (!container) return;
 
-  if (disputes.length === 0) {
-    container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">No disputes found.</div>';
+  const filtered = disputesList.filter(d => {
+    const status = (d.status || 'open').toLowerCase();
+    const type = (d.targetType || 'user').toLowerCase();
+
+    if (currentFilter === 'all') return true;
+    if (currentFilter === 'organizer') return type === 'organizer';
+    if (currentFilter === 'user') return type === 'user';
+    if (currentFilter === 'escalated') return status === 'escalated';
+    if (currentFilter === 'resolved') return status === 'resolved';
+    return true;
+  });
+
+  if (!filtered.length) {
+    container.innerHTML = `
+      <div style="text-align:center;padding:48px 20px;background:var(--bg-card);border:1px solid var(--border-color);border-radius:12px;">
+        <p style="color:var(--text-muted);font-size:15px;margin:0;">No disputes found in this category.</p>
+      </div>`;
     return;
   }
 
-  container.innerHTML = disputes.map(d => {
+  container.innerHTML = filtered.map(d => {
+    const isOrg = (d.targetType || '').toLowerCase() === 'organizer';
     const status = (d.status || 'open').toLowerCase();
-    const isEscalated = status === 'escalated';
     const isResolved = status === 'resolved';
-    
-    let actionsHtml = '';
-    if (!isEscalated && !isResolved) {
-      actionsHtml = `
-        <div class="dfc-actions">
-          <button class="btn-table-primary" onclick="resolveDispute('${d.cardId}','approved')">Approve Dispute</button>
-          <button class="btn-table-danger"  onclick="resolveDispute('${d.cardId}','rejected')">Reject Dispute</button>
-          <button class="btn-table-secondary" onclick="showToast('Request sent to both teams.')">Request More Info</button>
-          <button class="btn-escalate" onclick="escalateDispute('${d.cardId}')">🔺 Escalate to Super Admin</button>
-        </div>`;
-    }
+    const isEscalated = status === 'escalated';
 
-    let notesHtml = '';
-    if (!isEscalated && !isResolved) {
-      notesHtml = `
-        <div class="admin-notes-section">
-          <div class="notes-label-sm">Admin Notes</div>
-          <textarea class="form-input notes-textarea-sm" placeholder="Add your review notes here…">${d.adminNotes || ''}</textarea>
-        </div>`;
-    }
+    const typeBadge = isOrg
+      ? `<span style="background:rgba(231,0,11,0.15);color:#ff4d4f;border:1px solid rgba(231,0,11,0.3);padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;">⚡ DISPUTE AGAINST ORGANIZER</span>`
+      : `<span style="background:rgba(59,130,246,0.15);color:#60a5fa;border:1px solid rgba(59,130,246,0.3);padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;">👥 DISPUTE AGAINST USER/TEAM</span>`;
 
-    let decisionHtml = '';
-    if (isEscalated) {
-        const waitingText = d.superAdminState === 'dismissed'
-          ? 'Super Admin decision: Dismissed'
-          : d.superAdminState === 'resolved'
-            ? 'Super Admin decision: Role revoked, dispute resolved'
-            : 'Awaiting Super Admin decision';
-        decisionHtml = `<div class="dfc-escalated-note"><span>🔺 ${waitingText}</span></div>`;
-    } else if (isResolved && d.superAdminDecision) {
-        decisionHtml = `<div class="dfc-escalated-note"><span>🔺 Super Admin decision: ${d.superAdminDecision}</span></div>`;
+    let statusBadge = `<span class="status-pill pending">Open</span>`;
+    if (isEscalated) statusBadge = `<span class="status-pill warning" style="background:rgba(234,179,8,0.2);color:#eab308;border:1px solid rgba(234,179,8,0.4);">🔺 Escalated</span>`;
+    if (isResolved) statusBadge = `<span class="status-pill completed">✅ Resolved</span>`;
+
+    let actions = '';
+    if (!isResolved) {
+      actions = `
+        <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">
+          <button class="btn-table-primary" style="padding:7px 16px;font-size:13px;" onclick="resolveDisputeAction('${d.id}', 'resolved', 'Approved after review')">Approve &amp; Resolve</button>
+          <button class="btn-table-danger" style="padding:7px 16px;font-size:13px;" onclick="resolveDisputeAction('${d.id}', 'resolved', 'Dismissed - insufficient evidence')">Dismiss Dispute</button>
+          ${!isEscalated ? `<button class="btn-table-secondary" style="padding:7px 16px;font-size:13px;color:#eab308;border-color:rgba(234,179,8,0.4);" onclick="resolveDisputeAction('${d.id}', 'escalated', 'Escalated to senior administration')">🔺 Escalate</button>` : ''}
+        </div>`;
+    } else {
+      actions = `
+        <div style="margin-top:12px;padding:10px 14px;background:rgba(34,197,94,0.08);border-left:3px solid #22c55e;border-radius:4px;font-size:13px;color:var(--text-muted);">
+          <strong>Resolution:</strong> ${d.resolutionNotes || 'Dispute was reviewed and finalized by administration.'}
+        </div>`;
     }
 
     return `
-      <div class="dispute-full-card ${isEscalated ? 'dispute-card-escalated' : ''} ${isResolved ? 'dispute-card-resolved' : ''}" 
-           data-status="${status}" id="${d.cardId}">
-        <div class="dfc-header">
-          <div class="dfc-header-left">
-            <span class="dispute-id">${d.disputeId}</span>
-            <span class="dfc-competition">${d.competition || 'Unknown Competition'}</span>
+      <div class="dispute-card" style="background:var(--bg-card);border:1px solid var(--border-color);border-radius:12px;padding:20px;margin-bottom:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-weight:700;color:var(--text-main);font-size:14px;">#${d.id.slice(0, 8)}</span>
+            ${typeBadge}
           </div>
-          <span class="status-pill ${status === 'escalated' ? 'status-pill-escalated' : (status === 'resolved' ? 'approved' : 'pending')}">
-            ${status.charAt(0).toUpperCase() + status.slice(1)}
-          </span>
+          <div>${statusBadge}</div>
         </div>
-        <div class="dfc-title">${d.title}</div>
-        <div class="dfc-desc">${d.description || d.desc || d.detail || ''}</div>
-        <div class="dfc-meta-row">
-          <span>👥 Assigned Organizers: <strong style="color:var(--accent);">${Array.isArray(d.organizers) && d.organizers.length > 0 ? d.organizers.join(', ') : (d.organizer || 'Tournament Organizer')}</strong></span>
-          <span>Filed by: <strong>${d.filedBy || d.submitter || d.reporter || 'Player'}</strong></span>
-          <span>Filed: ${d.filedAt || d.time || 'Recent'}</span>
+
+        <h3 style="margin:0 0 8px 0;font-size:16px;color:var(--text-main);font-weight:700;">${d.title || (isOrg ? 'Dispute against Organizer' : 'Match Dispute')}</h3>
+        <p style="margin:0 0 14px 0;color:var(--text-muted);font-size:14px;line-height:1.5;">${d.description}</p>
+
+        <div style="display:flex;gap:18px;font-size:12px;color:var(--text-muted);border-top:1px solid var(--border-color);padding-top:12px;flex-wrap:wrap;">
+          <span><strong>Filed by:</strong> ${d.reportedBy || 'Participant'}</span>
+          <span><strong>Target:</strong> ${d.targetId || (isOrg ? 'Organizer' : 'Opponent')}</span>
+          <span><strong>Filed:</strong> ${new Date(d.createdAt).toLocaleDateString()}</span>
         </div>
-        ${notesHtml}
-        ${actionsHtml}
-        ${decisionHtml}
+
+        ${actions}
       </div>`;
   }).join('');
-
-  updateStatCounters();
 }
 
-function updateStatCounters() {
-  const counts = { open: 0, escalated: 0, resolved: 0 };
-  disputes.forEach(d => {
-    const s = (d.status || 'open').toLowerCase();
-    if (s === 'escalated') counts.escalated++;
-    else if (s === 'resolved') counts.resolved++;
-    else counts.open++;
-  });
-  const openEl      = document.getElementById('stat-open');
-  const escalatedEl = document.getElementById('stat-escalated');
-  const resolvedEl  = document.getElementById('stat-resolved');
-  if (openEl)      openEl.textContent      = counts.open;
-  if (escalatedEl) escalatedEl.textContent = counts.escalated;
-  if (resolvedEl)  resolvedEl.textContent  = counts.resolved;
-}
+async function resolveDisputeAction(id, newStatus, defaultNote) {
+  const notes = prompt('Enter resolution notes / decision verdict:', defaultNote);
+  if (notes === null) return;
 
-function applyFilter(filter) {
-  document.querySelectorAll('.dispute-full-card').forEach(card => {
-    card.style.display = filter === 'all' || card.dataset.status === filter ? '' : 'none';
-  });
-}
+  if (window.NexusAPI && window.NexusAPI.Disputes) {
+    const res = await window.NexusAPI.Disputes.update(id, newStatus, notes);
+    if (res.ok) {
+      if (typeof showToast === 'function') showToast(`Dispute updated to: ${newStatus}`);
+      await loadDisputes();
+      return;
+    }
+  }
 
-const filterTabs = document.querySelectorAll('.filter-tab');
-filterTabs.forEach(btn => {
-  btn.addEventListener('click', () => {
-    filterTabs.forEach(tab => tab.classList.remove('active'));
-    btn.classList.add('active');
-    applyFilter(btn.dataset.filter || 'all');
-  });
-});
-
-function resolveDispute(cardId, decision) {
-  const dispute = disputes.find(item => item.cardId === cardId);
-  if (!dispute) return;
-
-  dispute.status = 'resolved';
-  dispute.escalated = false;
-  dispute.superAdminState = '';
-  dispute.superAdminDecision = decision === 'approved'
-    ? 'Approved by admin'
-    : 'Rejected by admin';
-  dispute.updatedAt = new Date().toISOString();
-
-  saveDisputes(disputes);
-  renderDisputes();
-  applyFilter(document.querySelector('.filter-tab.active')?.dataset.filter || 'all');
-
-  if (decision === 'approved') {
-    showToast('Dispute approved. Match result updated.');
-  } else {
-    showToast('Dispute rejected. Original result stands.', 'error');
+  // Local fallback
+  const d = disputesList.find(item => item.id === id);
+  if (d) {
+    d.status = newStatus;
+    d.resolutionNotes = notes;
+    localStorage.setItem('nexus_admin_disputes', JSON.stringify(disputesList));
+    if (typeof showToast === 'function') showToast(`Dispute updated to: ${newStatus}`);
+    updateStats();
+    renderDisputes();
   }
 }
 
-function escalateDispute(cardId) {
-  window.location.href = `escalate-super-admin.html?cardId=${encodeURIComponent(cardId)}`;
-}
-
-window.addEventListener('storage', event => {
-  if (event.key !== DISPUTE_STORE_KEY) return;
-  disputes = loadDisputes();
-  renderDisputes();
-  applyFilter(document.querySelector('.filter-tab.active')?.dataset.filter || 'all');
+document.addEventListener('DOMContentLoaded', () => {
+  loadDisputes();
 });
 
-// Initial Render
-renderDisputes();
-applyFilter(document.querySelector('.filter-tab.active')?.dataset.filter || 'all');
-
-window.resolveDispute = resolveDispute;
-window.escalateDispute = escalateDispute;
+window.filterDisputes = filterDisputes;
+window.resolveDisputeAction = resolveDisputeAction;

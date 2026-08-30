@@ -33,12 +33,6 @@
       </a>
 
       <div class="sa-nav-label">PLATFORM</div>
-      <a href="resolve-disputes.html" class="sa-nav-link">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-        </svg>
-        Disputes
-      </a>
       <a href="policy-management.html" class="sa-nav-link">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
@@ -68,7 +62,6 @@
       </div>
       <div class="sa-header-actions">
         <button class="sa-btn-rect" onclick="resetDashboardChanges()">Reset Changes</button>
-        <button class="sa-btn-rect" onclick="location.href='resolve-disputes.html'">Resolve Disputes</button>
         <button class="sa-btn-rect sa-btn-icon" onclick="saveDashboardChanges()">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
@@ -273,26 +266,6 @@
               <div class="sa-input-desc">View and update the platform's detailed rules, terms, and legal policies.</div>
               <button class="btn-slanted neon" style="margin-top: 16px; width: fit-content;" onclick="location.href='policy-management.html'">MANAGE</button>
             </div>
-
-            <div class="sa-form-divider"></div>
-
-            <div class="sa-add-admin-form">
-              <div class="sa-form-label-box">
-                <div class="sa-input-title">Revoke Roles</div>
-                <div class="sa-input-desc">Remove a specific role or permission from a user</div>
-              </div>
-              <div class="sa-form-fields">
-                <input id="revoke-role-user-id" type="text" placeholder="User id">
-                <select id="revoke-role-select" class="sa-select-field" style="margin-top: 8px;">
-                  <option selected disabled>Role to revoke</option>
-                  <option>Admin</option>
-                  <option>Moderator</option>
-                  <option>VIP</option>
-                </select>
-              </div>
-            </div>
-            <button class="btn-full-action danger" onclick="handleRevokeRole()">REVOKE
-              ROLE</button>
           </div>
         </div>
       </div>

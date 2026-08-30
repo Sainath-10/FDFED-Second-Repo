@@ -1,53 +1,22 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { Pool } from 'pg';
 import { IUser, UserRole } from '@/common/interfaces';
+import { PG_POOL } from '@/database/database.module';
 
 @Injectable()
 export class UserRepository {
-  private users: Map<string, IUser> = new Map();
-  private emailIndex: Map<string, string> = new Map();
-  private usernameIndex: Map<string, string> = new Map();
-  private nextId = 1;
+  constructor(@Inject(PG_POOL) private readonly pool: Pool) {}
 
-  constructor() {
-    this.seedDemoAccounts();
-  }
-
-  private async seedDemoAccounts() {
-    const demoAccounts = [
-      {
-        email: 'regular@nexus.gg',
-        username: 'regular@nexus.gg',
-        firstName: 'Regular',
-        lastName: 'User',
-        role: UserRole.PARTICIPANT,
-      },
-      {
-        email: 'admin@nexus.gg',
-        username: 'admin@nexus.gg',
-        firstName: 'Admin',
-        lastName: 'User',
-        role: UserRole.ADMIN,
-      },
-      {
-        email: 'superadmin@nexus.gg',
-        username: 'superadmin@nexus.gg',
-        firstName: 'Super',
-        lastName: 'Admin',
-        role: UserRole.SUPER_ADMIN,
-      },
-    ];
-
-    for (const account of demoAccounts) {
-      await this.create(
-        account.email,
-        account.username,
-        account.firstName,
-        account.lastName,
-        account.role,
-      );
-    }
-
-    console.log(`✓ Seeded ${demoAccounts.length} demo accounts`);
+  private mapRow(row: any): IUser {
+    return {
+      id: row.id,
+      email: row.email,
+      username: row.username,
+      firstName: row.first_name,
+      lastName: row.last_name,
+      role: row.role as UserRole,
+      createdAt: new Date(row.created_at),
+    };
   }
 
   async create(
@@ -57,68 +26,94 @@ export class UserRepository {
     lastName: string,
     role: UserRole = UserRole.PARTICIPANT,
   ): Promise<IUser> {
-    const id = String(this.nextId++);
-
-    const user: IUser = {
-      id,
-      email,
-      username,
-      firstName,
-      lastName,
-      role,
-      createdAt: new Date(),
-    };
-
-    this.users.set(id, user);
-    this.emailIndex.set(email, id);
-    this.usernameIndex.set(username, id);
-
-    return user;
+    const { rows } = await this.pool.query(
+      `INSERT INTO users (email, username, first_name, last_name, role)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING *`,
+      [email, username, firstName, lastName, role],
+    );
+    return this.mapRow(rows[0]);
   }
 
   async findById(id: string): Promise<IUser | null> {
-    return this.users.get(id) || null;
+    const { rows } = await this.pool.query(
+      'SELECT * FROM users WHERE id = $1',
+      [id],
+    );
+    return rows.length ? this.mapRow(rows[0]) : null;
   }
 
   async findByEmail(email: string): Promise<IUser | null> {
-    const userId = this.emailIndex.get(email);
-    return userId ? this.users.get(userId) || null : null;
+    const { rows } = await this.pool.query(
+      'SELECT * FROM users WHERE LOWER(email) = LOWER($1)',
+      [email],
+    );
+    return rows.length ? this.mapRow(rows[0]) : null;
   }
 
   async findByUsername(username: string): Promise<IUser | null> {
-    const userId = this.usernameIndex.get(username);
-    return userId ? this.users.get(userId) || null : null;
+    const { rows } = await this.pool.query(
+      'SELECT * FROM users WHERE LOWER(username) = LOWER($1)',
+      [username],
+    );
+    return rows.length ? this.mapRow(rows[0]) : null;
   }
 
-  async findByEmailOrUsername(
-    emailOrUsername: string,
-  ): Promise<IUser | null> {
-    const userByEmail = await this.findByEmail(emailOrUsername);
-    if (userByEmail) return userByEmail;
-
-    return await this.findByUsername(emailOrUsername);
+  async findByEmailOrUsername(emailOrUsername: string): Promise<IUser | null> {
+    const { rows } = await this.pool.query(
+      'SELECT * FROM users WHERE LOWER(email) = LOWER($1) OR LOWER(username) = LOWER($1)',
+      [emailOrUsername],
+    );
+    return rows.length ? this.mapRow(rows[0]) : null;
   }
 
   async findAll(): Promise<IUser[]> {
-    return Array.from(this.users.values());
+    const { rows } = await this.pool.query(
+      'SELECT * FROM users ORDER BY created_at ASC',
+    );
+    return rows.map((r) => this.mapRow(r));
+  }
+
+  async updateRole(id: string, role: UserRole): Promise<IUser> {
+    const { rows } = await this.pool.query(
+      `UPDATE users 
+       SET role = $2 
+       WHERE id = $1 
+       RETURNING *`,
+      [id, role],
+    );
+    if (!rows.length) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+    return this.mapRow(rows[0]);
   }
 
   async delete(id: string): Promise<boolean> {
-    const user = this.users.get(id);
-    if (!user) return false;
-
-    this.emailIndex.delete(user.email);
-    this.usernameIndex.delete(user.username);
-    this.users.delete(id);
-
-    return true;
+    const { rowCount } = await this.pool.query(
+      'DELETE FROM users WHERE id = $1',
+      [id],
+    );
+    return rowCount > 0;
   }
 
   async emailExists(email: string): Promise<boolean> {
-    return this.emailIndex.has(email);
+    const { rows } = await this.pool.query(
+      'SELECT 1 FROM users WHERE LOWER(email) = LOWER($1)',
+      [email],
+    );
+    return rows.length > 0;
   }
 
   async usernameExists(username: string): Promise<boolean> {
-    return this.usernameIndex.has(username);
+    const { rows } = await this.pool.query(
+      'SELECT 1 FROM users WHERE LOWER(username) = LOWER($1)',
+      [username],
+    );
+    return rows.length > 0;
+  }
+
+  async count(): Promise<number> {
+    const { rows } = await this.pool.query('SELECT COUNT(*) FROM users');
+    return parseInt(rows[0].count, 10);
   }
 }

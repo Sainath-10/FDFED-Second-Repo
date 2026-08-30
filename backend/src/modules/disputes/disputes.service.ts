@@ -15,7 +15,7 @@ export class DisputesService {
     createDisputeDto: CreateDisputeDto,
     reportedBy: string = 'system',
   ): Promise<IDispute> {
-    const { competitionId, teamId, description } = createDisputeDto;
+    const { competitionId, teamId, targetType, targetId, title, description } = createDisputeDto;
 
     // Look up competition to get primary organizer and all co-organizers
     const comp = await this.competitionRepository.findById(competitionId);
@@ -25,7 +25,10 @@ export class DisputesService {
 
     return this.disputeRepository.create(
       competitionId,
-      teamId,
+      teamId || null,
+      targetType || 'user',
+      targetId || null,
+      title || null,
       description,
       reportedBy,
       organizers,
@@ -40,8 +43,12 @@ export class DisputesService {
     return dispute;
   }
 
-  async getAllDisputes(): Promise<IDispute[]> {
-    return this.disputeRepository.findAll();
+  async getAllDisputes(targetType?: 'organizer' | 'user', status?: string): Promise<IDispute[]> {
+    return this.disputeRepository.findAll(targetType, status);
+  }
+
+  async getDisputesByTargetType(targetType: 'organizer' | 'user'): Promise<IDispute[]> {
+    return this.disputeRepository.findByTargetType(targetType);
   }
 
   async getDisputesByCompetition(competitionId: string): Promise<IDispute[]> {

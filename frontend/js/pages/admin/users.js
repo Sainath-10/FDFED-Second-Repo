@@ -7,67 +7,53 @@ function normalize(value) {
   return String(value || '').trim().toLowerCase();
 }
 
-function readStoredAccounts() {
-  try {
-    const raw = localStorage.getItem(ACCOUNTS_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (err) {
-    return [];
-  }
-}
-
-function getSeedAccounts() {
-  return Array.isArray(window.NEXUS_DEMO_ACCOUNTS) ? window.NEXUS_DEMO_ACCOUNTS : [];
-}
-
-function mergeAccounts() {
-  const seed = getSeedAccounts();
-  const stored = readStoredAccounts();
-  const seen = new Set();
-
-  return seed.concat(stored).filter(account => {
-    const key = normalize(account && account.username);
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
 function formatRole(role) {
   const map = {
-    regular: 'User',
-    participant: 'User',
-    team_lead: 'User',
+    regular: 'Participant',
+    participant: 'Participant',
+    team_lead: 'Team Lead',
     admin: 'Admin',
     'super-admin': 'Super Admin',
-    super_admin: 'Super Admin'
+    super_admin: 'Super Admin',
   };
-  return map[normalize(role)] || 'User';
+  return map[normalize(role)] || 'Participant';
 }
 
-function mergeAccountsWithBanStatus() {
-  const seed = getSeedAccounts();
-  const stored = readStoredAccounts();
+function getRolePillClass(role) {
+  const r = normalize(role);
+  if (r === 'super_admin' || r === 'super-admin') return 'sa-role-pill-super';
+  if (r === 'admin') return 'sa-role-pill-admin';
+  if (r === 'team_lead') return 'sa-role-pill-lead';
+  return 'sa-role-pill-user';
+}
 
-  // Build a map of stored accounts by username for quick lookup
-  const storedMap = {};
-  stored.forEach(a => {
-    if (a && a.username) storedMap[normalize(a.username)] = a;
-  });
+let cachedUsers = [];
 
-  const seen = new Set();
-  return seed.concat(stored).filter(account => {
-    const key = normalize(account && account.username);
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }).map(account => {
-    // Overlay stored data (including banned flag) onto seed data
-    const key = normalize(account.username);
-    const storedEntry = storedMap[key];
-    return storedEntry ? Object.assign({}, account, storedEntry) : account;
-  });
+async function loadUsers() {
+  if (window.NexusAPI && window.NexusAPI.Admin) {
+    const res = await window.NexusAPI.Admin.getAllUsers();
+    if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
+      cachedUsers = res.data;
+      renderUsers(cachedUsers);
+      return;
+    }
+  }
+
+  // Fallback to local accounts
+  try {
+    const stored = JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '[]');
+    const seed = Array.isArray(window.NEXUS_DEMO_ACCOUNTS) ? window.NEXUS_DEMO_ACCOUNTS : [];
+    const seen = new Set();
+    cachedUsers = seed.concat(stored).filter(account => {
+      const key = normalize(account && account.username);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  } catch (e) {
+    cachedUsers = [];
+  }
+  renderUsers(cachedUsers);
 }
 
 function renderUsers(list) {
@@ -75,7 +61,7 @@ function renderUsers(list) {
   const empty = document.getElementById('users-empty');
   if (!body) return;
 
-  if (!list.length) {
+  if (!list || !list.length) {
     body.innerHTML = '';
     if (empty) empty.style.display = 'block';
     return;
@@ -87,16 +73,13 @@ function renderUsers(list) {
     const username = account.username || 'unknown';
     const roleLabel = formatRole(account.role);
     const email = account.email || (username.includes('@') ? username : '—');
-    const isBanned = !!account.banned;
-    const rolePill = isBanned
-      ? `<span class="sa-role-pill" style="background:rgba(231,0,11,0.15);color:#e7000b;border:1px solid rgba(231,0,11,0.3);">BANNED</span>`
-      : `<span class="sa-role-pill">${roleLabel}</span>`;
-    const rowStyle = isBanned ? ' style="opacity:0.5;"' : '';
+    const rolePill = `<span class="sa-role-pill" style="font-size:11px;font-weight:700;">${roleLabel}</span>`;
+    
     return `
-      <tr${rowStyle}>
-        <td>${username}${isBanned ? ' <span style="font-size:10px;color:#e7000b;">(banned)</span>' : ''}</td>
+      <tr>
+        <td style="font-weight:600;color:var(--text-main);">${username}</td>
         <td>${rolePill}</td>
-        <td class="sa-email">${email}</td>
+        <td class="sa-email" style="color:var(--text-muted);">${email}</td>
       </tr>`;
   }).join('');
 }
@@ -104,19 +87,19 @@ function renderUsers(list) {
 function applySearch() {
   const input = document.getElementById('users-search');
   const query = normalize(input && input.value);
-  const list = mergeAccountsWithBanStatus();
 
   if (!query) {
-    renderUsers(list);
+    renderUsers(cachedUsers);
     return;
   }
 
-  const filtered = list.filter(account => {
+  const filtered = cachedUsers.filter(account => {
     const haystack = [
       account.username,
       account.email,
       account.role,
-      account.banned ? 'banned' : ''
+      account.firstName,
+      account.lastName,
     ].map(normalize).join(' ');
     return haystack.includes(query);
   });
@@ -125,7 +108,7 @@ function applySearch() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  renderUsers(mergeAccountsWithBanStatus());
+  loadUsers();
   const input = document.getElementById('users-search');
   if (input) input.addEventListener('input', applySearch);
 });
