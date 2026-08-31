@@ -18,12 +18,6 @@ export class UserEntity {
   @Column({ unique: true })
   username: string;
 
-  @Column({ default: '' })
-  firstName: string;
-
-  @Column({ default: '' })
-  lastName: string;
-
   @Column({ name: 'password_hash', select: false, default: '' })
   passwordHash: string;
 
@@ -33,18 +27,18 @@ export class UserEntity {
   @Column({ default: false })
   banned: boolean;
 
-  @Column({ default: 0 })
+  @Column({ name: 'warningCount', default: 0 })
   warningCount: number;
 
-  @Column({ nullable: true, type: 'text' })
+  @Column({ name: 'profilePicUrl', nullable: true, type: 'text' })
   profilePicUrl: string;
 
   @Column({ nullable: true, type: 'text' })
   bio: string;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'createdAt' })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ name: 'updatedAt' })
   updatedAt: Date;
 }

@@ -11,8 +11,6 @@ export interface RawUserRow {
   id: string;
   email: string;
   username: string;
-  firstName: string;
-  lastName: string;
   password_hash: string;
   role: UserRole;
   banned: boolean;
@@ -35,16 +33,12 @@ export class UserRepository {
   async create(
     email: string,
     username: string,
-    firstName: string,
-    lastName: string,
     passwordHash: string,
     role: UserRole = UserRole.PARTICIPANT,
   ): Promise<UserEntity> {
     const user = this.repo.create({
       email,
       username,
-      firstName,
-      lastName,
       passwordHash,
       role,
       banned: false,
@@ -56,13 +50,11 @@ export class UserRepository {
   async createWithPassword(
     email: string,
     username: string,
-    firstName: string,
-    lastName: string,
     password: string,
     role: UserRole = UserRole.PARTICIPANT,
   ): Promise<UserEntity> {
     const passwordHash = await bcrypt.hash(password, 10);
-    return this.create(email, username, firstName, lastName, passwordHash, role);
+    return this.create(email, username, passwordHash, role);
   }
 
   // ─── Read ──────────────────────────────────────────────────────────────────
@@ -95,7 +87,7 @@ export class UserRepository {
 
   async findRawByEmailOrUsername(emailOrUsername: string): Promise<RawUserRow | null> {
     const rows = await this.repo.query(
-      `SELECT id, email, username, "firstName", "lastName", password_hash, role, banned,
+      `SELECT id, email, username, password_hash, role, banned,
               "warningCount", "profilePicUrl", bio, "createdAt", "updatedAt"
        FROM users
        WHERE email = $1 OR username = $1
@@ -133,8 +125,6 @@ export class UserRepository {
   async ensureDemoAccount(account: {
     email: string;
     username: string;
-    firstName: string;
-    lastName: string;
     password: string;
     role: UserRole;
   }): Promise<void> {
@@ -143,8 +133,6 @@ export class UserRepository {
       await this.createWithPassword(
         account.email,
         account.username,
-        account.firstName,
-        account.lastName,
         account.password,
         account.role,
       );
@@ -154,8 +142,6 @@ export class UserRepository {
 
     const updates: Partial<UserEntity> = {
       username: existing.username || account.username,
-      firstName: existing.firstName || account.firstName,
-      lastName: existing.lastName || account.lastName,
       role: account.role,
     };
 
@@ -206,9 +192,9 @@ export class UserRepository {
 
   async seedDemoAccounts(): Promise<void> {
     const demoAccounts = [
-      { email: 'regular@nexus.gg', username: 'regular@nexus.gg', firstName: 'Regular', lastName: 'User', password: 'regular123', role: UserRole.PARTICIPANT },
-      { email: 'admin@nexus.gg', username: 'admin@nexus.gg', firstName: 'Admin', lastName: 'User', password: 'admin123', role: UserRole.ADMIN },
-      { email: 'superadmin@nexus.gg', username: 'superadmin@nexus.gg', firstName: 'Super', lastName: 'Admin', password: 'super123', role: UserRole.SUPER_ADMIN },
+      { email: 'regular@nexus.gg', username: 'regular@nexus.gg', password: 'regular123', role: UserRole.PARTICIPANT },
+      { email: 'admin@nexus.gg', username: 'admin@nexus.gg', password: 'admin123', role: UserRole.ADMIN },
+      { email: 'superadmin@nexus.gg', username: 'superadmin@nexus.gg', password: 'super123', role: UserRole.SUPER_ADMIN },
     ];
 
     for (const acc of demoAccounts) {

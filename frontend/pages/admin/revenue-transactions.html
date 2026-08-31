@@ -1,94 +1,373 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>NEXUS ESPORTS - Admin Revenue Transactions</title>
   <link rel="stylesheet" href="../../css/styles.css">
   <link rel="stylesheet" href="../../css/pages/admin/dashboard.css">
+  <style>
+    select.filter-select {
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      background-color: #121214 !important;
+      color: #f4f4f5 !important;
+      border: 1px solid rgba(255, 255, 255, 0.18) !important;
+      border-radius: 8px !important;
+      padding: 7px 32px 7px 14px !important;
+      font-size: 12px !important;
+      font-weight: 600 !important;
+      cursor: pointer !important;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") !important;
+      background-repeat: no-repeat !important;
+      background-position: right 10px center !important;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    select.filter-select:hover,
+    select.filter-select:focus {
+      border-color: #c6ff33 !important;
+      box-shadow: 0 0 8px rgba(198, 255, 51, 0.2) !important;
+    }
+
+    select.filter-select option {
+      background-color: #18181b !important;
+      color: #ffffff !important;
+      padding: 10px !important;
+    }
+  </style>
 </head>
+
 <body>
-<div id="sidebar-mount"></div>
-<div class="page-with-sidebar">
-  <main class="admin-page">
-    <div class="admin-header-block">
-      <h1 class="admin-title-xl">Revenue Transactions</h1>
-      <p class="admin-subtitle-muted">Organizer platform fee payments to admin.</p>
-    </div>
-
-    <div class="dash-stats">
-      <div class="dash-stat-card">
-        <div class="dash-stat-icon dash-stat-icon-warn">Rs</div>
-        <div><div class="dash-stat-num" id="revenue-total">Rs.0</div><div class="dash-stat-lbl">Total Paid</div></div>
+  <div id="sidebar-mount"></div>
+  <div class="page-with-sidebar">
+    <main class="admin-page">
+      <div class="admin-header-block"
+        style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;">
+        <div>
+          <h1 class="admin-title-xl">Revenue Transactions</h1>
+          <p class="admin-subtitle-muted">Organizer platform fee payments and financial transaction history.</p>
+        </div>
+        <div id="admin-config-btn-wrap">
+          <a href="revenue-config.html" class="btn-table-secondary"
+            style="background:#c6ff33;color:#000;padding:10px 18px;font-size:13px;font-weight:800;border-radius:8px;text-decoration:none;display:inline-flex;align-items:center;gap:8px;border:none;box-shadow:0 0 12px rgba(198,255,51,0.3);cursor:pointer;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+              stroke-linecap="round">
+              <path
+                d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            Change Revenue Configuration
+          </a>
+        </div>
       </div>
-      <div class="dash-stat-card">
-        <div class="dash-stat-icon dash-stat-icon-success">OK</div>
-        <div><div class="dash-stat-num" id="revenue-count">0</div><div class="dash-stat-lbl">Transactions</div></div>
+
+      <div class="dash-stats">
+        <div class="dash-stat-card">
+          <div class="dash-stat-icon dash-stat-icon-warn">Rs</div>
+          <div>
+            <div class="dash-stat-num" id="revenue-total">Rs.0</div>
+            <div class="dash-stat-lbl">Total Paid</div>
+          </div>
+        </div>
+        <div class="dash-stat-card">
+          <div class="dash-stat-icon dash-stat-icon-success" style="font-size:14px;font-weight:800;">TX</div>
+          <div>
+            <div class="dash-stat-num" id="revenue-count">0</div>
+            <div class="dash-stat-lbl">Transactions</div>
+          </div>
+        </div>
       </div>
-    </div>
 
-    <div class="table-container-card">
-      <div class="table-header-between">
-        <h2 class="table-title-md">Organizer Payments</h2>
+      <div class="table-container-card">
+        <div class="table-header-between"
+          style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;margin-bottom:20px;">
+          <h2 class="table-title-md" style="margin:0;">Organizer Payments</h2>
+
+          <!-- Right-Aligned Filters Group -->
+          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+            <!-- Status Filter Box -->
+            <div style="display:flex;align-items:center;gap:8px;">
+              <label for="status-filter"
+                style="font-size:12px;color:var(--text-muted);font-weight:600;letter-spacing:0.5px;">Status:</label>
+              <select id="status-filter" class="filter-select">
+                <option value="ALL">All Statuses</option>
+                <option value="CONFIRMED">Confirmed</option>
+                <option value="PENDING">Pending</option>
+                <option value="FAILED">Failed</option>
+              </select>
+            </div>
+
+            <!-- Time Period Filter Box -->
+            <div style="display:flex;align-items:center;gap:8px;">
+              <label for="date-filter"
+                style="font-size:12px;color:var(--text-muted);font-weight:600;letter-spacing:0.5px;">Time
+                Period:</label>
+              <select id="date-filter" class="filter-select">
+                <option value="ALL">All Time</option>
+                <option value="TODAY">Today</option>
+                <option value="7DAYS">Last 7 Days</option>
+                <option value="30DAYS">Last 30 Days</option>
+                <option value="QUARTER">This Quarter</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-scroll-wrap">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Competition</th>
+                <th>Organizer</th>
+                <th>Paid Amount</th>
+                <th>Entry Fee</th>
+                <th>Date</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="revenue-rows"></tbody>
+          </table>
+        </div>
+
+        <!-- Pagination Controls -->
+        <div id="pagination-controls"
+          style="display:flex;justify-content:space-between;align-items:center;padding:16px 0 4px;margin-top:16px;border-top:1px solid rgba(255,255,255,0.08);flex-wrap:wrap;gap:12px;">
+          <div id="pagination-info" style="font-size:12px;color:var(--text-muted);font-weight:600;">
+            Showing 0 transactions
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button id="btn-prev-page" class="btn-table-secondary"
+              style="padding:6px 14px;font-size:12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.18);color:#fff;border-radius:6px;cursor:pointer;">←
+              Prev</button>
+            <span id="page-num-display" style="font-size:12px;color:#c6ff33;font-weight:700;">Page 1 of 1</span>
+            <button id="btn-next-page" class="btn-table-secondary"
+              style="padding:6px 14px;font-size:12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.18);color:#fff;border-radius:6px;cursor:pointer;">Next
+              →</button>
+          </div>
+        </div>
+
       </div>
-      <div class="table-scroll-wrap">
-        <table class="admin-table">
-          <thead>
-            <tr>
-              <th>Competition</th>
-              <th>Organizer</th>
-              <th>Paid Amount</th>
-              <th>Entry Fee</th>
-              <th>Date</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody id="revenue-rows"></tbody>
-        </table>
-      </div>
-    </div>
-  </main>
-  <div id="footer-mount"></div>
-</div>
+    </main>
+    <div id="footer-mount"></div>
+  </div>
 
-<script src="../../js/script.js"></script>
-<script src="../../js/pages/competitions-data.js"></script>
-<script>
-  initAdminSidebar('revenue', '../../');
-  initFooter('../../');
+  <script src="../../js/script.js"></script>
+  <script src="../../js/pages/competitions-data.js"></script>
+  <script>
+    initAdminSidebar('revenue', '../../');
+    initFooter('../../');
 
-  function money(value) {
-    return 'Rs.' + (Number(value) || 0).toLocaleString('en-IN');
-  }
+    // Check admin privileges for configuration button
+    (function () {
+      try {
+        const session = JSON.parse(localStorage.getItem('nexus.auth.session') || 'null');
+        const btnWrap = document.getElementById('admin-config-btn-wrap');
+        if (btnWrap) {
+          btnWrap.style.display = (session && String(session.role || '').toLowerCase() === 'admin') ? 'block' : 'none';
+        }
+      } catch (e) { }
+    })();
 
-  function renderRevenue() {
-    const comps = window.NexusData ? window.NexusData.loadCompetitions() : [];
-    const rows = comps
-      .filter(comp => comp && comp.organizerPaid && Number(comp.platformFee || 0) > 0)
-      .map(comp => ({
-        name: comp.name || 'Competition',
-        organizer: comp.createdBy || comp.organizerId || 'Organizer',
-        amount: Number(comp.platformFee || 0),
-        entryFee: comp.entryFee || 'Free',
-        date: comp.createdAt ? new Date(comp.createdAt).toLocaleDateString() : '-',
-      }));
+    function money(value) {
+      return 'Rs.' + (Number(value) || 0).toLocaleString('en-IN');
+    }
 
-    const total = rows.reduce((sum, row) => sum + row.amount, 0);
-    document.getElementById('revenue-total').textContent = money(total);
-    document.getElementById('revenue-count').textContent = rows.length;
-    document.getElementById('revenue-rows').innerHTML = rows.length ? rows.map(row => `
-      <tr>
-        <td>${row.name}</td>
-        <td>${row.organizer}</td>
-        <td class="text-accent-bold">${money(row.amount)}</td>
-        <td>${row.entryFee}</td>
-        <td>${row.date}</td>
-        <td><span class="status-pill approved">Paid</span></td>
-      </tr>
-    `).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:30px;">No organizer payments yet.</td></tr>';
-  }
+    let allTransactions = [];
+    let currentPage = 1;
+    const pageSize = 10; // Pagination enforcement: 10 per page
 
-  renderRevenue();
-</script>
+    function getLocalDateString(d) {
+      if (!d || isNaN(d.getTime())) d = new Date();
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    function formatDate(isoOrStr) {
+      if (!isoOrStr) return getLocalDateString(new Date());
+      try {
+        const d = new Date(isoOrStr);
+        if (!isNaN(d.getTime())) {
+          return getLocalDateString(d);
+        }
+      } catch (e) { }
+      return String(isoOrStr).split('T')[0];
+    }
+
+    function getDateObj(isoOrStr) {
+      if (!isoOrStr) return new Date();
+      const d = new Date(isoOrStr);
+      return isNaN(d.getTime()) ? new Date() : d;
+    }
+
+    function determineStatus(comp) {
+      if (!comp) return 'CONFIRMED';
+      if (comp.approvalStatus === 'rejected') return 'FAILED';
+      if (comp.approvalStatus === 'pending') return 'PENDING';
+      if (comp.organizerPaid === false) return 'PENDING';
+      return 'CONFIRMED';
+    }
+
+    function loadAllTransactions() {
+      const comps = window.NexusData ? window.NexusData.loadCompetitions() : [];
+      let updatedStorage = false;
+
+      allTransactions = comps.map((comp, idx) => {
+        const amt = typeof comp.platformFee === 'number' && comp.platformFee > 0
+          ? comp.platformFee
+          : (window.NexusData ? window.NexusData.calculatePlatformFee(comp.prize || 0) : 50);
+
+        // Derive creation date (prioritize createdAt timestamp)
+        let rawDateStr = comp.createdAt || comp.created_at || comp.timestamp;
+        if (!rawDateStr) {
+          const isUserCreated = comp.createdBy && comp.createdBy !== 'system';
+          if (isUserCreated) {
+            comp.createdAt = new Date().toISOString();
+            rawDateStr = comp.createdAt;
+            updatedStorage = true;
+          } else {
+            rawDateStr = '2026-01-01';
+          }
+        }
+
+        const dateObj = getDateObj(rawDateStr);
+        const dateStr = formatDate(rawDateStr);
+
+        return {
+          id: comp.id || ('tx_' + idx),
+          name: comp.name || 'Competition',
+          organizer: comp.createdBy || comp.organizerId || 'Organizer',
+          amount: Number(amt) || 50,
+          entryFee: comp.entryFee || 'Free',
+          dateStr: dateStr,
+          dateRaw: dateObj,
+          status: determineStatus(comp)
+        };
+      });
+
+      if (updatedStorage && window.NexusData && typeof window.NexusData.saveCompetitions === 'function') {
+        window.NexusData.saveCompetitions(comps);
+      }
+    }
+
+    function isWithinDateRange(dateObj, rangeKey) {
+      if (!dateObj || isNaN(dateObj.getTime())) return true;
+      if (rangeKey === 'ALL') return true;
+
+      if (rangeKey === 'TODAY') {
+        const compDateStr = getLocalDateString(dateObj);
+        const todayStr = getLocalDateString(new Date());
+        return compDateStr === todayStr;
+      }
+
+      const diffDays = (now - dateObj) / (1000 * 60 * 60 * 24);
+
+      if (rangeKey === '7DAYS') {
+        return diffDays >= 0 && diffDays <= 7;
+      }
+      if (rangeKey === '30DAYS') {
+        return diffDays >= 0 && diffDays <= 30;
+      }
+      if (rangeKey === 'QUARTER') {
+        return diffDays >= 0 && diffDays <= 90;
+      }
+      return true;
+    }
+
+    function renderTable() {
+      const statusFilter = document.getElementById('status-filter').value;
+      const dateFilter = document.getElementById('date-filter').value;
+
+      const filtered = allTransactions.filter(item => {
+        const matchStatus = statusFilter === 'ALL' || item.status === statusFilter;
+        const matchDate = isWithinDateRange(item.dateRaw, dateFilter);
+        return matchStatus && matchDate;
+      });
+
+      const totalFiltered = filtered.length;
+      const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
+      if (currentPage > totalPages) currentPage = totalPages;
+      if (currentPage < 1) currentPage = 1;
+
+      const startIdx = (currentPage - 1) * pageSize;
+      const pageItems = filtered.slice(startIdx, startIdx + pageSize);
+
+      const tbody = document.getElementById('revenue-rows');
+      if (pageItems.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:30px;">No matching revenue transactions found.</td></tr>';
+      } else {
+        tbody.innerHTML = pageItems.map(row => `
+        <tr>
+          <td style="font-weight:600;color:#fff;">${row.name}</td>
+          <td>${row.organizer}</td>
+          <td class="text-accent-bold" style="color:#c6ff33;font-weight:700;">${money(row.amount)}</td>
+          <td>${row.entryFee}</td>
+          <td style="font-family:monospace;color:var(--text-muted);">${row.dateStr}</td>
+          <td>
+            ${row.status === 'CONFIRMED' ? '<span class="status-pill approved" style="background:rgba(34,197,94,0.15);color:#4ade80;border:1px solid rgba(74,222,128,0.3);font-weight:700;padding:4px 10px;border-radius:12px;">CONFIRMED</span>' : ''}
+            ${row.status === 'PENDING' ? '<span class="status-pill pending" style="background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid rgba(251,191,36,0.3);font-weight:700;padding:4px 10px;border-radius:12px;">PENDING</span>' : ''}
+            ${row.status === 'FAILED' ? '<span class="status-pill rejected" style="background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(248,113,113,0.3);font-weight:700;padding:4px 10px;border-radius:12px;">FAILED</span>' : ''}
+          </td>
+        </tr>
+      `).join('');
+      }
+
+      // Total confirmed revenue calculation
+      const totalConfirmed = filtered
+        .filter(f => f.status === 'CONFIRMED')
+        .reduce((sum, item) => sum + item.amount, 0);
+
+      document.getElementById('revenue-total').textContent = money(totalConfirmed);
+      document.getElementById('revenue-count').textContent = totalFiltered;
+
+      // Pagination info & controls
+      const endIdx = Math.min(startIdx + pageSize, totalFiltered);
+      document.getElementById('pagination-info').textContent = totalFiltered === 0
+        ? 'Showing 0 transactions'
+        : `Showing ${startIdx + 1}–${endIdx} of ${totalFiltered} transactions`;
+
+      document.getElementById('page-num-display').textContent = `Page ${currentPage} of ${totalPages}`;
+
+      const prevBtn = document.getElementById('btn-prev-page');
+      const nextBtn = document.getElementById('btn-next-page');
+
+      prevBtn.disabled = currentPage <= 1;
+      nextBtn.disabled = currentPage >= totalPages;
+      prevBtn.style.opacity = currentPage <= 1 ? '0.4' : '1';
+      nextBtn.style.opacity = currentPage >= totalPages ? '0.4' : '1';
+    }
+
+    // Event Listeners for Filters & Pagination
+    document.getElementById('status-filter').addEventListener('change', () => {
+      currentPage = 1;
+      renderTable();
+    });
+
+    document.getElementById('date-filter').addEventListener('change', () => {
+      currentPage = 1;
+      renderTable();
+    });
+
+    document.getElementById('btn-prev-page').addEventListener('click', () => {
+      if (currentPage > 1) {
+        currentPage--;
+        renderTable();
+      }
+    });
+
+    document.getElementById('btn-next-page').addEventListener('click', () => {
+      currentPage++;
+      renderTable();
+    });
+
+    // Initial Load
+    loadAllTransactions();
+    renderTable();
+  </script>
 </body>
+
 </html>

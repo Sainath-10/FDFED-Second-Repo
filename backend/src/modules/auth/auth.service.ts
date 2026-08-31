@@ -18,7 +18,7 @@ export class AuthService {
   ) {}
 
   async register(registerDto: RegisterDto): Promise<AuthResponseDto> {
-    const { email, username, firstName, lastName, password, role } = registerDto;
+    const { email, username, password, role } = registerDto;
 
     if (await this.userRepository.emailExists(email)) {
       throw new ConflictException('Email already registered');
@@ -30,8 +30,6 @@ export class AuthService {
     const user = await this.userRepository.createWithPassword(
       email,
       username,
-      firstName,
-      lastName,
       password,
       role || UserRole.PARTICIPANT,
     );
@@ -41,8 +39,6 @@ export class AuthService {
         id: user.id,
         email: user.email,
         username: user.username,
-        firstName: user.firstName,
-        lastName: user.lastName,
         role: user.role,
       },
       message: 'Registration successful. You can now log in.',
@@ -80,8 +76,6 @@ export class AuthService {
         id: user.id,
         email: user.email,
         username: user.username,
-        firstName: user.firstName,
-        lastName: user.lastName,
         role: user.role,
       },
       access_token: accessToken,
@@ -109,7 +103,7 @@ export class AuthService {
     return this.userRepository.incrementWarning(usernameOrEmail);
   }
 
-  async updateProfile(id: string, updates: { firstName?: string; lastName?: string; bio?: string; profilePicUrl?: string }) {
+  async updateProfile(id: string, updates: { bio?: string; profilePicUrl?: string }) {
     return this.userRepository.update(id, updates);
   }
 

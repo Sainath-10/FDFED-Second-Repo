@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Admin Activity</title>
+  <link rel="stylesheet" href="../../css/styles.css">
+  <link rel="stylesheet" href="../../css/pages/admin/dashboard.css">
+  <script>
+    // Strict Authorization Guard
+    (function () {
+      try {
+        const session = JSON.parse(localStorage.getItem('nexus.auth.session') || 'null');
+        const role = String(session?.role || '').toLowerCase();
+        if (!session || (role !== 'admin' && role !== 'super-admin' && role !== 'super_admin')) {
+          alert('Access Denied: Only Administrators can access Admin Activity.');
+          window.location.replace('../dashboard.html');
+        }
+      } catch (e) {
+        window.location.replace('../dashboard.html');
+      }
+    })();
+  </script>
+</head>
+
+<body>
+
+  <!-- Sidebar Mount -->
+  <div id="sidebar-mount"></div>
+
+  <div class="page-with-sidebar">
+    <main class="admin-main">
+
+      <header class="admin-header" style="margin-bottom:24px;">
+        <div>
+          <h1 class="admin-title">Admin <span style="color:var(--accent,#c6ff33);">Activity Logs</span></h1>
+          <p class="admin-desc">Detailed audit timeline of administrative actions including revenue configuration changes, dispute resolutions, and tournament approvals.</p>
+        </div>
+      </header>
+
+      <!-- Admin Profile & Activity Summary Header Card -->
+      <div id="admin-info-card" style="background:#0a0a0a;border:1px solid #262626;border-radius:16px;padding:24px;margin-bottom:28px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:20px;">
+        <div style="display:flex;align-items:center;gap:16px;">
+          <div id="admin-avatar" style="width:56px;height:56px;border-radius:50%;background:rgba(198,255,51,0.15);border:2px solid rgba(198,255,51,0.4);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;color:#c6ff33;">
+            A
+          </div>
+          <div>
+            <h2 id="admin-username-title" style="margin:0 0 4px;color:#ffffff;font-size:20px;font-weight:800;">admin@nexus.gg</h2>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span id="admin-role-badge" style="padding:4px 10px;border-radius:20px;font-size:12px;font-weight:700;background:rgba(198,255,51,0.15);color:#c6ff33;border:1px solid rgba(198,255,51,0.3);">
+                Administrator
+              </span>
+              <span id="admin-email-text" style="color:var(--text-muted);font-size:13px;">admin@nexus.gg</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Activity Stats Pills -->
+        <div style="display:flex;gap:16px;flex-wrap:wrap;">
+          <div style="background:#141414;border:1px solid #262626;border-radius:12px;padding:12px 18px;text-align:center;min-width:110px;">
+            <div style="font-size:11px;color:var(--text-muted);font-weight:700;text-transform:uppercase;margin-bottom:4px;">Revenue Config</div>
+            <div id="stat-config-count" style="font-size:20px;font-weight:900;color:#fb923c;">0</div>
+          </div>
+          <div style="background:#141414;border:1px solid #262626;border-radius:12px;padding:12px 18px;text-align:center;min-width:110px;">
+            <div style="font-size:11px;color:var(--text-muted);font-weight:700;text-transform:uppercase;margin-bottom:4px;">Disputes Resolved</div>
+            <div id="stat-disputes-count" style="font-size:20px;font-weight:900;color:#60a5fa;">0</div>
+          </div>
+          <div style="background:#141414;border:1px solid #262626;border-radius:12px;padding:12px 18px;text-align:center;min-width:110px;">
+            <div style="font-size:11px;color:var(--text-muted);font-weight:700;text-transform:uppercase;margin-bottom:4px;">Approvals</div>
+            <div id="stat-approvals-count" style="font-size:20px;font-weight:900;color:#c6ff33;">0</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Activity Timeline Container -->
+      <section style="background:#0a0a0a;border:1px solid #262626;border-radius:16px;padding:28px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:12px;">
+          <h3 style="margin:0;font-size:17px;font-weight:800;color:#ffffff;display:flex;align-items:center;gap:10px;">
+            <span>⚡ Audit Trail Timeline</span>
+          </h3>
+          <div id="log-count-text" style="color:var(--text-muted);font-size:13px;font-weight:600;">Showing activity logs</div>
+        </div>
+
+        <div id="activity-timeline-list" style="display:flex;flex-direction:column;gap:16px;">
+          <!-- Activity entries injected via JS -->
+        </div>
+
+        <div id="activity-empty-state" style="display:none;padding:60px 20px;text-align:center;background:#141414;border:1px dashed #262626;border-radius:12px;">
+          <div style="font-size:36px;margin-bottom:12px;">📋</div>
+          <h4 style="margin:0 0 6px;color:#ffffff;font-size:16px;font-weight:700;">No Activity Logs Found</h4>
+          <p style="margin:0;color:var(--text-muted);font-size:13px;">This administrator has not performed any revenue configuration changes or dispute resolutions yet.</p>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="../../js/script.js"></script>
+  <script src="../../js/pages/competitions-data.js"></script>
+  <script src="../../js/data/auth-accounts.js"></script>
+  <script src="../../js/pages/admin/admin-activity.js"></script>
+</body>
+
+</html>

@@ -744,6 +744,100 @@
     return { ok: true, action, request };
   }
 
+  function decideCoOrganizerInvite(options) {
+    const opts = options || {};
+    const action = opts.action === 'accepted' ? 'accepted' : 'declined';
+    const session = getSession();
+    if (!session) return { ok: false, error: 'Please log in first.' };
+
+    const comp = getCompetitionById(opts.compId);
+    if (!comp) return { ok: false, error: 'Competition not found.' };
+
+    if (!Array.isArray(comp.organizers)) {
+      comp.organizers = Array.from(new Set([comp.createdBy, comp.organizerId].filter(Boolean)));
+    }
+    if (!Array.isArray(comp.pendingCoOrganizers)) {
+      comp.pendingCoOrganizers = [];
+    }
+
+    const userKey = normalize(session.username);
+
+    if (action === 'accepted') {
+      if (!comp.organizers.some(u => normalize(u) === userKey)) {
+        comp.organizers.push(session.username);
+      }
+      comp.pendingCoOrganizers = comp.pendingCoOrganizers.filter(u => normalize(u) !== userKey);
+      saveCompetition(comp);
+
+      // Resolve pending co-organizer-invite notifications for this user in localStorage
+      try {
+        const notifItems = loadNotifications();
+        let notifModified = false;
+        notifItems.forEach(n => {
+          if (n && n.meta && (n.meta.compId === comp.id || n.meta.compId === opts.compId) && n.type === 'co-organizer-invite' && normalize(n.toUsername) === userKey && n.status === 'pending') {
+            n.status = 'approved';
+            n.read = true;
+            n.title = 'Co-Organizer Invitation Accepted';
+            n.body = `You accepted the invitation to be a co-organizer for "${comp.name}".`;
+            notifModified = true;
+          }
+        });
+        if (notifModified) saveNotifications(notifItems);
+      } catch (e) {}
+
+      const creator = comp.createdBy || comp.organizerId;
+      if (creator) {
+        pushNotification({
+          toUsername: creator,
+          type: 'co-organizer-result',
+          status: 'approved',
+          title: 'Co-Organizer Accepted',
+          body: `@${session.username} accepted your co-organizer invitation for "${comp.name}".`,
+          createdAt: isoNow(),
+          read: false,
+          meta: { compId: comp.id }
+        });
+      }
+
+      return { ok: true, message: `You are now a co-organizer for "${comp.name}"!` };
+    } else {
+      comp.pendingCoOrganizers = comp.pendingCoOrganizers.filter(u => normalize(u) !== userKey);
+      saveCompetition(comp);
+
+      // Resolve pending co-organizer-invite notifications for this user in localStorage
+      try {
+        const notifItems = loadNotifications();
+        let notifModified = false;
+        notifItems.forEach(n => {
+          if (n && n.meta && (n.meta.compId === comp.id || n.meta.compId === opts.compId) && n.type === 'co-organizer-invite' && normalize(n.toUsername) === userKey && n.status === 'pending') {
+            n.status = 'rejected';
+            n.read = true;
+            n.title = 'Co-Organizer Invitation Declined';
+            n.body = `You declined the invitation to be a co-organizer for "${comp.name}".`;
+            notifModified = true;
+          }
+        });
+        if (notifModified) saveNotifications(notifItems);
+      } catch (e) {}
+
+      const creator = comp.createdBy || comp.organizerId;
+      if (creator) {
+        pushNotification({
+          toUsername: creator,
+          type: 'co-organizer-result',
+          status: 'rejected',
+          title: 'Co-Organizer Declined',
+          body: `@${session.username} declined your co-organizer invitation for "${comp.name}".`,
+          createdAt: isoNow(),
+          read: false,
+          meta: { compId: comp.id }
+        });
+      }
+
+      return { ok: true, message: 'Co-organizer invitation declined.' };
+    }
+  }
+
   function decideInvite(options) {
     const opts = options || {};
     const action = opts.action === 'accepted' ? 'accepted' : 'declined';
@@ -1113,6 +1207,8 @@
     revokeInvite,
     submitJoinRequest,
     decideJoinRequest,
+    pushNotification,
+    decideCoOrganizerInvite,
     decideInvite,
     directJoinTeam,
     removePlayer,

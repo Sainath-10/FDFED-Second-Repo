@@ -597,6 +597,20 @@ function setCompetitionApproval(compId, decision, adminUsername) {
     });
   }
 
+  // Log Admin Activity
+  try {
+    const session = JSON.parse(localStorage.getItem('nexus.auth.session') || '{}');
+    const adminUser = adminUsername || session.username || session.email || 'admin@nexus.gg';
+    const actionLabel = next === 'approved' ? 'Approved' : (next === 'rejected' ? 'Rejected' : 'Set Pending');
+    logAdminActivity(adminUser, 'COMPETITION_APPROVAL', `${actionLabel} competition "${comp.name || 'Tournament'}"`, {
+      compId: comp.id,
+      competitionName: comp.name,
+      decision: next
+    });
+  } catch (e) {
+    console.error('Error logging approval activity:', e);
+  }
+
   return { ok: true, competition: comp };
 }
 
@@ -1200,16 +1214,89 @@ function isTeamBannedInComp(teamName, compIdOrData) {
   return !!(team && team.status === 'banned');
 }
 
+const REVENUE_CONFIG_KEY = 'nexus.revenue_config';
+
+function getRevenueConfig() {
+  try {
+    const raw = localStorage.getItem(REVENUE_CONFIG_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        percentage: typeof parsed.percentage === 'number' ? parsed.percentage : 7,
+        minCost: typeof parsed.minCost === 'number' ? parsed.minCost : 50,
+        updatedAt: parsed.updatedAt || null
+      };
+    }
+  } catch (e) {}
+  return { percentage: 7, minCost: 50, updatedAt: null };
+}
+
+function saveRevenueConfig(config) {
+  const percentage = parseFloat(config.percentage);
+  const minCost = parseFloat(config.minCost);
+
+  if (isNaN(percentage) || percentage < 0 || percentage >= 15) {
+    return { ok: false, error: 'Percentage from Prize Pool must be strictly less than 15%' };
+  }
+  if (isNaN(minCost) || minCost < 0 || minCost >= 100) {
+    return { ok: false, error: 'Minimum Cost to host a Competition must be strictly less than 100' };
+  }
+
+  const cleanConfig = {
+    percentage: percentage,
+    minCost: minCost,
+    updatedAt: new Date().toISOString()
+  };
+
+  localStorage.setItem(REVENUE_CONFIG_KEY, JSON.stringify(cleanConfig));
+  return { ok: true, config: cleanConfig };
+}
+
 function calculatePlatformFee(prizePoolAmount) {
   const amt = parseFloat(prizePoolAmount) || 0;
-  if (amt <= 0) return 0;
-  if (amt <= 700) {
-    return 50;
+  const config = getRevenueConfig();
+  const percentageFee = Math.round(amt * (config.percentage / 100));
+  return Math.max(config.minCost, percentageFee);
+}
+
+const ADMIN_ACTIVITY_KEY = 'nexus.admin.activity_logs';
+
+function getAdminActivityLogs(adminUsername) {
+  try {
+    const raw = localStorage.getItem(ADMIN_ACTIVITY_KEY);
+    const logs = raw ? JSON.parse(raw) : [];
+    if (!adminUsername) return logs;
+    const target = String(adminUsername).trim().toLowerCase();
+    return logs.filter(item => String(item.adminUsername || '').trim().toLowerCase() === target);
+  } catch (e) {
+    return [];
   }
-  return Math.round(amt * 0.07);
+}
+
+function logAdminActivity(adminUsername, actionType, details, metadata) {
+  try {
+    const raw = localStorage.getItem(ADMIN_ACTIVITY_KEY);
+    const logs = raw ? JSON.parse(raw) : [];
+    const newEntry = {
+      id: 'act-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
+      adminUsername: adminUsername || 'admin@nexus.gg',
+      actionType: actionType,
+      details: details,
+      metadata: metadata || {},
+      timestamp: new Date().toISOString()
+    };
+    logs.unshift(newEntry);
+    localStorage.setItem(ADMIN_ACTIVITY_KEY, JSON.stringify(logs));
+    return newEntry;
+  } catch (e) {
+    console.error('Failed to log admin activity:', e);
+  }
 }
 
 // Expose globally
+window.logAdminActivity = logAdminActivity;
+window.getAdminActivityLogs = getAdminActivityLogs;
+
 window.NexusData = {
   loadCompetitions, saveCompetitions, getCompetitionById,
   updateCompetition, deleteCompetition, addCompetition, generateId, getCompIdFromUrl,
@@ -1220,8 +1307,12 @@ window.NexusData = {
   removeCoOrganizer: removeCoOrganizerFromComp,
   setTeamRegistrationStatus,
   seedShowcaseCompetitions,
+  getRevenueConfig,
+  saveRevenueConfig,
   calculatePlatformFee,
   isTeamBannedInComp,
+  getAdminActivityLogs,
+  logAdminActivity,
   // Disputes
   addDispute, loadDisputes, saveDisputes,
   getDisputesByStatus, getDisputesByCompetition, updateDisputeStatus,

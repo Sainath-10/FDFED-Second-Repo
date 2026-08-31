@@ -394,7 +394,8 @@ if (createCompForm) {
     const prizeThreshold = 50000;
     const isHighStakes = totalPrize > prizeThreshold;
     const approvalStatus = isHighStakes ? 'pending' : 'approved';
-    const organizersList = Array.from(new Set([session.username, ...coOrganizers]));
+    const organizersList = [session.username];
+    const pendingCoOrganizersList = Array.from(new Set(coOrganizers));
 
     const newComp = {
       id: window.NexusData.generateId(name),
@@ -405,6 +406,7 @@ if (createCompForm) {
       description: description,
       startDate: startDate ? new Date(startDate + 'T00:00:00').toISOString() : '',
       endDate: endDate ? new Date(endDate + 'T00:00:00').toISOString() : '',
+      createdAt: new Date().toISOString(),
       dates: startDate ? `${startDate} to ${endDate}` : 'TBD',
       registrationDates: {
         open: regOpen,
@@ -434,6 +436,7 @@ if (createCompForm) {
       organizerId: session.username,
       createdBy: session.username,
       organizers: organizersList,
+      pendingCoOrganizers: pendingCoOrganizersList,
       approvalStatus: approvalStatus,
       badge: isHighStakes ? 'Pending' : 'New',
       badgeClass: isHighStakes ? 'live' : 'hot',
@@ -448,11 +451,43 @@ if (createCompForm) {
         window.NexusData.addCompetition(newComp);
       }
 
+      // Send co-organizer invitation notifications to pending co-organizers
+      pendingCoOrganizersList.forEach(coOrgUsername => {
+        if (!coOrgUsername) return;
+        const notifEntry = {
+          toUsername: coOrgUsername,
+          type: 'co-organizer-invite',
+          status: 'pending',
+          title: '🏆 Co-Organizer Invitation',
+          body: `@${session.username} invited you to be a co-organizer for tournament "${newComp.name}".`,
+          createdAt: new Date().toISOString(),
+          read: false,
+          meta: {
+            compId: newComp.id,
+            compName: newComp.name,
+            invitedBy: session.username
+          }
+        };
+
+        if (window.NexusTeamWorkflow && typeof window.NexusTeamWorkflow.pushNotification === 'function') {
+          window.NexusTeamWorkflow.pushNotification(notifEntry);
+        } else if (window.NexusData && typeof window.NexusData.pushSystemNotification === 'function') {
+          window.NexusData.pushSystemNotification(notifEntry);
+        } else {
+          try {
+            const raw = localStorage.getItem('nexus.notifications.items') || '[]';
+            const items = JSON.parse(raw);
+            items.unshift(Object.assign({ id: 'notif-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7) }, notifEntry));
+            localStorage.setItem('nexus.notifications.items', JSON.stringify(items));
+          } catch(e) {}
+        }
+      });
+
       if (typeof showToast === 'function') {
         if (isHighStakes) {
           showToast(`Tournament submitted! Requires Admin approval because prize pool (₹${totalPrize.toLocaleString('en-IN')}) exceeds ₹50,000.`, 'warning');
         } else {
-          showToast('Tournament Created & Published!', 'success');
+          showToast('Tournament Created & Published! Co-organizers invited.', 'success');
         }
       }
       setTimeout(() => window.location.href = 'my-activity.html', 1500);

@@ -18,20 +18,6 @@ export class RegisterDto {
   username: string;
 
   @ApiProperty({
-    description: 'User first name',
-    example: 'John',
-  })
-  @IsString()
-  firstName: string;
-
-  @ApiProperty({
-    description: 'User last name',
-    example: 'Doe',
-  })
-  @IsString()
-  lastName: string;
-
-  @ApiProperty({
     description: 'User password',
     example: 'secret123',
     minLength: 6,
@@ -72,8 +58,6 @@ export class LoginResponseDto {
     id: string;
     email: string;
     username: string;
-    firstName: string;
-    lastName: string;
     role: UserRole;
   };
 
@@ -96,8 +80,6 @@ export class AuthResponseDto {
     id: string;
     email: string;
     username: string;
-    firstName: string;
-    lastName: string;
     role: UserRole;
   };
 

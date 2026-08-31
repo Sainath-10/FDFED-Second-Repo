@@ -47,10 +47,11 @@ function buildDynamicActions(item, statusClass) {
 
   const isJoinRequest = item.type === 'team-join-request';
   const isInvite = item.type === 'team-invite';
-  if (!isJoinRequest && !isInvite) return '';
+  const isCoOrgInvite = item.type === 'co-organizer-invite';
+  if (!isJoinRequest && !isInvite && !isCoOrgInvite) return '';
 
-  const positiveLabel = isJoinRequest ? 'Accept Player' : 'Accept Invite';
-  const negativeLabel = isJoinRequest ? 'Reject Player' : 'Reject Invite';
+  const positiveLabel = isJoinRequest ? 'Accept Player' : (isCoOrgInvite ? 'Accept Co-Organizer' : 'Accept Invite');
+  const negativeLabel = isJoinRequest ? 'Reject Player' : (isCoOrgInvite ? 'Decline Co-Organizer' : 'Reject Invite');
 
   return `
     <div class="notif-actions-row">
@@ -134,6 +135,11 @@ function processNotificationAction(notificationId, action) {
       compId: meta.compId,
       teamId: meta.teamId,
       inviteId: meta.inviteId,
+      action: action
+    });
+  } else if (item.type === 'co-organizer-invite') {
+    result = window.NexusTeamWorkflow.decideCoOrganizerInvite({
+      compId: meta.compId,
       action: action
     });
   }

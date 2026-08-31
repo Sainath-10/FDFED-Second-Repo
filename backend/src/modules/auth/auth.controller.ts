@@ -47,9 +47,7 @@ export class AuthController {
   }
 
   @Get('users')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get all users (Admin only)' })
+  @ApiOperation({ summary: 'Get all users' })
   async getAllUsers() {
     return this.authService.getAllUsers();
   }
@@ -76,7 +74,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Update own profile' })
   async updateProfile(
     @Request() req: any,
-    @Body() body: { firstName?: string; lastName?: string; bio?: string; profilePicUrl?: string },
+    @Body() body: { bio?: string; profilePicUrl?: string },
   ) {
     return this.authService.updateProfile(req.user.id, body);
   }

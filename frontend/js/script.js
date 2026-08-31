@@ -571,6 +571,7 @@ function getAdminSidebar(activePage, base = '../../') {
     { id: 'disputes', label: 'Disputes', href: base + 'pages/admin/disputes.html', icon: shieldIcon() },
     { id: 'revenue', label: 'Revenue', href: base + 'pages/admin/revenue-transactions.html', icon: moneyIcon() },
     { id: 'users', label: 'Users', href: base + 'pages/admin/users.html', icon: usersIcon() },
+    { id: 'activity', label: 'Activity', href: base + 'pages/admin/admin-activity.html', icon: checkCircleIcon() },
     { id: 'profile', label: 'Profile', href: base + 'pages/admin/admin-profile.html', icon: profileIcon() },
   ];
 
@@ -582,13 +583,13 @@ function getAdminSidebar(activePage, base = '../../') {
       <div class="logo-sub">ESPORTS</div>
     </div>
     <nav class="sidebar-nav">
-      ${items.slice(0, 3).map(item => `
+      ${items.slice(0, 4).map(item => `
         <a href="${item.href}" class="nav-item ${activePage === item.id ? 'active' : ''}">
           ${item.icon}<span>${item.label}</span>
         </a>`).join('')}
     </nav>
     <div class="sidebar-nav-bottom">
-      ${items.slice(3).map(item => `
+      ${items.slice(4).map(item => `
         <a href="${item.href}" class="nav-item ${activePage === item.id ? 'active' : ''}">
           ${item.icon}<span>${item.label}</span>
         </a>`).join('')}
@@ -604,6 +605,7 @@ function getSuperAdminSidebar(activePage, base = '../../') {
     { id: 'dashboard', label: 'Dashboard',  href: base + 'pages/super-admin/super-dashboard.html', icon: homeIcon() },
     { id: 'policy',    label: 'Policy',     href: base + 'pages/super-admin/policy-management.html', icon: checkCircleIcon() },
     { id: 'users',     label: 'Users',      href: base + 'pages/super-admin/users.html', icon: usersIcon() },
+    { id: 'admins',    label: 'Admins',     href: base + 'pages/super-admin/admins.html', icon: shieldIcon() },
     { id: 'profile',   label: 'Profile',    href: base + 'pages/super-admin/profile.html', icon: profileIcon() },
   ];
 
@@ -615,13 +617,13 @@ function getSuperAdminSidebar(activePage, base = '../../') {
       <div class="logo-sub">ESPORTS</div>
     </div>
     <nav class="sidebar-nav">
-      ${items.slice(0, 3).map(item => `
+      ${items.slice(0, 4).map(item => `
         <a href="${item.href}" class="nav-item ${activePage === item.id ? 'active' : ''}">
           ${item.icon}<span>${item.label}</span>
         </a>`).join('')}
     </nav>
     <div class="sidebar-nav-bottom">
-      ${items.slice(3).map(item => `
+      ${items.slice(4).map(item => `
         <a href="${item.href}" class="nav-item ${activePage === item.id ? 'active' : ''}">
           ${item.icon}<span>${item.label}</span>
         </a>`).join('')}
@@ -875,6 +877,86 @@ function getAdminCompTabs(activeTab, variant) {
       });
     } catch(e) {
       console.error('Warning popup check failed:', e);
+    }
+  });
+})();
+
+// ── CO-ORGANIZER INVITATION TOAST & POPUP ─────────────────────────────
+(function checkCoOrganizerInvites() {
+  document.addEventListener('DOMContentLoaded', function() {
+    try {
+      var sessionRaw = localStorage.getItem('nexus.auth.session');
+      if (!sessionRaw) return;
+      var session = JSON.parse(sessionRaw);
+      if (!session || !session.username) return;
+
+      var NOTIFICATIONS_KEY = 'nexus.notifications.items';
+      var rawNotifs = localStorage.getItem(NOTIFICATIONS_KEY);
+      if (!rawNotifs) return;
+
+      var notifications = JSON.parse(rawNotifs || '[]');
+      if (!Array.isArray(notifications)) return;
+
+      var userKey = session.username.trim().toLowerCase();
+      var pendingInvites = notifications.filter(function(n) {
+        return n &&
+          n.toUsername && n.toUsername.trim().toLowerCase() === userKey &&
+          n.type === 'co-organizer-invite' &&
+          n.status === 'pending';
+      });
+
+      pendingInvites.forEach(function(invite) {
+        var toastId = 'co-org-toast-' + invite.id;
+        if (document.getElementById(toastId)) return;
+
+        var compName = (invite.meta && invite.meta.compName) || 'a competition';
+        var invitedBy = (invite.meta && invite.meta.invitedBy) || 'An organizer';
+
+        var toast = document.createElement('div');
+        toast.id = toastId;
+        toast.style.cssText = 'position:fixed;top:24px;right:24px;z-index:99999;background:#0f172a;border:2px solid #c6ff33;border-radius:12px;padding:16px 20px;box-shadow:0 12px 32px rgba(0,0,0,0.6);color:#f8fafc;max-width:420px;font-family:Lato,sans-serif;';
+        toast.innerHTML = '<div style="display:flex;align-items:flex-start;gap:12px;">'
+          + '<div style="font-size:24px;line-height:1;">🏆</div>'
+          + '<div style="flex:1;">'
+          + '<div style="font-weight:700;font-size:15px;color:#c6ff33;margin-bottom:4px;">Co-Organizer Invitation</div>'
+          + '<div style="font-size:13px;color:#cbd5e1;line-height:1.4;">'
+          + '<strong>@' + invitedBy + '</strong> added you as a co-organizer for <strong>"' + compName + '"</strong>.'
+          + '</div>'
+          + '<div style="display:flex;gap:8px;margin-top:12px;">'
+          + '<button id="accept-co-org-' + invite.id + '" style="padding:6px 14px;background:#c6ff33;color:#000;border:none;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer;">Accept</button>'
+          + '<button id="decline-co-org-' + invite.id + '" style="padding:6px 14px;background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.4);border-radius:6px;font-weight:600;font-size:12px;cursor:pointer;">Decline</button>'
+          + '</div></div>'
+          + '<button id="close-co-org-' + invite.id + '" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:16px;padding:0;line-height:1;">✕</button>'
+          + '</div>';
+
+        document.body.appendChild(toast);
+
+        document.getElementById('close-co-org-' + invite.id).addEventListener('click', function() {
+          toast.remove();
+        });
+
+        document.getElementById('accept-co-org-' + invite.id).addEventListener('click', function() {
+          toast.remove();
+          if (window.NexusTeamWorkflow && typeof window.NexusTeamWorkflow.decideCoOrganizerInvite === 'function') {
+            var res = window.NexusTeamWorkflow.decideCoOrganizerInvite({ compId: invite.meta.compId, action: 'accepted' });
+            window.NexusTeamWorkflow.updateNotification(invite.id, { status: 'approved', read: true, body: invite.body + ' (You accepted this invitation.)' }, session.username);
+            if (typeof showToast === 'function') showToast(res.message || 'You are now a co-organizer!', 'success');
+            setTimeout(function() { window.location.reload(); }, 1200);
+          }
+        });
+
+        document.getElementById('decline-co-org-' + invite.id).addEventListener('click', function() {
+          toast.remove();
+          if (window.NexusTeamWorkflow && typeof window.NexusTeamWorkflow.decideCoOrganizerInvite === 'function') {
+            var res = window.NexusTeamWorkflow.decideCoOrganizerInvite({ compId: invite.meta.compId, action: 'declined' });
+            window.NexusTeamWorkflow.updateNotification(invite.id, { status: 'rejected', read: true, body: invite.body + ' (You declined this invitation.)' }, session.username);
+            if (typeof showToast === 'function') showToast(res.message || 'Invitation declined.', 'error');
+            setTimeout(function() { window.location.reload(); }, 1200);
+          }
+        });
+      });
+    } catch(e) {
+      console.error('Co-organizer toast check failed:', e);
     }
   });
 })();

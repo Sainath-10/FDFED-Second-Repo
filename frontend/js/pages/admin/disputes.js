@@ -495,6 +495,20 @@ function adminResolve(disputeId, executeBan) {
     }
 
     window.NexusData.updateDisputeStatus(disputeId, updates);
+
+    try {
+      if (window.NexusData && typeof window.NexusData.logAdminActivity === 'function') {
+        const actionLabel = updates.banApplied ? 'Resolved Dispute with Ban' : 'Resolved Dispute';
+        const targetStr = d.targetUserOrTeam || d.against || 'target';
+        window.NexusData.logAdminActivity(adminUser, 'DISPUTE_RESOLVED', `${actionLabel} #${disputeId.slice(-8)} regarding ${targetStr}`, {
+          disputeId: disputeId,
+          target: targetStr,
+          banApplied: updates.banApplied,
+          notes: notes
+        });
+      }
+    } catch(e) {}
+
     refreshQueue();
     if (typeof showToast === 'function') {
       showToast('Dispute resolved successfully!');

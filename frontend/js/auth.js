@@ -200,7 +200,7 @@
 
     let apiResult = null;
     if (window.NexusAPI) {
-      apiResult = await window.NexusAPI.Auth.register(email, username, password, firstName, lastName, 'participant');
+      apiResult = await window.NexusAPI.Auth.register(email, username, password, 'participant');
       if (apiResult && !apiResult.ok) {
         const msg = String(apiResult.error || '').toLowerCase();
         const isNetworkError = msg.includes('network') || msg.includes('failed') || msg.includes('unavailable');

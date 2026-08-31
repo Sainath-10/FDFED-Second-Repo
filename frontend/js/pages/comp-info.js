@@ -61,7 +61,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const session = getSession();
   const approvalStatus = getApprovalStatus(comp);
-  const isOwner = normalize(comp.organizerId || comp.createdBy) === normalize(session && session.username);
+  const userKey = normalize(session && session.username);
+  const isCoOrg = Array.isArray(comp.organizers) && comp.organizers.map(normalize).includes(userKey);
+  const isOwner = isCoOrg || normalize(comp.organizerId || comp.createdBy) === userKey;
   if (approvalStatus !== 'approved' && !isOwner) {
     showNotFound();
     return;
@@ -300,7 +302,8 @@ function setupCTAButtons(comp) {
   const userKey = normalize(session && session.username);
 
   // Organizer detection
-  const isOwner = !!(userKey && (normalize(comp.organizerId) === userKey || normalize(comp.createdBy) === userKey));
+  const isCoOrg = Array.isArray(comp.organizers) && comp.organizers.map(normalize).includes(userKey);
+  const isOwner = !!(userKey && (isCoOrg || normalize(comp.organizerId) === userKey || normalize(comp.createdBy) === userKey));
 
   if (isOwner) {
     if (registerBtn) registerBtn.style.display = 'none';
@@ -448,7 +451,9 @@ function setupCTAButtons(comp) {
     if (sessionRaw) {
       try {
         const session = JSON.parse(sessionRaw);
-        isOwner = (comp.organizerId || comp.createdBy) === session.username;
+        const u = normalize(session.username);
+        const coOrgs = Array.isArray(comp.organizers) ? comp.organizers.map(normalize) : [];
+        isOwner = coOrgs.includes(u) || normalize(comp.organizerId) === u || normalize(comp.createdBy) === u;
       } catch (e) { }
     }
 

@@ -4,7 +4,7 @@
  */
 
 (function (window) {
-  const API_URL = 'http://localhost:3000';
+  const API_URL = 'http://localhost:3001';
   const TOKEN_KEY = 'nexus.auth.token';
   const USER_KEY = 'nexus.auth.user';
 
@@ -122,10 +122,10 @@
 
   // ============ AUTH API ============
   const AuthAPI = {
-    async register(email, username, password, firstName, lastName, role = 'participant') {
+    async register(email, username, password, role = 'participant') {
       return makeRequest('/auth/register', {
         method: 'POST',
-        body: JSON.stringify({ email, username, password, firstName, lastName, role }),
+        body: JSON.stringify({ email, username, password, role }),
       });
     },
 

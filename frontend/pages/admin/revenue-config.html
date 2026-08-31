@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Revenue Configuration</title>
+  <link rel="stylesheet" href="../../css/styles.css">
+  <link rel="stylesheet" href="../../css/pages/create-competition.css">
+  <link rel="stylesheet" href="../../css/pages/admin/dashboard.css">
+  <script>
+    // Strict Admin Authorization Guard (Runs BEFORE body renders)
+    (function () {
+      try {
+        const session = JSON.parse(localStorage.getItem('nexus.auth.session') || 'null');
+        if (!session || String(session.role || '').toLowerCase() !== 'admin') {
+          alert('Access Denied: Only Admin can access Revenue Configuration.');
+          window.location.replace('revenue-transactions.html');
+        }
+      } catch (e) {
+        window.location.replace('revenue-transactions.html');
+      }
+    })();
+  </script>
+</head>
+<body>
+
+  <!-- Sidebar Mount -->
+  <div id="sidebar-mount"></div>
+
+  <div class="page-with-sidebar">
+    <main class="create-comp-page">
+
+      <a href="revenue-transactions.html" class="back-btn">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <path d="M12 8H4M4 8L8 12M4 8L8 4" />
+        </svg>
+        Back to Revenue Transactions
+      </a>
+
+      <h1 class="page-title">Change Revenue Configuration</h1>
+      <p class="page-subtitle">Configure global platform fee percentage rates and minimum tournament hosting cost.</p>
+
+      <!-- Security Banner for Admin -->
+      <div style="background:rgba(198,255,51,0.08);border:1px solid rgba(198,255,51,0.3);border-radius:12px;padding:14px 20px;margin-bottom:24px;display:flex;align-items:center;gap:14px;">
+        <span style="font-size:26px;">🛡️</span>
+        <div>
+          <h4 style="margin:0 0 2px;color:#c6ff33;font-size:15px;font-weight:700;">Admin Privileged Configuration Control</h4>
+          <p style="margin:0;color:var(--text-muted);font-size:13px;">Only Admin users can modify these global platform revenue thresholds. Changes will immediately take effect for all tournament creation logic.</p>
+        </div>
+      </div>
+
+      <div class="create-layout">
+
+        <!-- Form Card (Matching create-competition UI) -->
+        <div class="form-card">
+          <form id="revenue-config-form" novalidate>
+
+            <div class="form-section-title">Platform Revenue Parameters</div>
+
+            <!-- Field 1: Percentage from Prize Pool -->
+            <div class="form-group">
+              <label class="form-label" for="prize-percentage">
+                Percentage from Prize Pool (%) <span style="color:#ef4444">*</span>
+              </label>
+              <input class="form-input" type="number" id="prize-percentage" step="0.1" min="0" max="14.99" placeholder="e.g. 7" required>
+              <div style="font-size:12px;color:#fb923c;font-weight:600;margin-top:6px;display:flex;align-items:center;gap:6px;">
+                <span>⚠️ Admin Restriction:</span> Must be strictly less than 15% (&lt; 15%)
+              </div>
+            </div>
+
+            <!-- Field 2: Minimum Cost to host a Competition -->
+            <div class="form-group" style="margin-top:24px;">
+              <label class="form-label" for="min-cost">
+                Minimum Cost to host a Competition (₹) <span style="color:#ef4444">*</span>
+              </label>
+              <input class="form-input" type="number" id="min-cost" step="1" min="0" max="99.99" placeholder="e.g. 50" required>
+              <div style="font-size:12px;color:#fb923c;font-weight:600;margin-top:6px;display:flex;align-items:center;gap:6px;">
+                <span>⚠️ Admin Restriction:</span> Must be strictly less than ₹100 (&lt; 100) (Default: 50)
+              </div>
+            </div>
+
+            <!-- Error Banner -->
+            <div id="config-error-msg" style="display:none;background:rgba(239,68,68,0.12);border:1px solid #ef4444;color:#ef4444;padding:12px 16px;border-radius:8px;font-size:13px;margin-top:20px;font-weight:600;"></div>
+
+            <div style="margin-top:32px;display:flex;align-items:center;gap:14px;">
+              <button type="submit" class="btn-submit" style="flex:1;">Save Revenue Configuration</button>
+              <a href="revenue-transactions.html" style="display:inline-flex;align-items:center;justify-content:center;padding:14px 28px;background:rgba(255,255,255,0.06);color:var(--text-muted);border:1px solid rgba(255,255,255,0.18);border-radius:12px;font-size:14px;font-weight:700;text-decoration:none;transition:all 0.2s ease;cursor:pointer;" onmouseover="this.style.background='rgba(255,255,255,0.14)';this.style.color='#ffffff';this.style.borderColor='rgba(255,255,255,0.4)';" onmouseout="this.style.background='rgba(255,255,255,0.06)';this.style.color='var(--text-muted)';this.style.borderColor='rgba(255,255,255,0.18)';">Cancel</a>
+            </div>
+
+          </form>
+        </div>
+
+        <!-- Summary Sidebar (Matching create-competition Summary UI) -->
+        <div class="summary-card">
+          <h3>Current Configuration</h3>
+
+          <div class="summary-row">
+            <span class="k">Prize Pool Percentage</span>
+            <span class="v" id="curr-percentage" style="color:#c6ff33;font-weight:800;">— %</span>
+          </div>
+          <div class="summary-row">
+            <span class="k">Min Hosting Cost</span>
+            <span class="v" id="curr-min-cost" style="color:#fb923c;font-weight:800;">₹—</span>
+          </div>
+          <div class="summary-row">
+            <span class="k">Access Scope</span>
+            <span class="v" style="color:#60a5fa;font-weight:700;">Admin Only</span>
+          </div>
+          <div class="summary-row">
+            <span class="k">Last Modified</span>
+            <span class="v" id="curr-last-modified" style="font-size:11px;">Default</span>
+          </div>
+
+          <div style="margin-top:24px;">
+            <h3>Enforcement Rules</h3>
+            <div class="steps-list">
+              <div class="step-item">
+                <div class="step-num done">✓</div>
+                <span class="step-text">Calculates higher of Min Cost or Prize Pool %</span>
+              </div>
+              <div class="step-item">
+                <div class="step-num done">✓</div>
+                <span class="step-text">Updates competition creation platform fees live</span>
+              </div>
+              <div class="step-item">
+                <div class="step-num done">✓</div>
+                <span class="step-text">Enforces Admin-only restriction bounds (&lt;15% &amp; &lt;₹100)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </main>
+
+    <!-- Footer Mount -->
+    <div id="footer-mount"></div>
+  </div>
+
+  <script src="../../js/script.js"></script>
+  <script src="../../js/pages/competitions-data.js"></script>
+  <script>
+    initAdminSidebar('revenue', '../../');
+    initFooter('../../');
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const percentageInput = document.getElementById('prize-percentage');
+      const minCostInput = document.getElementById('min-cost');
+      const errorMsg = document.getElementById('config-error-msg');
+      const form = document.getElementById('revenue-config-form');
+
+      function renderCurrentConfig() {
+        const config = window.NexusData ? window.NexusData.getRevenueConfig() : { percentage: 7, minCost: 50 };
+        percentageInput.value = config.percentage;
+        minCostInput.value = config.minCost;
+
+        document.getElementById('curr-percentage').textContent = `${config.percentage}%`;
+        document.getElementById('curr-min-cost').textContent = `₹${config.minCost}`;
+        document.getElementById('curr-last-modified').textContent = config.updatedAt
+          ? new Date(config.updatedAt).toLocaleString()
+          : 'Default Settings';
+      }
+
+      renderCurrentConfig();
+
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        errorMsg.style.display = 'none';
+
+        const percentage = parseFloat(percentageInput.value);
+        const minCost = parseFloat(minCostInput.value);
+
+        if (isNaN(percentage) || percentage < 0) {
+          showError('Please enter a valid positive percentage.');
+          return;
+        }
+        if (percentage >= 15) {
+          showError('Percentage from Prize Pool must be strictly less than 15% (< 15%).');
+          return;
+        }
+
+        if (isNaN(minCost) || minCost < 0) {
+          showError('Please enter a valid positive minimum cost.');
+          return;
+        }
+        if (minCost >= 100) {
+          showError('Minimum Cost to host a Competition must be strictly less than 100 (< 100).');
+          return;
+        }
+
+        const prevConfig = window.NexusData ? window.NexusData.getRevenueConfig() : { percentage: 7, minCost: 50 };
+
+        if (window.NexusData && typeof window.NexusData.saveRevenueConfig === 'function') {
+          const res = window.NexusData.saveRevenueConfig({ percentage, minCost });
+          if (!res.ok) {
+            showError(res.error || 'Failed to save revenue configuration.');
+            return;
+          }
+        }
+
+        // Log Admin Activity with state transition
+        try {
+          const session = JSON.parse(localStorage.getItem('nexus.auth.session') || '{}');
+          const adminName = session.username || session.email || 'admin@nexus.gg';
+          const details = `Changed Revenue Configuration: Prize Pool Fee (${prevConfig.percentage}% → ${percentage}%), Minimum Cost to Host (₹${prevConfig.minCost} → ₹${minCost})`;
+          if (window.NexusData && typeof window.NexusData.logAdminActivity === 'function') {
+            window.NexusData.logAdminActivity(adminName, 'REVENUE_CONFIG_CHANGE', details, {
+              prevPercentage: prevConfig.percentage,
+              newPercentage: percentage,
+              prevMinCost: prevConfig.minCost,
+              newMinCost: minCost
+            });
+          }
+        } catch (e) {
+          console.error('Error logging revenue config activity:', e);
+        }
+
+        renderCurrentConfig();
+        if (typeof showToast === 'function') {
+          showToast('Revenue configuration updated successfully!', 'success');
+        }
+
+        // Redirect to admin revenue transactions page after brief confirmation
+        setTimeout(() => {
+          window.location.href = 'revenue-transactions.html';
+        }, 500);
+      });
+
+      function showError(msg) {
+        errorMsg.textContent = `⚠️ ${msg}`;
+        errorMsg.style.display = 'block';
+      }
+    });
+  </script>
+</body>
+</html>

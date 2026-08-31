@@ -101,10 +101,12 @@ function renderUsers(list) {
   }).join('');
 }
 
+let currentRoster = [];
+
 function applySearch() {
   const input = document.getElementById('users-search');
   const query = normalize(input && input.value);
-  const list = mergeAccountsWithBanStatus();
+  const list = currentRoster.length ? currentRoster : mergeAccountsWithBanStatus();
 
   if (!query) {
     renderUsers(list);
@@ -124,8 +126,60 @@ function applySearch() {
   renderUsers(filtered);
 }
 
+async function syncAndRenderUsers() {
+  currentRoster = mergeAccountsWithBanStatus();
+  renderUsers(currentRoster);
+
+  try {
+    const res = await fetch('http://localhost:3001/auth/users');
+    if (res.ok) {
+      const dbUsers = await res.json();
+      if (Array.isArray(dbUsers) && dbUsers.length > 0) {
+        const stored = readStoredAccounts();
+        const map = {};
+
+        getSeedAccounts().forEach(a => {
+          if (a && a.username) map[normalize(a.username)] = a;
+        });
+
+        stored.forEach(a => {
+          if (a && a.username) map[normalize(a.username)] = a;
+        });
+
+        dbUsers.forEach(u => {
+          if (u && (u.username || u.email)) {
+            const username = u.username || u.email;
+            const key = normalize(username);
+            const existing = map[key] || {};
+            map[key] = Object.assign({}, existing, {
+              id: u.id || existing.id,
+              username: username,
+              email: u.email || existing.email || (username.includes('@') ? username : '—'),
+              role: u.role || existing.role || 'regular',
+              banned: typeof u.banned === 'boolean' ? u.banned : !!existing.banned,
+              warningCount: typeof u.warningCount === 'number' ? u.warningCount : (existing.warningCount || 0)
+            });
+          }
+        });
+
+        currentRoster = Object.values(map);
+        localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(currentRoster));
+
+        const searchInput = document.getElementById('users-search');
+        if (searchInput && searchInput.value.trim()) {
+          applySearch();
+        } else {
+          renderUsers(currentRoster);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Backend DB fetch offline, using cached roster:', err);
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
-  renderUsers(mergeAccountsWithBanStatus());
+  syncAndRenderUsers();
   const input = document.getElementById('users-search');
   if (input) input.addEventListener('input', applySearch);
 });
