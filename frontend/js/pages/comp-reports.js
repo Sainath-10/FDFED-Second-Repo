@@ -50,6 +50,13 @@
       } catch(e){}
 
       const compName = comp.name || 'Competition';
+      const normalizedAgainst = usernameAgainst.toLowerCase();
+      const isTeamTarget = Array.isArray(comp.teams) && comp.teams.some(team => {
+        const teamName = String(team.name || '').toLowerCase();
+        const teamId = String(team.id || '').toLowerCase();
+        return teamName === normalizedAgainst || teamId === normalizedAgainst;
+      });
+      const targetType = isTeamTarget ? 'opponent_team' : 'player';
       const timestamp = new Date().toLocaleString('en-IN', { 
         month: 'short', day: 'numeric', year: 'numeric', 
         hour: '2-digit', minute: '2-digit', hour12: false 
@@ -61,27 +68,41 @@
         disputeId: '#DISP-' + (new Date().getFullYear()) + '-' + Math.floor(1000 + Math.random() * 9000),
         competition: compName,
         title: type.charAt(0).toUpperCase() + type.slice(1) + ' Dispute — ' + compName,
+        reason: type.charAt(0).toUpperCase() + type.slice(1),
         description: desc,
+        reportedBy: reporterName,
         filedBy: reporterName,
         against: usernameAgainst,
+        targetType,
+        targetUserOrTeam: usernameAgainst,
         filedAt: timestamp,
-        status: isOrg ? 'escalated_to_admin' : 'open',
-        escalated: isOrg,
-        superAdminState: isOrg ? 'pending' : '',
-        escalationReason: isOrg ? 'Filed directly by Organizer — auto-escalated to Super Admin' : '',
+        createdAt: new Date().toISOString(),
+        status: isTeamTarget ? 'open_organizer' : (isOrg ? 'escalated_to_admin' : 'open_organizer'),
+        escalated: !isTeamTarget && isOrg,
+        superAdminState: !isTeamTarget && isOrg ? 'pending' : '',
+        escalationReason: '',
+        organizerWarnings: 0,
         compId: compId,
+        competitionId: compId,
         type: type,
         updatedAt: new Date().toISOString()
       };
 
-      // Persist to central admin store
+      // Persist to the shared dispute store used by organizer/admin review pages.
       try {
-        const adminStoreKey = 'nexus_admin_disputes';
-        const existing = JSON.parse(localStorage.getItem(adminStoreKey) || '[]');
-        existing.unshift(newDispute);
-        localStorage.setItem(adminStoreKey, JSON.stringify(existing));
+        if (window.NexusData && typeof window.NexusData.addDispute === 'function') {
+          const result = window.NexusData.addDispute(newDispute);
+          if (result && result.ok === false) {
+            showToast(result.error || 'Dispute blocked.', 'error');
+            return;
+          }
+        } else {
+          const existing = JSON.parse(localStorage.getItem('nexus.disputes') || '[]');
+          existing.unshift(newDispute);
+          localStorage.setItem('nexus.disputes', JSON.stringify(existing));
+        }
       } catch(e) {
-        console.error('Failed to save to admin store:', e);
+        console.error('Failed to save dispute:', e);
       }
 
       showToast('Dispute submitted', 'success');

@@ -68,6 +68,9 @@ export class DisputesService {
       updates.status = DisputeStatus.RESOLVED;
       updates.resolvedBy = organizerUsername;
     } else {
+      if (dispute.targetType === DisputeTargetType.OPPONENT_TEAM) {
+        throw new BadRequestException('Team disputes must be handled by the organizer with warnings or a team ban.');
+      }
       // escalate_to_admin
       updates.status = DisputeStatus.ESCALATED_TO_ADMIN;
       updates.banRequested = dto.requestBan ?? false;

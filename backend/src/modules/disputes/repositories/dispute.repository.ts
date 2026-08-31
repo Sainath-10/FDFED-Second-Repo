@@ -64,6 +64,7 @@ export class DisputeRepository {
       .where('d.status IN (:...statuses)', {
         statuses: [DisputeStatus.OPEN_ADMIN, DisputeStatus.ESCALATED_TO_ADMIN],
       })
+      .andWhere('d.targetType != :teamTarget', { teamTarget: DisputeTargetType.OPPONENT_TEAM })
       .orderBy('d.createdAt', 'DESC')
       .getMany();
   }

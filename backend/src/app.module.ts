@@ -35,14 +35,22 @@ import { PlatformPolicyEntity } from './entities/platform-policy.entity';
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        type: 'postgres',
-        host: config.get<string>('DB_HOST', '127.0.0.1'),
-        port: config.get<number>('DB_PORT', 5432),
-        username: config.get<string>('DB_USERNAME', 'nexus_user'),
-        password: config.get<string>('DB_PASSWORD', '1234'),
-        database: config.get<string>('DB_DATABASE', 'nexus_db'),
-        entities: [
+      useFactory: (config: ConfigService) => {
+        const databaseUrl = config.get<string>('DATABASE_URL');
+        const connection = databaseUrl
+          ? { type: 'postgres' as const, url: databaseUrl }
+          : {
+              type: 'postgres' as const,
+              host: config.get<string>('DB_HOST', '127.0.0.1'),
+              port: Number(config.get<string>('DB_PORT', '5432')),
+              username: config.get<string>('DB_USERNAME', 'postgres'),
+              password: config.get<string>('DB_PASSWORD', 'postgres'),
+              database: config.get<string>('DB_DATABASE', 'fdfed'),
+            };
+
+        return {
+          ...connection,
+          entities: [
           UserEntity,
           CompetitionEntity,
           TeamEntity,
@@ -52,10 +60,11 @@ import { PlatformPolicyEntity } from './entities/platform-policy.entity';
           TeamJoinRequestEntity,
           TeamInviteEntity,
           PlatformPolicyEntity,
-        ],
-        synchronize: true, // Auto-create tables in dev. Use migrations in production.
-        logging: config.get<string>('NODE_ENV') === 'development' ? ['error', 'warn'] : false,
-      }),
+          ],
+          synchronize: true, // Auto-create tables in dev. Use migrations in production.
+          logging: config.get<string>('NODE_ENV') === 'development' ? ['error', 'warn'] : false,
+        };
+      },
     }),
 
     // JWT globally available
@@ -65,7 +74,9 @@ import { PlatformPolicyEntity } from './entities/platform-policy.entity';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         secret: config.get<string>('JWT_SECRET', 'nexus_fallback_secret'),
-        signOptions: { expiresIn: (config.get<string>('JWT_EXPIRES_IN', '7d') || '7d') as any },
+        signOptions: {
+          expiresIn: (config.get<string>('JWT_EXPIRES_IN') || config.get<string>('JWT_EXPIRATION') || '7d') as any,
+        },
       }),
     }),
 

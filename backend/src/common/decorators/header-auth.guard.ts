@@ -30,7 +30,13 @@ export class HeaderAuthGuard implements CanActivate {
       );
     }
 
-    request.user = { role };
+    const username = request.headers['x-user-name'] || request.headers['x-username'];
+    const userId = request.headers['x-user-id'];
+    request.user = {
+      role,
+      username: Array.isArray(username) ? username[0] : username,
+      id: Array.isArray(userId) ? userId[0] : userId,
+    };
     return true;
   }
 }

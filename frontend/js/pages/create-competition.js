@@ -401,7 +401,10 @@ if (createCompForm) {
       name: name,
       game: game,
       type: type,
+      format: formatLabel,
       description: description,
+      startDate: startDate ? new Date(startDate + 'T00:00:00').toISOString() : '',
+      endDate: endDate ? new Date(endDate + 'T00:00:00').toISOString() : '',
       dates: startDate ? `${startDate} to ${endDate}` : 'TBD',
       registrationDates: {
         open: regOpen,

@@ -47,8 +47,10 @@ export class TeamsController {
   })
   async createTeam(
     @Body() createTeamDto: CreateTeamDto,
+    @CurrentUser() user?: any,
   ): Promise<TeamResponseDto> {
-    return this.teamsService.createTeam(createTeamDto);
+    const leaderId = user?.username || user?.id || 'system';
+    return this.teamsService.createTeam(createTeamDto, leaderId);
   }
 
   @Get()

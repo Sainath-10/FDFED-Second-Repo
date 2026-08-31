@@ -37,6 +37,23 @@
     }
   }
 
+  function getLegacySession() {
+    try {
+      const raw = localStorage.getItem('nexus.auth.session');
+      return raw ? JSON.parse(raw) : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function normalizeRole(role) {
+    const value = String(role || '').trim().toLowerCase();
+    if (value === 'super-admin') return 'super_admin';
+    if (value === 'teamlead' || value === 'team-lead') return 'team_lead';
+    if (value === 'organizer') return 'team_lead';
+    return value;
+  }
+
   function setUser(user) {
     try {
       localStorage.setItem(USER_KEY, JSON.stringify(user));
@@ -65,9 +82,15 @@
       config.headers.Authorization = `Bearer ${token}`;
     }
 
-    const user = getUser();
+    const user = getUser() || getLegacySession();
     if (user && user.role && !config.headers['x-user-role']) {
-      config.headers['x-user-role'] = user.role;
+      config.headers['x-user-role'] = normalizeRole(user.role);
+    }
+    if (user && user.username && !config.headers['x-user-name']) {
+      config.headers['x-user-name'] = user.username;
+    }
+    if (user && user.id && !config.headers['x-user-id']) {
+      config.headers['x-user-id'] = user.id;
     }
 
     try {
@@ -183,9 +206,13 @@
     },
 
     async create(name, description, startDate, endDate, coOrganizers = []) {
+      const payload = typeof name === 'object' && name !== null
+        ? name
+        : { name, description, startDate, endDate, coOrganizers };
+
       return makeRequest('/competitions', {
         method: 'POST',
-        body: JSON.stringify({ name, description, startDate, endDate, coOrganizers }),
+        body: JSON.stringify(payload),
       });
     },
 
@@ -236,9 +263,13 @@
     },
 
     async create(name, competitionId, members = []) {
+      const payload = typeof name === 'object' && name !== null
+        ? name
+        : { name, competitionId, members };
+
       return makeRequest('/teams', {
         method: 'POST',
-        body: JSON.stringify({ name, competitionId, members }),
+        body: JSON.stringify(payload),
       });
     },
 

@@ -225,6 +225,90 @@ function loadCompetitions() {
   return [];
 }
 
+function formatApiDateRange(startDate, endDate) {
+  const start = startDate ? new Date(startDate) : null;
+  const end = endDate ? new Date(endDate) : null;
+  if (!start || Number.isNaN(start.getTime()) || !end || Number.isNaN(end.getTime())) return 'TBD';
+  return `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`;
+}
+
+function mapApiCompetition(c) {
+  return {
+    id: c.id,
+    dbId: c.id,
+    name: c.name,
+    description: c.description,
+    status: c.status || 'active',
+    startDate: c.startDate,
+    endDate: c.endDate,
+    createdAt: c.createdAt,
+    createdBy: c.createdBy,
+    organizerId: c.createdBy,
+    organizers: Array.isArray(c.organizers) ? c.organizers : [c.createdBy].filter(Boolean),
+    approvalStatus: c.approvalStatus || 'approved',
+    badge: c.badge || (c.status === 'active' ? 'Active' : c.status === 'draft' ? 'Draft' : 'Completed'),
+    badgeClass: c.badgeClass || (c.status === 'active' ? 'live' : 'hot'),
+    game: c.game || 'Unknown Game',
+    type: c.type || 'tournament',
+    dates: c.dates || formatApiDateRange(c.startDate, c.endDate),
+    participants: c.participants || 0,
+    location: c.location || 'Online',
+    prizePool: c.prizePool || (c.prize ? `Rs.${Number(c.prize).toLocaleString('en-IN')}` : 'Rs.0'),
+    prize: c.prize || 0,
+    season: c.season || 'Season 1',
+    format: c.format || 'Tournament',
+    maxTeams: c.maxTeams || 100,
+    maxPlayersPerTeam: c.maxPlayersPerTeam || 5,
+    platformFee: c.platformFee || 0,
+    feeType: c.feeType || 'free',
+    entryFeeAmount: c.entryFeeAmount || 0,
+    entryFee: c.entryFee || 'Free',
+    organizerPaid: !!c.organizerPaid,
+    img: c.img,
+    bannerColor: c.bannerColor || '#1a2e2e',
+    teams: Array.isArray(c.teams) ? c.teams : [],
+    standings: Array.isArray(c.standings) ? c.standings : [],
+    matches: Array.isArray(c.matches) ? c.matches : [],
+    disputes: Array.isArray(c.disputes) ? c.disputes : [],
+    totalMatches: c.totalMatches || 0,
+    matchesCompleted: c.matchesCompleted || 0,
+  };
+}
+
+function mergeCompetitions(localComps, apiComps) {
+  const merged = [];
+  const index = new Map();
+
+  (localComps || []).forEach(comp => {
+    if (!comp || !comp.id) return;
+    const clone = Object.assign({}, comp);
+    const keys = [clone.id, clone.dbId, clone.name].filter(Boolean).map(String);
+    keys.forEach(key => index.set(key, merged.length));
+    merged.push(clone);
+  });
+
+  (apiComps || []).forEach(apiComp => {
+    if (!apiComp || !apiComp.id) return;
+    const keys = [apiComp.id, apiComp.dbId, apiComp.name].filter(Boolean).map(String);
+    const foundKey = keys.find(key => index.has(key));
+    if (foundKey) {
+      const idx = index.get(foundKey);
+      const local = merged[idx];
+      merged[idx] = Object.assign({}, apiComp, local, {
+        dbId: local.dbId || apiComp.dbId || apiComp.id,
+        backendSynced: true,
+      });
+      keys.forEach(key => index.set(key, idx));
+    } else {
+      const idx = merged.length;
+      keys.forEach(key => index.set(key, idx));
+      merged.push(Object.assign({}, apiComp, { backendSynced: true }));
+    }
+  });
+
+  return stripBannedFromTeams(merged);
+}
+
 // Fetch competitions from backend API
 async function fetchCompetitionsFromAPI() {
   if (!window.NexusAPI) return [];
@@ -235,7 +319,7 @@ async function fetchCompetitionsFromAPI() {
     return [];
   }
 
-  const competitions = (result.data || []).map(c => ({
+  const competitions = (result.data || []).map(mapApiCompetition); /*
     id: c.id,
     name: c.name,
     description: c.description,
@@ -259,10 +343,11 @@ async function fetchCompetitionsFromAPI() {
     disputes: [],
     totalMatches: 0,
     matchesCompleted: 0,
-  }));
+  */
 
-  saveCompetitions(competitions);
-  return competitions;
+  const merged = mergeCompetitions(loadCompetitions(), competitions);
+  saveCompetitions(merged);
+  return merged;
 }
 
 function saveCompetitions(data) {
@@ -353,13 +438,31 @@ function addCompetition(comp) {
 
   // Sync create to PostgreSQL backend
   if (window.NexusAPI && window.NexusAPI.Competitions) {
-    window.NexusAPI.Competitions.create(
-      comp.name,
-      comp.description || 'No description provided.',
-      comp.startDate || new Date().toISOString(),
-      comp.endDate || new Date(Date.now() + 14 * 86400000).toISOString(),
-      comp.organizers || []
-    ).then(res => {
+    window.NexusAPI.Competitions.create({
+      name: comp.name,
+      description: comp.description || 'No description provided.',
+      startDate: comp.startDate || new Date().toISOString(),
+      endDate: comp.endDate || new Date(Date.now() + 14 * 86400000).toISOString(),
+      coOrganizers: comp.organizers || [],
+      game: comp.game,
+      type: comp.type,
+      location: comp.location || 'Online',
+      prizePool: comp.prizePool,
+      prize: comp.prize,
+      format: comp.format,
+      season: comp.season,
+      maxTeams: comp.maxTeams,
+      maxPlayersPerTeam: comp.maxPlayersPerTeam,
+      img: comp.img,
+      badge: comp.badge,
+      badgeClass: comp.badgeClass,
+      feeType: comp.feeType,
+      entryFeeAmount: comp.entryFeeAmount,
+      entryFee: comp.entryFee,
+      platformFee: comp.platformFee,
+      organizerPaid: comp.organizerPaid,
+      approvalStatus: comp.approvalStatus,
+    }).then(res => {
       if (res && res.ok && res.data && res.data.id && res.data.id !== comp.id) {
         // Update local competition id with the real PostgreSQL UUID
         const currentAll = loadCompetitions();
@@ -475,6 +578,10 @@ function setCompetitionApproval(compId, decision, adminUsername) {
   all[idx] = comp;
   saveCompetitions(all);
 
+  if (window.NexusAPI && window.NexusAPI.Competitions) {
+    window.NexusAPI.Competitions.setApproval(comp.dbId || comp.id, next).catch(() => {});
+  }
+
   const organizer = comp.createdBy || comp.organizerId;
   if (organizer) {
     pushSystemNotification({
@@ -585,7 +692,7 @@ async function fetchActiveCompetitionsFromAPI() {
     return [];
   }
 
-  return (result.data || []).map(c => ({
+  return mergeCompetitions(loadCompetitions(), (result.data || []).map(mapApiCompetition)); /*
     id: c.id,
     name: c.name,
     description: c.description,
@@ -609,7 +716,7 @@ async function fetchActiveCompetitionsFromAPI() {
     disputes: [],
     totalMatches: 0,
     matchesCompleted: 0,
-  }));
+  */
 }
 
 function generateId(name) {
@@ -777,9 +884,40 @@ function saveDisputes(disputes) {
   localStorage.setItem(DISPUTES_KEY, JSON.stringify(disputes));
 }
 
+function isUserOnTeam(team, username) {
+  const target = String(username || '').trim().toLowerCase();
+  if (!team || !target) return false;
+  const same = value => {
+    const raw = typeof value === 'string' ? value : (value && (value.username || value.name || value.id));
+    return String(raw || '').trim().toLowerCase() === target;
+  };
+  if (same(team.createdBy) || same(team.leaderId) || same(team.leaderUsername) || same(team.captain)) return true;
+  return (Array.isArray(team.members) && team.members.some(same)) || (Array.isArray(team.players) && team.players.some(same));
+}
+
+function getUserTeamNameInCompetition(compId, username) {
+  const comp = getCompetitionById(compId);
+  if (!comp || !Array.isArray(comp.teams)) return '';
+  const team = comp.teams.find(t => isUserOnTeam(t, username));
+  return team ? String(team.name || '').trim().toLowerCase() : '';
+}
+
 function addDispute(disputeData) {
   const disputes = loadDisputes();
   const id = 'disp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+  const reporter = String(disputeData.reportedBy || disputeData.filedBy || disputeData.submitter || '').trim().toLowerCase();
+  const target = String(disputeData.targetUserOrTeam || disputeData.against || '').trim().toLowerCase();
+
+  if (reporter && target && reporter === target) {
+    return { ok: false, error: 'You cannot raise a dispute against yourself.' };
+  }
+
+  if ((disputeData.targetType === 'team' || disputeData.targetType === 'opponent_team') && reporter && target) {
+    const reporterTeamName = getUserTeamNameInCompetition(disputeData.competitionId, reporter);
+    if (reporterTeamName && reporterTeamName === target) {
+      return { ok: false, error: 'You cannot raise a dispute against your own team.' };
+    }
+  }
 
   // Check if filed by organizer
   let isOrg = disputeData.isOrganizer || disputeData.reportedByRole === 'organizer' || disputeData.filedByRole === 'organizer';
@@ -798,33 +936,38 @@ function addDispute(disputeData) {
     } catch(e) {}
   }
 
-  const initialStatus = isOrg ? 'escalated_to_admin' : (disputeData.status || 'open');
+  const isTeamTarget = disputeData.targetType === 'team' || disputeData.targetType === 'opponent_team';
+  const initialStatus = isTeamTarget ? 'open_organizer' : (isOrg ? 'escalated_to_admin' : (disputeData.status || 'open_organizer'));
   const newDispute = {
     id,
     ...disputeData,
+    createdAt: disputeData.createdAt || new Date().toISOString(),
+    updatedAt: disputeData.updatedAt || new Date().toISOString(),
     status: initialStatus,
-    escalated: isOrg || !!disputeData.escalated,
-    superAdminState: isOrg ? 'pending' : (disputeData.superAdminState || ''),
-    escalatedReason: isOrg ? 'Dispute raised directly by Organizer — auto-escalated to Super Admin' : (disputeData.escalatedReason || '')
+    escalated: !isTeamTarget && (isOrg || !!disputeData.escalated),
+    superAdminState: !isTeamTarget && isOrg ? 'pending' : (disputeData.superAdminState || ''),
+    escalatedReason: !isTeamTarget && isOrg ? 'Dispute raised directly by Organizer — auto-escalated to Super Admin' : (disputeData.escalatedReason || '')
   };
 
   disputes.unshift(newDispute);
   saveDisputes(disputes);
 
-  // Also sync directly to admin store (nexus_admin_disputes)
-  try {
-    const adminKey = 'nexus_admin_disputes';
-    const adminDisputes = JSON.parse(localStorage.getItem(adminKey) || '[]');
-    adminDisputes.unshift({
-      ...newDispute,
-      cardId: 'disp-' + Date.now(),
-      disputeId: '#DISP-' + (new Date().getFullYear()) + '-' + Math.floor(1000 + Math.random() * 9000),
-      competition: disputeData.matchName || disputeData.competition || 'Competition',
-      filedBy: disputeData.reportedBy || disputeData.submitter || 'Organizer',
-      against: disputeData.targetUserOrTeam || disputeData.against || 'Target'
-    });
-    localStorage.setItem(adminKey, JSON.stringify(adminDisputes));
-  } catch(e) {}
+  if (!isTeamTarget) {
+    // Also sync directly to admin store (nexus_admin_disputes)
+    try {
+      const adminKey = 'nexus_admin_disputes';
+      const adminDisputes = JSON.parse(localStorage.getItem(adminKey) || '[]');
+      adminDisputes.unshift({
+        ...newDispute,
+        cardId: 'disp-' + Date.now(),
+        disputeId: '#DISP-' + (new Date().getFullYear()) + '-' + Math.floor(1000 + Math.random() * 9000),
+        competition: disputeData.matchName || disputeData.competition || 'Competition',
+        filedBy: disputeData.reportedBy || disputeData.submitter || 'Organizer',
+        against: disputeData.targetUserOrTeam || disputeData.against || 'Target'
+      });
+      localStorage.setItem(adminKey, JSON.stringify(adminDisputes));
+    } catch(e) {}
+  }
 
   // Send notification to target user/team that a dispute was raised against them
   if (disputeData.targetUserOrTeam) {
@@ -838,7 +981,7 @@ function addDispute(disputeData) {
     );
   }
 
-  return id;
+  return { ok: true, id, dispute: newDispute };
 }
 
 function getDisputesByStatus(status) {
@@ -945,12 +1088,16 @@ function issueOrganizerWarning(disputeId, reason) {
   const d = disputes.find(x => x.id === disputeId);
   if (!d) return null;
 
+  const isTeamDispute = d.targetType === 'team' || d.targetType === 'opponent_team';
   d.organizerWarnings = (d.organizerWarnings || 0) + 1;
   d.organizerNotes = reason || d.organizerNotes;
   d.updatedAt = new Date().toISOString();
 
   // 1. Register warning on target user's account so warning popup triggers on next login
   const warnCount = registerAccountWarning(d.targetUserOrTeam, `Organizer Warning (${d.competitionId}): ${reason}`, 'Tournament Organizer', d.competitionId);
+  if (isTeamDispute) {
+    d.organizerWarnings = warnCount;
+  }
 
   // 2. Send warning notification to target user
   sendNotificationHelper(
@@ -963,8 +1110,16 @@ function issueOrganizerWarning(disputeId, reason) {
   );
 
   let autoEscalated = false;
-  // After 2 warnings -> auto-escalate to admin!
-  if (d.organizerWarnings >= 2) {
+  let autoBanned = false;
+  if (isTeamDispute && warnCount >= 3) {
+    d.status = 'resolved';
+    d.banApplied = true;
+    d.teamBanned = true;
+    d.resolvedBy = 'Tournament Organizer';
+    d.resolvedAt = new Date().toISOString();
+    d.organizerNotes = `${reason} Team banned after 3 organizer warnings.`;
+    autoBanned = true;
+  } else if (!isTeamDispute && d.organizerWarnings >= 2) {
     d.status = 'escalated_to_admin';
     d.banRequested = true;
     d.escalatedReason = `Auto-escalated to admin after 2 organizer warnings: ${reason}`;
@@ -972,7 +1127,7 @@ function issueOrganizerWarning(disputeId, reason) {
   }
 
   saveDisputes(disputes);
-  return { warningCount: d.organizerWarnings, autoEscalated, dispute: d };
+  return { warningCount: d.organizerWarnings, autoEscalated, autoBanned, dispute: d };
 }
 
 function issueAdminWarning(disputeId, reason, targetUsername) {
@@ -1058,6 +1213,7 @@ function calculatePlatformFee(prizePoolAmount) {
 window.NexusData = {
   loadCompetitions, saveCompetitions, getCompetitionById,
   updateCompetition, deleteCompetition, addCompetition, generateId, getCompIdFromUrl,
+  fetchCompetitionsFromAPI, fetchActiveCompetitionsFromAPI, mapApiCompetition, mergeCompetitions,
   goToComp, goToParticipant,
   getApprovalStatus, setCompetitionApproval, getCompetitionsForPublic,
   addCoOrganizer: addCoOrganizerToComp,

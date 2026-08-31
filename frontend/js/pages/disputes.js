@@ -3,14 +3,52 @@ initFooter('../');
 
 const DISPUTE_STORE_KEY = 'nexus_admin_disputes';
 
-function renderDisputes() {
+function mapApiDispute(d) {
+  return {
+    id: d.id,
+    title: d.reason || 'Dispute',
+    desc: d.reason || '',
+    description: d.reason || '',
+    status: d.status || 'pending',
+    time: d.createdAt ? new Date(d.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recent',
+    matchName: d.competitionId || 'N/A',
+    reporter: d.reportedBy || 'Player',
+    submitter: d.reportedBy || 'Player',
+    organizers: Array.isArray(d.organizers) ? d.organizers : [],
+    targetUserOrTeam: d.targetUserOrTeam,
+  };
+}
+
+async function loadDisputesForPage() {
+  if (window.NexusAPI && window.NexusAPI.Disputes) {
+    try {
+      const result = await window.NexusAPI.Disputes.getAll();
+      if (result.ok && Array.isArray(result.data) && result.data.length > 0) {
+        return result.data.map(mapApiDispute);
+      }
+    } catch (e) {}
+  }
+
+  try {
+    return JSON.parse(localStorage.getItem(DISPUTE_STORE_KEY) || '[]');
+  } catch (e) {
+    return [];
+  }
+}
+
+function getStatusUi(status) {
+  const value = String(status || 'pending').toLowerCase();
+  if (value === 'resolved') return { className: 'approved', label: 'Resolved', filter: 'resolved' };
+  if (value === 'under_review' || value === 'investigating') return { className: 'pending', label: 'Investigating', filter: 'investigating' };
+  if (value === 'escalated' || value === 'escalated_to_admin' || value === 'open_admin') return { className: 'pending', label: 'Escalated', filter: 'escalated' };
+  return { className: 'pending', label: 'Pending Review', filter: value };
+}
+
+async function renderDisputes() {
   const container = document.getElementById('disputes-list');
   if (!container) return;
 
-  let disputes = [];
-  try {
-    disputes = JSON.parse(localStorage.getItem(DISPUTE_STORE_KEY) || '[]');
-  } catch(e) {}
+  const disputes = await loadDisputesForPage();
 
   if (disputes.length === 0) {
     // Keep the static ones or show a message?
@@ -21,14 +59,13 @@ function renderDisputes() {
   }
 
   const dynamicHtml = disputes.map(d => {
-    const statusClass = d.status === 'resolved' ? 'approved' : (d.status === 'investigating' ? 'pending' : 'pending');
-    const statusLabel = d.status === 'resolved' ? 'Resolved' : (d.status === 'investigating' ? 'Investigating' : 'Pending Review');
+    const statusUi = getStatusUi(d.status);
     
     return `
-      <div class="dispute-card" data-status="${d.status || 'pending'}">
+      <div class="dispute-card" data-status="${statusUi.filter}">
         <div class="dispute-header">
           <span class="dispute-id">#${d.id}</span>
-          <span class="status-pill ${statusClass}">${statusLabel}</span>
+          <span class="status-pill ${statusUi.className}">${statusUi.label}</span>
         </div>
         <div class="dispute-title">${d.title}</div>
         <div class="dispute-desc">${d.desc || d.description || ''}</div>
@@ -40,10 +77,10 @@ function renderDisputes() {
         </div>
         <div class="dispute-actions">
           <button class="btn-table-secondary" onclick="showEvidence('${d.id}')">View Details</button>
-          ${d.status !== 'resolved' && d.status !== 'escalated' ? `
+          ${d.status !== 'resolved' && d.status !== 'escalated' && d.status !== 'escalated_to_admin' ? `
           <button class="btn-table-danger" onclick="location.href='dispute-escalation.html?id=${d.id}'">Escalate</button>
           ` : ''}
-          ${d.status === 'escalated' ? '<span style="color:var(--accent);font-size:12px;">Escalated to Super Admin</span>' : ''}
+          ${d.status === 'escalated' || d.status === 'escalated_to_admin' ? '<span style="color:var(--accent);font-size:12px;">Escalated to Super Admin</span>' : ''}
         </div>
       </div>
     `;

@@ -135,7 +135,23 @@ function renderHero(comp) {
        EDIT COMPETITION
      </a>`;
 
-  document.getElementById('comp-hero-actions').innerHTML = actionButtons;
+  const actionsEl = document.getElementById('comp-hero-actions');
+  actionsEl.innerHTML = actionButtons;
+
+  const hasEntryFee = comp.feeType && comp.feeType !== 'free' && Number(comp.entryFeeAmount || 0) > 0;
+
+  if (hasEntryFee) {
+    const transactionsLink = document.createElement('a');
+    transactionsLink.href = `organizer-revenue.html?id=${comp.id}`;
+    transactionsLink.className = 'hero-btn hero-btn-secondary';
+    transactionsLink.style.borderColor = 'rgba(96,165,250,0.45)';
+    transactionsLink.style.color = '#bfdbfe';
+    transactionsLink.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M6 9v6M18 9v6"/></svg>
+      TRANSACTIONS
+    `;
+    actionsEl.prepend(transactionsLink);
+  }
 }
 
 function renderStats(comp) {

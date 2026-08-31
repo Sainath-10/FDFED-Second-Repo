@@ -1,4 +1,4 @@
-import { IsString, IsDateString, IsEnum, IsOptional, MinLength } from 'class-validator';
+import { IsString, IsDateString, IsEnum, IsOptional, MinLength, IsArray, IsNumber, IsBoolean } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateCompetitionDto {
@@ -36,8 +36,99 @@ export class CreateCompetitionDto {
     example: ['admin@nexus.gg'],
     required: false,
   })
+  @IsArray()
   @IsOptional()
   coOrganizers?: string[];
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  game?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  type?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  location?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  prizePool?: string;
+
+  @ApiProperty({ required: false })
+  @IsNumber()
+  @IsOptional()
+  prize?: number;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  format?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  season?: string;
+
+  @ApiProperty({ required: false })
+  @IsNumber()
+  @IsOptional()
+  maxTeams?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber()
+  @IsOptional()
+  maxPlayersPerTeam?: number;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  img?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  badge?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  badgeClass?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  feeType?: string;
+
+  @ApiProperty({ required: false })
+  @IsNumber()
+  @IsOptional()
+  entryFeeAmount?: number;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  entryFee?: string;
+
+  @ApiProperty({ required: false })
+  @IsNumber()
+  @IsOptional()
+  platformFee?: number;
+
+  @ApiProperty({ required: false })
+  @IsBoolean()
+  @IsOptional()
+  organizerPaid?: boolean;
+
+  @ApiProperty({ enum: ['pending', 'approved', 'rejected'], required: false })
+  @IsEnum(['pending', 'approved', 'rejected'])
+  @IsOptional()
+  approvalStatus?: 'pending' | 'approved' | 'rejected';
 }
 
 export class AddCoOrganizerDto {

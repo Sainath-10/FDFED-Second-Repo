@@ -547,6 +547,15 @@
       const nc = Array.isArray(c.coOrganizers) ? c.coOrganizers.length : 0;
       return `<div class="mc"><div class="mc-ico">${em[c.game]||'🏆'}</div><div class="mc-info"><div class="mc-name">${c.name||'Untitled'}</div><div class="mc-meta">${c.game||'—'} · ${c.format||'—'} · ${nc} co-organizer${nc!==1?'s':''}</div></div><div style="display:flex;align-items:center;gap:8px;margin-right:12px;">${sb}</div><div class="mc-acts"><button class="btn btn-o btn-sm" onclick="loadEdit('${c.id}')">✏️ Edit</button><button class="btn btn-o btn-sm" onclick="editOrgs('${c.id}')">👥 Organizers</button><button class="btn btn-r btn-sm" onclick="archiveComp('${c.id}')">🗃️ Archive</button></div></div>`;
     }).join('');
+    list.querySelectorAll('.mc-acts').forEach((acts, index) => {
+      const comp = filtered[index];
+      if (!comp || acts.querySelector('.revenue-link')) return;
+      const link = document.createElement('a');
+      link.className = 'btn btn-o btn-sm revenue-link';
+      link.href = '../organizer-revenue.html?id=' + encodeURIComponent(comp.id);
+      link.textContent = 'Revenue';
+      acts.prepend(link);
+    });
   }
   function loadEdit(id) {
     const c = allComps.find(x=>x.id===id); if(!c) return;

@@ -11,7 +11,7 @@ export class CompetitionsService {
     createCompetitionDto: CreateCompetitionDto,
     createdBy: string = 'system',
   ): Promise<ICompetition> {
-    const { name, description, startDate, endDate, coOrganizers } = createCompetitionDto;
+    const { name, description, startDate, endDate, coOrganizers, ...extras } = createCompetitionDto;
 
     if (!name || name.trim().length < 3) {
       throw new BadRequestException('Tournament name must be at least 3 characters.');
@@ -39,6 +39,7 @@ export class CompetitionsService {
       eDate,
       createdBy,
       coOrganizers || [],
+      extras,
     );
   }
 

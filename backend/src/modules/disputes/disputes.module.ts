@@ -5,6 +5,7 @@ import { DisputesController } from './disputes.controller';
 import { DisputeRepository } from './repositories/dispute.repository';
 import { CompetitionsModule } from '../competitions/competitions.module';
 import { AuthModule } from '../auth/auth.module';
+import { TeamsModule } from '../teams/teams.module';
 import { DisputeTrackingMiddleware } from '../../common/middleware';
 import { DisputeEntity } from '../../entities/dispute.entity';
 
@@ -13,6 +14,7 @@ import { DisputeEntity } from '../../entities/dispute.entity';
     TypeOrmModule.forFeature([DisputeEntity]),
     CompetitionsModule,
     AuthModule,
+    TeamsModule,
   ],
   controllers: [DisputesController],
   providers: [DisputesService, DisputeRepository],

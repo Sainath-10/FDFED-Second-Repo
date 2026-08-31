@@ -27,6 +27,11 @@ if (reportForm) {
     const matchRound = document.querySelector('#report-form input[placeholder*="Match"]')?.value || 'Match';
     const against = document.querySelector('#report-form input[placeholder*="Team"]')?.value || 'Opponent';
     const description = document.querySelector('#report-form textarea')?.value || '';
+    const typeText = String(reportType || '').toLowerCase();
+    const targetType = typeText.includes('organizer')
+      ? 'organizer'
+      : (typeText.includes('rule') ? 'match_rule' : 'opponent_team');
+    const isAdminTarget = targetType === 'organizer';
 
     // Get current user session & role
     let reporter = 'Player';
@@ -35,7 +40,7 @@ if (reportForm) {
       const sess = JSON.parse(localStorage.getItem('nexus.auth.session') || '{}');
       if (sess.username) reporter = sess.username;
       const role = String(sess.role || '').toLowerCase();
-      if (role === 'organizer' || role === 'admin' || role === 'super-admin' || (comp && comp.createdBy === sess.username)) {
+      if (role === 'organizer' || role === 'admin' || role === 'super-admin' || role === 'super_admin') {
         isOrg = true;
       }
     } catch(e) {}
@@ -64,20 +69,26 @@ if (reportForm) {
       round: matchRound,
       submitter: reporter,
       reporter: reporter,
+      reportedBy: reporter,
       filedBy: reporter,
       against: against,
+      targetType: targetType,
       targetUserOrTeam: against,
       organizers: organizers,
       time: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       filedAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       matchName: comp ? comp.name : compSelect,
       competition: comp ? comp.name : compSelect,
       competitionId: compId || '1',
       compId: compId || '1',
-      status: isOrg ? 'escalated_to_admin' : 'awaiting',
-      escalated: isOrg,
-      superAdminState: isOrg ? 'pending' : '',
-      escalationReason: isOrg ? 'Filed directly by Organizer — auto-escalated to Super Admin' : '',
+      status: isAdminTarget ? 'open_admin' : 'open_organizer',
+      escalated: false,
+      superAdminState: '',
+      escalationReason: '',
+      organizerWarnings: 0,
+      evidenceUrls: [],
       evidence: files.length
     };
 
@@ -113,27 +124,24 @@ if (reportForm) {
           window.NexusData.updateCompetition(comp);
         }
 
-        // Add to general disputes store
-        const adminDisputes = JSON.parse(localStorage.getItem('nexus_admin_disputes') || '[]');
-        adminDisputes.unshift(newDisputeObj);
-        localStorage.setItem('nexus_admin_disputes', JSON.stringify(adminDisputes));
+        // Add to shared disputes store used by organizer/admin review pages.
+        const disputes = JSON.parse(localStorage.getItem('nexus.disputes') || '[]');
+        disputes.unshift(newDisputeObj);
+        localStorage.setItem('nexus.disputes', JSON.stringify(disputes));
       } catch (err) {}
 
-      // Try sending to backend API in background
-      try {
-        fetch('http://localhost:3000/disputes', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-user-role': 'participant'
-          },
-          body: JSON.stringify({
-            competitionId: compId || '1',
-            teamId: against || 'team-1',
-            description: `${reportType} (${matchRound}): ${description}`
-          })
+      if (window.NexusAPI && window.NexusAPI.Disputes) {
+        const reason = `${reportType} (${matchRound}): ${description || 'No additional details provided.'}`;
+
+        window.NexusAPI.Disputes.create({
+          competitionId: compId || '1',
+          teamId: against || 'team-1',
+          targetType,
+          targetUserOrTeam: against || 'Opponent',
+          reason,
+          evidenceUrls: [],
         }).catch(() => {});
-      } catch(e) {}
+      }
 
       if (typeof showToast === 'function') {
         showToast('Dispute submitted', 'success');

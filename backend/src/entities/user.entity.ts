@@ -18,13 +18,13 @@ export class UserEntity {
   @Column({ unique: true })
   username: string;
 
-  @Column()
+  @Column({ default: '' })
   firstName: string;
 
-  @Column()
+  @Column({ default: '' })
   lastName: string;
 
-  @Column()
+  @Column({ name: 'password_hash', select: false, default: '' })
   passwordHash: string;
 
   @Column({ type: 'varchar', default: UserRole.PARTICIPANT })

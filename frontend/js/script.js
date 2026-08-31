@@ -563,12 +563,13 @@ function getTeamSidebar(activePage, activeTab, base = '../../') {
 }
 
 /**
- * Admin sidebar: Home, Disputes, Users, Profile
+ * Admin sidebar: Home, Disputes, Revenue, Users, Profile
  */
 function getAdminSidebar(activePage, base = '../../') {
   const items = [
     { id: 'home', label: 'Home', href: base + 'pages/admin/dashboard.html', icon: homeIcon() },
     { id: 'disputes', label: 'Disputes', href: base + 'pages/admin/disputes.html', icon: shieldIcon() },
+    { id: 'revenue', label: 'Revenue', href: base + 'pages/admin/revenue-transactions.html', icon: moneyIcon() },
     { id: 'users', label: 'Users', href: base + 'pages/admin/users.html', icon: usersIcon() },
     { id: 'profile', label: 'Profile', href: base + 'pages/admin/admin-profile.html', icon: profileIcon() },
   ];
@@ -671,6 +672,14 @@ function usersIcon() {
     <circle cx="7" cy="5" r="3"/>
     <path d="M20 15v-1a4 4 0 0 0-3-3.87"/>
     <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+  </svg>`;
+}
+
+function moneyIcon() {
+  return `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.67" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="2" y="5" width="16" height="10" rx="2"/>
+    <circle cx="10" cy="10" r="2"/>
+    <path d="M5 8v4M15 8v4"/>
   </svg>`;
 }
 

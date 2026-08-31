@@ -27,13 +27,12 @@ export class AuthService {
       throw new ConflictException('Username already taken');
     }
 
-    const passwordHash = await bcrypt.hash(password, 10);
-    const user = await this.userRepository.create(
+    const user = await this.userRepository.createWithPassword(
       email,
       username,
       firstName,
       lastName,
-      passwordHash,
+      password,
       role || UserRole.PARTICIPANT,
     );
 
@@ -53,7 +52,7 @@ export class AuthService {
   async login(loginDto: LoginDto): Promise<LoginResponseDto> {
     const { emailOrUsername, password } = loginDto;
 
-    const user = await this.userRepository.findByEmailOrUsername(emailOrUsername);
+    const user = await this.userRepository.findWithPasswordByEmailOrUsername(emailOrUsername);
     if (!user) {
       throw new NotFoundException('No user found with those credentials');
     }

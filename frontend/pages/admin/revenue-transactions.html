@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS - Admin Revenue Transactions</title>
+  <link rel="stylesheet" href="../../css/styles.css">
+  <link rel="stylesheet" href="../../css/pages/admin/dashboard.css">
+</head>
+<body>
+<div id="sidebar-mount"></div>
+<div class="page-with-sidebar">
+  <main class="admin-page">
+    <div class="admin-header-block">
+      <h1 class="admin-title-xl">Revenue Transactions</h1>
+      <p class="admin-subtitle-muted">Organizer platform fee payments to admin.</p>
+    </div>
+
+    <div class="dash-stats">
+      <div class="dash-stat-card">
+        <div class="dash-stat-icon dash-stat-icon-warn">Rs</div>
+        <div><div class="dash-stat-num" id="revenue-total">Rs.0</div><div class="dash-stat-lbl">Total Paid</div></div>
+      </div>
+      <div class="dash-stat-card">
+        <div class="dash-stat-icon dash-stat-icon-success">OK</div>
+        <div><div class="dash-stat-num" id="revenue-count">0</div><div class="dash-stat-lbl">Transactions</div></div>
+      </div>
+    </div>
+
+    <div class="table-container-card">
+      <div class="table-header-between">
+        <h2 class="table-title-md">Organizer Payments</h2>
+      </div>
+      <div class="table-scroll-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Competition</th>
+              <th>Organizer</th>
+              <th>Paid Amount</th>
+              <th>Entry Fee</th>
+              <th>Date</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="revenue-rows"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+  <div id="footer-mount"></div>
+</div>
+
+<script src="../../js/script.js"></script>
+<script src="../../js/pages/competitions-data.js"></script>
+<script>
+  initAdminSidebar('revenue', '../../');
+  initFooter('../../');
+
+  function money(value) {
+    return 'Rs.' + (Number(value) || 0).toLocaleString('en-IN');
+  }
+
+  function renderRevenue() {
+    const comps = window.NexusData ? window.NexusData.loadCompetitions() : [];
+    const rows = comps
+      .filter(comp => comp && comp.organizerPaid && Number(comp.platformFee || 0) > 0)
+      .map(comp => ({
+        name: comp.name || 'Competition',
+        organizer: comp.createdBy || comp.organizerId || 'Organizer',
+        amount: Number(comp.platformFee || 0),
+        entryFee: comp.entryFee || 'Free',
+        date: comp.createdAt ? new Date(comp.createdAt).toLocaleDateString() : '-',
+      }));
+
+    const total = rows.reduce((sum, row) => sum + row.amount, 0);
+    document.getElementById('revenue-total').textContent = money(total);
+    document.getElementById('revenue-count').textContent = rows.length;
+    document.getElementById('revenue-rows').innerHTML = rows.length ? rows.map(row => `
+      <tr>
+        <td>${row.name}</td>
+        <td>${row.organizer}</td>
+        <td class="text-accent-bold">${money(row.amount)}</td>
+        <td>${row.entryFee}</td>
+        <td>${row.date}</td>
+        <td><span class="status-pill approved">Paid</span></td>
+      </tr>
+    `).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:30px;">No organizer payments yet.</td></tr>';
+  }
+
+  renderRevenue();
+</script>
+</body>
+</html>

@@ -39,9 +39,22 @@ export interface ICompetition {
   status: string;
   createdBy: string;
   organizers: string[];
+  game?: string;
+  type?: string;
+  location?: string;
+  prizePool?: string;
+  prize?: number;
+  format?: string;
+  season?: string;
+  maxTeams?: number;
+  maxPlayersPerTeam?: number;
+  img?: string;
+  badge?: string;
+  badgeClass?: string;
   platformFee?: number;
   feeType?: string;
   entryFeeAmount?: number;
+  entryFee?: string;
   organizerPaid?: boolean;
   approvalStatus?: string;
   approvalUpdatedBy?: string;
@@ -81,6 +94,8 @@ export interface IDispute {
   resolvedBy?: string;
   banRequested?: boolean;
   banApplied?: boolean;
+  organizerWarnings?: number;
+  teamBanned?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -253,6 +253,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   renderCards();
+  if (window.NexusData && typeof window.NexusData.fetchCompetitionsFromAPI === 'function') {
+    Promise.race([
+      window.NexusData.fetchCompetitionsFromAPI(),
+      new Promise(resolve => setTimeout(resolve, 2000))
+    ]).then(() => renderCards()).catch(() => {});
+  }
   const modal = document.getElementById('comp-detail-modal');
   if (modal) {
     modal.addEventListener('click', (e) => {

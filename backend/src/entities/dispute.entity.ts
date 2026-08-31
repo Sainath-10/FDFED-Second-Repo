@@ -57,6 +57,12 @@ export class DisputeEntity {
   @Column({ default: false })
   banApplied: boolean;
 
+  @Column({ default: 0 })
+  organizerWarnings: number;
+
+  @Column({ default: false })
+  teamBanned: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 

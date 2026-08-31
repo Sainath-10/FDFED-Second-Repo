@@ -456,6 +456,27 @@
     saveCompetition(comp);
     setActiveTeamContext({ compId: comp.id, teamId: team.id });
 
+    if (window.NexusAPI && window.NexusAPI.Teams) {
+      window.NexusAPI.Teams.create({
+        name: team.name,
+        competitionId: comp.dbId || comp.id,
+        members: [session.username],
+      }).then(res => {
+        if (res && res.ok && res.data && res.data.id) {
+          const latest = getCompetitionById(comp.id);
+          if (latest) {
+            ensureCompetitionTeams(latest);
+            const storedTeam = latest.teams.find(t => t.id === team.id);
+            if (storedTeam) {
+              storedTeam.dbId = res.data.id;
+              storedTeam.backendSynced = true;
+              saveCompetition(latest);
+            }
+          }
+        }
+      }).catch(() => {});
+    }
+
     // Notify organiser that a new team registration needs approval.
     const organiserUsername = String(comp.createdBy || comp.organizerId || '').trim();
     if (organiserUsername) {

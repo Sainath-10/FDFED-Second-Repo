@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS - Organizer Revenue</title>
+  <link rel="stylesheet" href="../css/styles.css">
+  <link rel="stylesheet" href="../css/pages/admin/dashboard.css">
+  <style>
+    .rev-page { padding: 40px 60px 80px 100px; min-height: 100vh; }
+    .rev-header { margin-bottom: 28px; }
+    .rev-title { font-family: var(--font-display); font-size: 34px; text-transform: uppercase; color: var(--text-white); }
+    .rev-sub { color: var(--text-muted); margin-top: 6px; font-size: 14px; }
+    .rev-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 28px; }
+    .rev-card { background: var(--bg-card); border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; padding: 20px; }
+    .rev-num { font-family: var(--font-display); font-size: 26px; color: var(--accent); }
+    .rev-label { margin-top: 4px; color: var(--text-muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+    @media (max-width: 800px) { .rev-page { padding: 28px 18px; } .rev-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<div id="sidebar-mount"></div>
+<div class="page-with-sidebar">
+  <main class="rev-page">
+    <a href="admin/manage-competition.html" class="btn-table-secondary" style="margin-bottom:24px;">Back</a>
+    <div class="rev-header">
+      <h1 class="rev-title" id="rev-title">Revenue</h1>
+      <p class="rev-sub" id="rev-sub">Teams and players who paid entry fees.</p>
+    </div>
+
+    <div class="rev-grid">
+      <div class="rev-card"><div class="rev-num" id="rev-total">Rs.0</div><div class="rev-label">Total Collected</div></div>
+      <div class="rev-card"><div class="rev-num" id="rev-paid">0</div><div class="rev-label">Paid Entries</div></div>
+      <div class="rev-card"><div class="rev-num" id="rev-fee">Free</div><div class="rev-label">Entry Fee</div></div>
+    </div>
+
+    <div class="table-container-card">
+      <div class="table-header-between">
+        <h2 class="table-title-md">Payments</h2>
+      </div>
+      <div class="table-scroll-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Type</th>
+              <th>Team</th>
+              <th>Amount</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="rev-rows"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+  <div id="footer-mount"></div>
+</div>
+
+<script src="../js/script.js"></script>
+<script src="../js/pages/competitions-data.js"></script>
+<script>
+  initSidebar('activity', '../');
+  initFooter('../');
+
+  function money(value) {
+    return 'Rs.' + (Number(value) || 0).toLocaleString('en-IN');
+  }
+
+  function paymentStatusLabel(item) {
+    return ((item && item.paymentStatus === 'paid') || Number(item && item.feePaid || 0) > 0) ? 'paid' : 'not_paid';
+  }
+
+  function renderOrganizerRevenue() {
+    const compId = new URLSearchParams(location.search).get('id') || sessionStorage.getItem('last_comp_id');
+    const comp = window.NexusData && compId ? window.NexusData.getCompetitionById(compId) : null;
+    const rows = [];
+
+    if (comp && Array.isArray(comp.teams)) {
+      comp.teams.forEach(team => {
+        if ((comp.feeType || 'free') === 'per_team') {
+          rows.push({ name: team.name || 'Team', type: 'Team', team: team.name || '-', amount: Number(team.feePaid || comp.entryFeeAmount || 0), paymentStatus: paymentStatusLabel(team) });
+        }
+        const joinRequests = team.joinRequests || [];
+        const memberNames = new Set((team.members || []).map(member => String(member.username || '').toLowerCase()));
+        (team.members || []).forEach(member => {
+          if ((comp.feeType || 'free') === 'per_player') {
+            const requestPayment = joinRequests.find(req => String(req.username || '').toLowerCase() === String(member.username || '').toLowerCase());
+            const paymentSource = requestPayment || member;
+            rows.push({ name: member.username || member.displayName || 'Player', type: 'Player', team: team.name || '-', amount: Number(paymentSource.feePaid || comp.entryFeeAmount || 0), paymentStatus: paymentStatusLabel(paymentSource) });
+          }
+        });
+        joinRequests.forEach(req => {
+          if ((comp.feeType || 'free') === 'per_player' && !memberNames.has(String(req.username || '').toLowerCase())) {
+            rows.push({ name: req.username || req.displayName || 'Player', type: 'Player', team: team.name || '-', amount: Number(req.feePaid || comp.entryFeeAmount || 0), paymentStatus: paymentStatusLabel(req) });
+          }
+        });
+      });
+    }
+
+    const total = rows.reduce((sum, row) => sum + (row.paymentStatus === 'paid' ? row.amount : 0), 0);
+    const paidCount = rows.filter(row => row.paymentStatus === 'paid').length;
+    document.getElementById('rev-title').textContent = comp ? comp.name + ' Revenue' : 'Revenue';
+    document.getElementById('rev-total').textContent = money(total);
+    document.getElementById('rev-paid').textContent = paidCount;
+    document.getElementById('rev-fee').textContent = comp ? (comp.entryFee || 'Free') : 'Free';
+    document.getElementById('rev-rows').innerHTML = rows.length ? rows.map(row => `
+      <tr>
+        <td>${row.name}</td>
+        <td>${row.type}</td>
+        <td>${row.team}</td>
+        <td class="text-accent-bold">${money(row.amount)}</td>
+        <td><span class="status-pill ${row.paymentStatus === 'paid' ? 'approved' : 'pending'}">${row.paymentStatus === 'paid' ? 'PAID' : 'NOT PAID'}</span></td>
+      </tr>
+    `).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:30px;">No team or player payments yet.</td></tr>';
+  }
+
+  renderOrganizerRevenue();
+</script>
+</body>
+</html>

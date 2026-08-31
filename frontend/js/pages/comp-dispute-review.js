@@ -1,7 +1,7 @@
 /* ============================================================
    NEXUS ESPORTS — Organizer Dispute Review JS
    Handles open_organizer disputes. Organizer can:
-     - Give Warning (auto-escalate at 2 warnings)
+     - Give Warning (team disputes ban after 3 organizer warnings)
      - Resolve with notes
      - Escalate to Admin (with optional ban request)
    ============================================================ */
@@ -12,6 +12,35 @@ let activeDisputeId = null;
 let disFilter = 'all';
 let disSearch = '';
 
+function isTeamDispute(d) {
+  return d && (d.targetType === 'team' || d.targetType === 'opponent_team');
+}
+
+function loadOrganizerDisputes(compId) {
+  const disputes = window.NexusData.loadDisputes();
+  let changed = false;
+
+  disputes.forEach(d => {
+    if (d.competitionId === compId && isTeamDispute(d) && d.status === 'escalated_to_admin') {
+      d.status = 'open_organizer';
+      d.escalated = false;
+      d.superAdminState = '';
+      d.escalatedReason = '';
+      d.escalationReason = '';
+      changed = true;
+    }
+  });
+
+  if (changed && typeof window.NexusData.saveDisputes === 'function') {
+    window.NexusData.saveDisputes(disputes);
+  }
+
+  return disputes.filter(d =>
+    d.competitionId === compId &&
+    (d.status === 'open_organizer' || d.status === 'under_review' || d.status === 'resolved' || d.status === 'escalated_to_admin')
+  );
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   const params = new URLSearchParams(window.location.search);
   const id = params.get('id');
@@ -20,10 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
   comp = window.NexusData.getCompetitionById(id) || { id, name: 'Competition', game: '—', disputes: [] };
 
   // Show only organizer-queue disputes
-  allDisputes = window.NexusData.loadDisputes().filter(d =>
-    d.competitionId === id &&
-    (d.status === 'open_organizer' || d.status === 'under_review' || d.status === 'resolved' || d.status === 'escalated_to_admin')
-  );
+  allDisputes = loadOrganizerDisputes(id);
 
   const backBtn = document.getElementById('btn-back-to-comp');
   if (backBtn) backBtn.href = `competition-detail.html?id=${id}`;
@@ -132,10 +158,19 @@ function openDispute(id) {
     : '<span style="color:#64748b;font-size:13px;">No evidence provided</span>';
 
   const warnCount = d.organizerWarnings || 0;
-  const warnLabel = warnCount > 0 ? `<div style="margin-top:8px;background:rgba(251,146,60,0.1);border:1px solid #fb923c44;border-radius:8px;padding:10px;">
+  const teamDispute = isTeamDispute(d);
+  const maxWarnings = teamDispute ? 3 : 2;
+  let warnLabel = warnCount > 0 ? `<div style="margin-top:8px;background:rgba(251,146,60,0.1);border:1px solid #fb923c44;border-radius:8px;padding:10px;">
     <span style="color:#fb923c;font-size:13px;font-weight:600;">⚠ Organizer Warnings Issued: ${warnCount}/2</span>
     ${warnCount >= 2 ? '<span style="color:#f87171;font-size:12px;margin-left:8px;">Auto-escalated to Admin!</span>' : ''}
   </div>` : '';
+  if (warnCount > 0 && teamDispute) {
+    const hint = warnCount >= 3 ? 'Team banned from this tournament.' : (warnCount === 2 ? 'Next warning bans this team from the tournament.' : 'Team dispute remains with the organizer.');
+    warnLabel = `<div style="margin-top:8px;background:rgba(251,146,60,0.1);border:1px solid #fb923c44;border-radius:8px;padding:10px;">
+      <span style="color:#fb923c;font-size:13px;font-weight:600;">Organizer Warnings Issued: ${warnCount}/3</span>
+      <span style="color:#f87171;font-size:12px;margin-left:8px;">${hint}</span>
+    </div>`;
+  }
 
   const actionsHtml = isPending ? `
     <div style="margin-top:28px;">
@@ -154,13 +189,13 @@ function openDispute(id) {
           ✔ Resolve Dispute
         </button>
         <button onclick="showEscalatePanel('${d.id}')"
-          style="flex:1;min-width:160px;padding:12px;background:none;border:1px solid #fb923c;color:#fb923c;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;">
+          style="${teamDispute ? 'display:none;' : ''}flex:1;min-width:160px;padding:12px;background:none;border:1px solid #fb923c;color:#fb923c;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;">
           🔺 Escalate to Admin
         </button>
       </div>
 
       <!-- Escalate sub-panel (hidden by default) -->
-      <div id="escalate-panel-${d.id}" style="display:none;margin-top:16px;background:#1e293b;border:1px solid #fb923c33;border-radius:10px;padding:16px;">
+      <div id="escalate-panel-${d.id}" style="display:none;${teamDispute ? 'visibility:hidden;' : ''}margin-top:16px;background:#1e293b;border:1px solid #fb923c33;border-radius:10px;padding:16px;">
         <p style="margin:0 0 12px;color:#fb923c;font-size:13px;font-weight:600;">Escalation to Platform Admin</p>
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:14px;">
           <input type="checkbox" id="ban-request-${d.id}" style="width:16px;height:16px;accent-color:#f87171;">
@@ -224,6 +259,11 @@ function openDispute(id) {
 
       ${actionsHtml}
     </div>`;
+
+  if (teamDispute) {
+    const warningButton = panel.querySelector(`button[onclick="issueWarning('${d.id}')"]`);
+    if (warningButton) warningButton.textContent = `Give Warning (${warnCount}/3)`;
+  }
 }
 
 function issueWarning(id) {
@@ -239,8 +279,13 @@ function issueWarning(id) {
     return;
   }
 
-  if (result.autoEscalated) {
+  if (result.autoBanned) {
+    if (typeof showToast === 'function') showToast(`Team "${result.dispute.targetUserOrTeam}" has been banned from this tournament after 3 warnings.`, 'error');
+  } else if (result.autoEscalated) {
     if (typeof showToast === 'function') showToast(`⚠ Warning #${result.warningCount} issued. Dispute auto-escalated to Platform Admin with ban request!`, 'warning');
+  } else if (isTeamDispute(result.dispute)) {
+    const nextText = result.warningCount >= 2 ? 'Next warning will ban this team from the tournament.' : 'Team dispute remains with the organizer.';
+    if (typeof showToast === 'function') showToast(`Warning #${result.warningCount}/3 issued to "${result.dispute.targetUserOrTeam}". ${nextText}`);
   } else {
     if (typeof showToast === 'function') showToast(`⚠ Warning #${result.warningCount}/2 issued to "${result.dispute.targetUserOrTeam}". One more warning will auto-escalate to Admin.`);
   }
@@ -248,10 +293,7 @@ function issueWarning(id) {
   // Refresh data
   const params = new URLSearchParams(window.location.search);
   const compId = params.get('id');
-  allDisputes = window.NexusData.loadDisputes().filter(d =>
-    d.competitionId === compId &&
-    (d.status === 'open_organizer' || d.status === 'under_review' || d.status === 'resolved' || d.status === 'escalated_to_admin')
-  );
+  allDisputes = loadOrganizerDisputes(compId);
   renderStats();
   openDispute(id);
 }

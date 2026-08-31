@@ -3,7 +3,6 @@
    Shows open_admin and escalated_to_admin disputes.
    Admin can:
      - Give Warning (auto-ban at 3 warnings)
-     - Ban Team from Tournament  (team disputes)
      - Revoke Access & Ban Player (player disputes)
      - Resolve
    ============================================================ */
@@ -22,11 +21,14 @@ document.addEventListener('DOMContentLoaded', () => {
 function refreshQueue() {
   if (!window.NexusData) return;
   const all = window.NexusData.loadDisputes();
-  // Admin sees open_admin + escalated_to_admin + resolved (for history)
+  const isTeamDispute = d => d && (d.targetType === 'team' || d.targetType === 'opponent_team');
+  // Admin sees only disputes that belong to the admin queue. Team disputes stay with organizers.
   adminDisputes = all.filter(d =>
-    d.status === 'open_admin' ||
-    d.status === 'escalated_to_admin' ||
-    d.status === 'resolved'
+    !isTeamDispute(d) && (
+      d.status === 'open_admin' ||
+      d.status === 'escalated_to_admin' ||
+      d.status === 'resolved'
+    )
   );
   renderStats();
   renderDisputes();

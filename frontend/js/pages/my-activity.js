@@ -6,6 +6,12 @@
 document.addEventListener('DOMContentLoaded', () => {
   renderAllSections();
   setupSearch();
+  if (window.NexusData && typeof window.NexusData.fetchCompetitionsFromAPI === 'function') {
+    Promise.race([
+      window.NexusData.fetchCompetitionsFromAPI(),
+      new Promise(resolve => setTimeout(resolve, 2000))
+    ]).then(() => renderAllSections()).catch(() => {});
+  }
 });
 
 const ICONS = {

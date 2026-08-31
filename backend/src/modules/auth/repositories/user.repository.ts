@@ -5,6 +5,24 @@ import * as bcrypt from 'bcrypt';
 import { UserEntity } from '../../../entities/user.entity';
 import { UserRole } from '../../../common/interfaces';
 
+export type UserWithPasswordHash = UserEntity & { passwordHash: string };
+
+export interface RawUserRow {
+  id: string;
+  email: string;
+  username: string;
+  firstName: string;
+  lastName: string;
+  password_hash: string;
+  role: UserRole;
+  banned: boolean;
+  warningCount: number;
+  profilePicUrl?: string;
+  bio?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 @Injectable()
 export class UserRepository {
   constructor(
@@ -35,6 +53,18 @@ export class UserRepository {
     return this.repo.save(user);
   }
 
+  async createWithPassword(
+    email: string,
+    username: string,
+    firstName: string,
+    lastName: string,
+    password: string,
+    role: UserRole = UserRole.PARTICIPANT,
+  ): Promise<UserEntity> {
+    const passwordHash = await bcrypt.hash(password, 10);
+    return this.create(email, username, firstName, lastName, passwordHash, role);
+  }
+
   // ─── Read ──────────────────────────────────────────────────────────────────
 
   async findById(id: string): Promise<UserEntity | null> {
@@ -53,6 +83,26 @@ export class UserRepository {
     return this.repo.findOne({
       where: [{ email: emailOrUsername }, { username: emailOrUsername }],
     });
+  }
+
+  async findWithPasswordByEmailOrUsername(emailOrUsername: string): Promise<UserWithPasswordHash | null> {
+    return this.repo
+      .createQueryBuilder('user')
+      .addSelect('user.passwordHash')
+      .where('user.email = :emailOrUsername OR user.username = :emailOrUsername', { emailOrUsername })
+      .getOne() as Promise<UserWithPasswordHash | null>;
+  }
+
+  async findRawByEmailOrUsername(emailOrUsername: string): Promise<RawUserRow | null> {
+    const rows = await this.repo.query(
+      `SELECT id, email, username, "firstName", "lastName", password_hash, role, banned,
+              "warningCount", "profilePicUrl", bio, "createdAt", "updatedAt"
+       FROM users
+       WHERE email = $1 OR username = $1
+       LIMIT 1`,
+      [emailOrUsername],
+    );
+    return rows[0] ?? null;
   }
 
   async findAll(): Promise<UserEntity[]> {
@@ -78,6 +128,42 @@ export class UserRepository {
 
   async updatePassword(id: string, newPasswordHash: string): Promise<void> {
     await this.repo.update(id, { passwordHash: newPasswordHash });
+  }
+
+  async ensureDemoAccount(account: {
+    email: string;
+    username: string;
+    firstName: string;
+    lastName: string;
+    password: string;
+    role: UserRole;
+  }): Promise<void> {
+    const existing = await this.findWithPasswordByEmailOrUsername(account.email);
+    if (!existing) {
+      await this.createWithPassword(
+        account.email,
+        account.username,
+        account.firstName,
+        account.lastName,
+        account.password,
+        account.role,
+      );
+      console.log(`Seeded user: ${account.email}`);
+      return;
+    }
+
+    const updates: Partial<UserEntity> = {
+      username: existing.username || account.username,
+      firstName: existing.firstName || account.firstName,
+      lastName: existing.lastName || account.lastName,
+      role: account.role,
+    };
+
+    if (!existing.passwordHash) {
+      updates.passwordHash = await bcrypt.hash(account.password, 10);
+    }
+
+    await this.repo.update(existing.id, updates);
   }
 
   async banUser(usernameOrEmail: string): Promise<boolean> {
@@ -126,12 +212,7 @@ export class UserRepository {
     ];
 
     for (const acc of demoAccounts) {
-      const exists = await this.emailExists(acc.email);
-      if (!exists) {
-        const hash = await bcrypt.hash(acc.password, 10);
-        await this.create(acc.email, acc.username, acc.firstName, acc.lastName, hash, acc.role);
-        console.log(`✓ Seeded user: ${acc.email}`);
-      }
+      await this.ensureDemoAccount(acc);
     }
   }
 }

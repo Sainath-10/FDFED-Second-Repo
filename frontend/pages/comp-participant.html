@@ -180,7 +180,15 @@
         const comps = JSON.parse(localStorage.getItem('nexus_competitions') || '[]');
         const comp = comps.find(c => c.id === compId);
         if (comp && Array.isArray(comp.teams)) {
-          const myTeam = comp.teams.find(t => Array.isArray(t.players) && t.players.some(pl => (pl.username || pl || '').toLowerCase() === currentUsername) || (t.leaderId && t.leaderId.toLowerCase() === currentUsername));
+          const userMatches = value => String((typeof value === 'string' ? value : (value && (value.username || value.name || value.id))) || '').toLowerCase() === currentUsername;
+          const myTeam = comp.teams.find(t =>
+            userMatches(t.createdBy) ||
+            userMatches(t.leaderId) ||
+            userMatches(t.leaderUsername) ||
+            userMatches(t.captain) ||
+            (Array.isArray(t.members) && t.members.some(userMatches)) ||
+            (Array.isArray(t.players) && t.players.some(userMatches))
+          );
           if (myTeam) currentTeamName = (myTeam.name || '').toLowerCase();
         }
       } catch(e) {}
@@ -212,7 +220,11 @@
         label.textContent = 'Tournament Organizer *';
         hint.textContent = '📢 Dispute against Organizer is routed directly to Platform Admin.';
         hint.style.color = '#fb923c'; hint.style.display = 'block';
-        targetSelect.innerHTML = `<option value="${p.organizer}" selected>${p.organizer} (Organizer)</option>`;
+        if ((p.organizer || '').toLowerCase() === currentUsername) {
+          targetSelect.innerHTML = '<option value="">You cannot dispute yourself as organizer</option>';
+        } else {
+          targetSelect.innerHTML = `<option value="${p.organizer}" selected>${p.organizer} (Organizer)</option>`;
+        }
       }
     }
 
@@ -245,7 +257,7 @@
         const sessionRaw = localStorage.getItem('nexus.auth.session');
         let session = null;
         try { if (sessionRaw) session = JSON.parse(sessionRaw); } catch(e) {}
-        window.NexusData.addDispute({
+        const result = window.NexusData.addDispute({
           competitionId: compId,
           reportedBy: session?.username || 'anonymous',
           targetType,
@@ -257,6 +269,10 @@
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         });
+        if (result && result.ok === false) {
+          if (typeof showToast === 'function') showToast(result.error || 'Dispute blocked.', 'error');
+          return;
+        }
       }
 
       closeDisputeModal();

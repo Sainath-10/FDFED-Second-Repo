@@ -61,6 +61,13 @@ export class OrganizerReviewDisputeDto {
 }
 
 // ─── Admin Resolves Dispute ────────────────────────────────────────────────────
+export class OrganizerWarnDisputeDto {
+  @ApiProperty({ description: 'Reason for issuing a warning to the team', example: 'Evidence confirmed. First warning issued.' })
+  @IsString()
+  @MinLength(5)
+  notes: string;
+}
+
 export class AdminResolveDisputeDto {
   @ApiProperty({ enum: ['resolve', 'resolve_and_ban'], description: 'Admin resolution action' })
   @IsEnum(['resolve', 'resolve_and_ban'])

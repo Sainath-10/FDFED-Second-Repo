@@ -44,6 +44,9 @@ export class CompetitionEntity {
   @Column({ nullable: true })
   prizePool: string;
 
+  @Column({ nullable: true, type: 'float' })
+  prize: number;
+
   @Column({ nullable: true })
   format: string;
 
@@ -52,6 +55,18 @@ export class CompetitionEntity {
 
   @Column({ default: 0 })
   maxTeams: number;
+
+  @Column({ default: 0 })
+  maxPlayersPerTeam: number;
+
+  @Column({ nullable: true, type: 'text' })
+  img: string;
+
+  @Column({ nullable: true })
+  badge: string;
+
+  @Column({ nullable: true })
+  badgeClass: string;
 
   @Column({ nullable: true })
   bannerColor: string;
@@ -73,6 +88,12 @@ export class CompetitionEntity {
 
   @Column({ nullable: true, type: 'float' })
   entryFeeAmount: number;
+
+  @Column({ nullable: true })
+  entryFee: string;
+
+  @Column({ default: false })
+  organizerPaid: boolean;
 
   @CreateDateColumn()
   createdAt: Date;
