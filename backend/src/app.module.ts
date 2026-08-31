@@ -12,6 +12,8 @@ import { UploadModule } from './modules/upload/upload.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { PoliciesModule } from './modules/policies/policies.module';
 import { MatchesModule } from './modules/matches/matches.module';
+import { RevenueModule } from './modules/revenue/revenue.module';
+import { AdminModule } from './modules/admin/admin.module';
 import { SeederService } from './database/seeder.service';
 
 import { SecurityMiddleware, RateLimiterMiddleware, LoggingMiddleware } from './common/middleware';
@@ -25,6 +27,9 @@ import { NotificationEntity } from './entities/notification.entity';
 import { TeamJoinRequestEntity } from './entities/team-join-request.entity';
 import { TeamInviteEntity } from './entities/team-invite.entity';
 import { PlatformPolicyEntity } from './entities/platform-policy.entity';
+import { RevenueTransactionEntity } from './entities/revenue-transaction.entity';
+import { RevenueConfigEntity } from './entities/revenue-config.entity';
+import { AdminActivityLogEntity } from './entities/admin-activity-log.entity';
 
 @Module({
   imports: [
@@ -51,15 +56,18 @@ import { PlatformPolicyEntity } from './entities/platform-policy.entity';
         return {
           ...connection,
           entities: [
-          UserEntity,
-          CompetitionEntity,
-          TeamEntity,
-          MatchEntity,
-          DisputeEntity,
-          NotificationEntity,
-          TeamJoinRequestEntity,
-          TeamInviteEntity,
-          PlatformPolicyEntity,
+            UserEntity,
+            CompetitionEntity,
+            TeamEntity,
+            MatchEntity,
+            DisputeEntity,
+            NotificationEntity,
+            TeamJoinRequestEntity,
+            TeamInviteEntity,
+            PlatformPolicyEntity,
+            RevenueTransactionEntity,
+            RevenueConfigEntity,
+            AdminActivityLogEntity,
           ],
           synchronize: true, // Auto-create tables in dev. Use migrations in production.
           logging: config.get<string>('NODE_ENV') === 'development' ? ['error', 'warn'] : false,
@@ -89,6 +97,8 @@ import { PlatformPolicyEntity } from './entities/platform-policy.entity';
     NotificationsModule,
     PoliciesModule,
     MatchesModule,
+    RevenueModule,
+    AdminModule,
   ],
   providers: [SeederService],
 })

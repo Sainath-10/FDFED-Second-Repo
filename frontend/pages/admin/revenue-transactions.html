@@ -252,6 +252,35 @@
       if (updatedStorage && window.NexusData && typeof window.NexusData.saveCompetitions === 'function') {
         window.NexusData.saveCompetitions(comps);
       }
+
+      // Sync backend transactions from PostgreSQL
+      try {
+        fetch('http://localhost:3001/revenue/transactions?limit=100')
+          .then(res => res.ok ? res.json() : null)
+          .then(data => {
+            if (data && Array.isArray(data.items) && data.items.length > 0) {
+              const apiTxList = data.items.map((tx, idx) => ({
+                id: tx.id || ('api_tx_' + idx),
+                name: tx.competitionName || 'Tournament',
+                organizer: tx.organizerName || 'Nexus Admin',
+                amount: Number(tx.platformFee || tx.grossAmount || 50),
+                entryFee: '₹' + (tx.grossAmount || 50),
+                dateStr: formatDate(tx.date || tx.createdAt),
+                dateRaw: getDateObj(tx.date || tx.createdAt),
+                status: (tx.status || 'CONFIRMED').toUpperCase()
+              }));
+
+              // Deduplicate by name & organizer
+              const existingNames = new Set(allTransactions.map(t => t.name.toLowerCase()));
+              apiTxList.forEach(apiTx => {
+                if (!existingNames.has(apiTx.name.toLowerCase())) {
+                  allTransactions.push(apiTx);
+                }
+              });
+              renderTable();
+            }
+          }).catch(() => {});
+      } catch (e) {}
     }
 
     function isWithinDateRange(dateObj, rangeKey) {

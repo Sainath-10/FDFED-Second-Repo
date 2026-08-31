@@ -1228,6 +1228,22 @@ function getRevenueConfig() {
       };
     }
   } catch (e) {}
+
+  // Async background fetch to sync from backend DB
+  try {
+    fetch('http://localhost:3001/revenue/config')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data && typeof data.percentage === 'number') {
+          localStorage.setItem(REVENUE_CONFIG_KEY, JSON.stringify({
+            percentage: data.percentage,
+            minCost: data.minCost,
+            updatedAt: data.updatedAt
+          }));
+        }
+      }).catch(() => {});
+  } catch(e) {}
+
   return { percentage: 7, minCost: 50, updatedAt: null };
 }
 
@@ -1249,6 +1265,16 @@ function saveRevenueConfig(config) {
   };
 
   localStorage.setItem(REVENUE_CONFIG_KEY, JSON.stringify(cleanConfig));
+
+  // Sync to Backend Database
+  try {
+    fetch('http://localhost:3001/revenue/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ percentage, minCost })
+    }).catch(() => {});
+  } catch (e) {}
+
   return { ok: true, config: cleanConfig };
 }
 
