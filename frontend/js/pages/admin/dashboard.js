@@ -44,11 +44,21 @@ function formatStatusBadge(status) {
 function renderCards() {
   const wrap = document.getElementById('tournament-cards');
   const empty = document.getElementById('admin-empty');
-  if (!wrap || !window.NexusData) return;
+  if (!wrap) return;
 
-  const comps = window.NexusData.loadCompetitions().filter(comp => {
+  // Merge local + API data (called from loadFromAPIAndRender)
+  const allLocalComps = window.NexusData ? window.NexusData.loadCompetitions().filter(comp => {
     return normalize(comp.role) === 'organizer' || !!comp.createdBy || !!comp.organizerId;
-  });
+  }) : [];
+
+  const comps = window._adminApiComps
+    ? (() => {
+        const apiNames = new Set(window._adminApiComps.map(c => normalize(c.name)));
+        const localOnly = allLocalComps.filter(c => !apiNames.has(normalize(c.name)));
+        return [...window._adminApiComps, ...localOnly];
+      })()
+    : allLocalComps;
+
   updateStats(comps);
 
   const filtered = comps.filter(comp => {
@@ -160,6 +170,55 @@ function closeCompDetails() {
   if (modal) modal.style.display = 'none';
 }
 
+
+window.filterCards = filterCards;
+window.setCompFilter = setCompFilter;
+window.setApprovalFilter = setCompFilter;
+window.openCompDetails = openCompDetails;
+window.closeCompDetails = closeCompDetails;
+
+
+// ── Load from Backend API, then render ──────────────────────────
+async function loadFromAPIAndRender() {
+  if (window.NexusAPI && window.NexusAPI.Competitions) {
+    try {
+      const res = await window.NexusAPI.Competitions.getAll();
+      if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
+        // Map backend shape to NexusData shape
+        window._adminApiComps = res.data.map(c => ({
+          id: c.id,
+          name: c.name,
+          description: c.description,
+          game: c.game || 'Esports',
+          type: c.type || 'tournament',
+          status: c.status === 'active' ? 'ongoing' : c.status,
+          startDate: c.startDate,
+          endDate: c.endDate,
+          createdBy: c.createdBy,
+          organizerId: c.createdBy,
+          organizers: c.organizers || [],
+          prizePool: c.prizePool || '—',
+          entryFee: c.entryFee || 'Free',
+          participants: c.participants || 0,
+          dates: c.startDate
+            ? `${new Date(c.startDate).toLocaleDateString('en-IN')} to ${new Date(c.endDate).toLocaleDateString('en-IN')}`
+            : 'TBD',
+          location: 'Online',
+        }));
+        renderCards();
+      } else {
+        // API returned empty or error — just use local
+        renderCards();
+      }
+    } catch (err) {
+      console.warn('[NexusAPI] Admin dashboard - could not load competitions from API:', err.message);
+      renderCards();
+    }
+  } else {
+    renderCards();
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   const params = new URLSearchParams(window.location.search);
   const filter = normalize(params.get('filter'));
@@ -169,7 +228,8 @@ document.addEventListener('DOMContentLoaded', () => {
       tab.classList.toggle('active', tab.getAttribute('data-filter') === filter);
     });
   }
-  renderCards();
+  // Load from API first, then render
+  loadFromAPIAndRender();
   const modal = document.getElementById('comp-detail-modal');
   if (modal) {
     modal.addEventListener('click', (e) => {
@@ -177,9 +237,3 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 });
-
-window.filterCards = filterCards;
-window.setCompFilter = setCompFilter;
-window.setApprovalFilter = setCompFilter;
-window.openCompDetails = openCompDetails;
-window.closeCompDetails = closeCompDetails;

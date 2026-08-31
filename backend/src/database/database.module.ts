@@ -1,4 +1,5 @@
 import { Module, Global, OnApplicationBootstrap } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
 import { Pool } from 'pg';
 
 export const PG_POOL = 'PG_POOL';
@@ -14,6 +15,7 @@ const schema = `
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email VARCHAR(255) UNIQUE NOT NULL,
     username VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255),
     first_name VARCHAR(255) NOT NULL,
     last_name VARCHAR(255) NOT NULL,
     role VARCHAR(50) NOT NULL DEFAULT 'participant',
@@ -108,19 +110,42 @@ export class DatabaseModule implements OnApplicationBootstrap {
         ALTER TABLE disputes ADD COLUMN IF NOT EXISTS target_id VARCHAR(255);
         ALTER TABLE disputes ADD COLUMN IF NOT EXISTS title VARCHAR(500);
         ALTER TABLE disputes ALTER COLUMN team_id DROP NOT NULL;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255);
       `).catch(() => {});
 
       // Seed demo accounts if table is empty
       const { rows } = await pool.query('SELECT COUNT(*) FROM users');
       if (parseInt(rows[0].count, 10) === 0) {
-        await pool.query(`
-          INSERT INTO users (email, username, first_name, last_name, role) VALUES
-            ('regular@nexus.gg',    'regular@nexus.gg',    'Regular', 'User',  'participant'),
-            ('admin@nexus.gg',      'admin@nexus.gg',      'Admin',   'User',  'admin'),
-            ('superadmin@nexus.gg', 'superadmin@nexus.gg', 'Super',   'Admin', 'super_admin')
-          ON CONFLICT (email) DO NOTHING;
-        `);
-        console.log('✓ Demo accounts seeded into PostgreSQL');
+        const regularHash = await bcrypt.hash('regular123', 10);
+        const adminHash = await bcrypt.hash('admin123', 10);
+        const superHash = await bcrypt.hash('super123', 10);
+        await pool.query(
+          `INSERT INTO users (email, username, password_hash, first_name, last_name, role) VALUES
+            ($1, $1, $2, 'Regular', 'User',  'participant'),
+            ($3, $3, $4, 'Admin',   'User',  'admin'),
+            ($5, $5, $6, 'Super',   'Admin', 'super_admin')
+          ON CONFLICT (email) DO NOTHING`,
+          ['regular@nexus.gg', regularHash, 'admin@nexus.gg', adminHash, 'superadmin@nexus.gg', superHash],
+        );
+        console.log('✓ Demo accounts seeded into PostgreSQL (with bcrypt passwords)');
+      } else {
+        // Patch existing demo accounts that may not have password_hash set
+        const regularHash = await bcrypt.hash('regular123', 10);
+        const adminHash = await bcrypt.hash('admin123', 10);
+        const superHash = await bcrypt.hash('super123', 10);
+        await pool.query(
+          `UPDATE users SET password_hash = $1 WHERE email = 'regular@nexus.gg' AND (password_hash IS NULL OR password_hash = '')`,
+          [regularHash],
+        ).catch(() => {});
+        await pool.query(
+          `UPDATE users SET password_hash = $1 WHERE email = 'admin@nexus.gg' AND (password_hash IS NULL OR password_hash = '')`,
+          [adminHash],
+        ).catch(() => {});
+        await pool.query(
+          `UPDATE users SET password_hash = $1 WHERE email = 'superadmin@nexus.gg' AND (password_hash IS NULL OR password_hash = '')`,
+          [superHash],
+        ).catch(() => {});
+        console.log('✓ Demo account passwords patched if missing');
       }
     } catch (err) {
       console.error('✗ Failed to initialize PostgreSQL schema:', err.message);

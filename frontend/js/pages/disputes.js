@@ -55,7 +55,78 @@ function renderDisputes() {
   container.innerHTML = dynamicHtml + staticHtml;
 }
 
-renderDisputes();
+// Load disputes: try backend API first, then fallback to localStorage
+async function loadDisputes() {
+  if (window.NexusAPI && window.NexusAPI.Disputes) {
+    try {
+      const res = await window.NexusAPI.Disputes.getAll();
+      if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
+        // Backend data: render it merged with local
+        const apiDisputes = res.data.map(d => ({
+          id: d.id,
+          title: d.title || `Dispute #${d.id.slice(0, 6)}`,
+          desc: d.description,
+          description: d.description,
+          status: d.status,
+          time: new Date(d.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+          reporter: d.reportedBy || 'Participant',
+          submitter: d.reportedBy || 'Participant',
+          organizers: d.organizers || [],
+          matchName: d.competitionName || 'Competition',
+        }));
+
+        // Merge: API disputes first, then local disputes not already in API (by ID)
+        const apiIds = new Set(apiDisputes.map(d => d.id));
+        let localDisputes = [];
+        try { localDisputes = JSON.parse(localStorage.getItem(DISPUTE_STORE_KEY) || '[]'); } catch(e) {}
+        const localOnly = localDisputes.filter(d => !apiIds.has(d.id));
+
+        // Temporarily override disputes list and render
+        const merged = [...apiDisputes, ...localOnly];
+        const container = document.getElementById('disputes-list');
+        if (container) {
+          const staticHtml = container.innerHTML;
+          const dynamicHtml = merged.map(d => {
+            const statusClass = d.status === 'resolved' ? 'approved' : (d.status === 'investigating' ? 'pending' : 'pending');
+            const statusLabel = d.status === 'resolved' ? 'Resolved' : (d.status === 'under_review' ? 'Under Review' : (d.status === 'escalated' ? 'Escalated' : 'Pending Review'));
+            return `
+              <div class="dispute-card" data-status="${d.status || 'pending'}">
+                <div class="dispute-header">
+                  <span class="dispute-id">#${d.id.slice(0, 8)}</span>
+                  <span class="status-pill ${statusClass}">${statusLabel}</span>
+                </div>
+                <div class="dispute-title">${d.title}</div>
+                <div class="dispute-desc">${d.desc || d.description || ''}</div>
+                <div class="dispute-meta">
+                  <span>📅 Filed: ${d.time || 'Recent'}</span>
+                  <span>🏆 Competition: ${d.matchName || 'N/A'}</span>
+                  <span>👥 Reporter: ${d.reporter || d.submitter || 'Player'}</span>
+                  <span>🛡️ Routed to: ${Array.isArray(d.organizers) && d.organizers.length > 0 ? d.organizers.join(', ') : 'Event Organizers'}</span>
+                </div>
+                <div class="dispute-actions">
+                  <button class="btn-table-secondary" onclick="showEvidence('${d.id}')">View Details</button>
+                  ${d.status !== 'resolved' && d.status !== 'escalated' ? `
+                  <button class="btn-table-danger" onclick="location.href='dispute-escalation.html?id=${d.id}'">Escalate</button>
+                  ` : ''}
+                  ${d.status === 'escalated' ? '<span style="color:var(--accent);font-size:12px;">Escalated to Super Admin</span>' : ''}
+                </div>
+              </div>
+            `;
+          }).join('');
+          container.innerHTML = dynamicHtml + staticHtml;
+        }
+        return;
+      }
+    } catch (err) {
+      console.warn('[NexusAPI] Could not load disputes from backend:', err.message);
+    }
+  }
+  // Fallback to localStorage-only
+  renderDisputes();
+}
+
+loadDisputes();
+
 
 const filterTabs = document.querySelectorAll('.filter-tab');
 if (filterTabs.length > 0) {

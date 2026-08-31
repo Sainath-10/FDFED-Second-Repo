@@ -35,6 +35,23 @@ export class UserRepository {
     return this.mapRow(rows[0]);
   }
 
+  async createWithPassword(
+    email: string,
+    username: string,
+    firstName: string,
+    lastName: string,
+    role: UserRole = UserRole.PARTICIPANT,
+    passwordHash: string,
+  ): Promise<IUser> {
+    const { rows } = await this.pool.query(
+      `INSERT INTO users (email, username, password_hash, first_name, last_name, role)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [email, username, passwordHash, firstName, lastName, role],
+    );
+    return this.mapRow(rows[0]);
+  }
+
   async findById(id: string): Promise<IUser | null> {
     const { rows } = await this.pool.query(
       'SELECT * FROM users WHERE id = $1',
@@ -65,6 +82,18 @@ export class UserRepository {
       [emailOrUsername],
     );
     return rows.length ? this.mapRow(rows[0]) : null;
+  }
+
+  /**
+   * Returns the raw DB row including password_hash for authentication purposes.
+   * Use this ONLY in AuthService for password verification.
+   */
+  async findRawByEmailOrUsername(emailOrUsername: string): Promise<any | null> {
+    const { rows } = await this.pool.query(
+      'SELECT * FROM users WHERE LOWER(email) = LOWER($1) OR LOWER(username) = LOWER($1)',
+      [emailOrUsername],
+    );
+    return rows.length ? rows[0] : null;
   }
 
   async findAll(): Promise<IUser[]> {

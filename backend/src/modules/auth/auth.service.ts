@@ -1,4 +1,5 @@
 import { Injectable, ConflictException, UnauthorizedException } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
 import axios from 'axios';
 import { UserRepository } from './repositories/user.repository';
 import { RegisterDto, LoginDto, AuthResponseDto } from './dto/auth.dto';
@@ -15,7 +16,7 @@ export class AuthService {
   ) {}
 
   async register(registerDto: RegisterDto): Promise<AuthResponseDto> {
-    const { email, username, firstName, lastName, role, country } = registerDto;
+    const { email, username, firstName, lastName, role, country, password } = registerDto;
 
     // Check if email already exists
     if (await this.userRepository.emailExists(email)) {
@@ -28,13 +29,29 @@ export class AuthService {
     }
 
     const assignedRole = role || UserRole.PARTICIPANT;
-    const user = await this.userRepository.create(
-      email,
-      username,
-      firstName,
-      lastName,
-      assignedRole,
-    );
+
+    let user: any;
+    if (password) {
+      // Hash the password and store it
+      const passwordHash = await bcrypt.hash(password, 10);
+      user = await this.userRepository.createWithPassword(
+        email,
+        username,
+        firstName,
+        lastName,
+        assignedRole,
+        passwordHash,
+      );
+    } else {
+      // No password provided — create without password hash (for API testing)
+      user = await this.userRepository.create(
+        email,
+        username,
+        firstName,
+        lastName,
+        assignedRole,
+      );
+    }
 
     // B2C Consume — Call external REST Countries API if country is provided
     let countryInfo: any = null;
@@ -71,12 +88,36 @@ export class AuthService {
   }
 
   async login(loginDto: LoginDto): Promise<AuthResponseDto> {
-    const { emailOrUsername } = loginDto;
+    const { emailOrUsername, password } = loginDto;
 
-    const user = await this.userRepository.findByEmailOrUsername(emailOrUsername);
-    if (!user) {
+    // Fetch the raw row including password_hash
+    const rawUser = await this.userRepository.findRawByEmailOrUsername(emailOrUsername);
+    if (!rawUser) {
       throw new UnauthorizedException('Invalid credentials. User not found.');
     }
+
+    // If the user has a password hash, verify it
+    if (rawUser.password_hash) {
+      if (!password) {
+        throw new UnauthorizedException('Password is required.');
+      }
+      const isValid = await bcrypt.compare(password, rawUser.password_hash);
+      if (!isValid) {
+        throw new UnauthorizedException('Invalid credentials. Incorrect password.');
+      }
+    }
+    // If no password_hash stored, allow login without password (legacy/demo accounts)
+    // This ensures backward compatibility
+
+    const user = {
+      id: rawUser.id,
+      email: rawUser.email,
+      username: rawUser.username,
+      firstName: rawUser.first_name,
+      lastName: rawUser.last_name,
+      role: rawUser.role,
+      createdAt: new Date(rawUser.created_at),
+    };
 
     const token = this.jwtTokenService.generateToken(user);
 

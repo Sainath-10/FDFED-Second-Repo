@@ -108,7 +108,33 @@ function createTeam() {
   if (inviteInput && result.team && result.team.id) {
     inviteInput.value = buildInviteLink(compId, result.team.id);
   }
-  
+
+  // ── Wire to Backend API ──────────────────────────────────────
+  (async () => {
+    if (window.NexusAPI && window.NexusAPI.Teams) {
+      try {
+        // Get session user info
+        let session = null;
+        try { session = JSON.parse(localStorage.getItem('nexus.auth.session') || 'null'); } catch(e) {}
+
+        const apiRes = await window.NexusAPI.Teams.create(
+          name,
+          compId,
+          session ? [session.username] : []
+        );
+        if (apiRes.ok && apiRes.data && apiRes.data.id) {
+          console.log('[NexusAPI] Team created in backend:', apiRes.data.id);
+          // Update local team object with backend ID for future reference
+          if (result.team) result.team._backendId = apiRes.data.id;
+        } else {
+          console.warn('[NexusAPI] Backend team create failed:', apiRes.error);
+        }
+      } catch (err) {
+        console.warn('[NexusAPI] Backend unreachable for team create:', err.message);
+      }
+    }
+  })();
+
   // Redirect to activity page
   setTimeout(() => {
     window.location.href = 'my-activity.html';

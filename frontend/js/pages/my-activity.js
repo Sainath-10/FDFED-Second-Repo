@@ -267,14 +267,57 @@ function renderGrid(gridId, countId, comps) {
   grid.innerHTML = html;
 }
 
-function renderAllSections() {
-  const allComps = window.NexusData ? window.NexusData.loadCompetitions() : [];
+async function renderAllSections() {
   const session = readSession();
-  const buckets = buildBuckets(allComps, session);
 
+  // Start with local data for immediate render
+  let allComps = window.NexusData ? window.NexusData.loadCompetitions() : [];
+  const buckets = buildBuckets(allComps, session);
   renderGrid('organized-grid', 'organized-count', buckets.organized);
   renderGrid('participated-grid', 'participated-count', buckets.participated);
   renderGrid('teamlead-grid', 'teamlead-count', buckets.teamled);
+
+  // Then try to pull from backend and re-render with merged data
+  if (window.NexusAPI && window.NexusAPI.Competitions) {
+    try {
+      const res = await window.NexusAPI.Competitions.getAll();
+      if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
+        const apiComps = res.data.map(c => ({
+          id: c.id,
+          name: c.name,
+          description: c.description,
+          game: c.game || 'Esports',
+          type: c.type || 'tournament',
+          status: c.status === 'active' ? 'ongoing' : c.status,
+          startDate: c.startDate,
+          endDate: c.endDate,
+          createdBy: c.createdBy,
+          organizerId: c.createdBy,
+          organizers: c.organizers || [],
+          prizePool: c.prizePool || '—',
+          entryFee: c.entryFee || 'Free',
+          participants: c.participants || 0,
+          teams: [],
+          matches: [],
+          dates: c.startDate
+            ? `${new Date(c.startDate).toLocaleDateString('en-IN')} to ${new Date(c.endDate).toLocaleDateString('en-IN')}`
+            : 'TBD',
+        }));
+
+        // Merge: API comps first, then local comps not already represented (by name)
+        const apiNames = new Set(apiComps.map(c => normalize(c.name)));
+        const localOnly = allComps.filter(c => !apiNames.has(normalize(c.name)));
+        allComps = [...apiComps, ...localOnly];
+
+        const mergedBuckets = buildBuckets(allComps, session);
+        renderGrid('organized-grid', 'organized-count', mergedBuckets.organized);
+        renderGrid('participated-grid', 'participated-count', mergedBuckets.participated);
+        renderGrid('teamlead-grid', 'teamlead-count', mergedBuckets.teamled);
+      }
+    } catch (err) {
+      console.warn('[NexusAPI] Could not load competitions for My Activity:', err.message);
+    }
+  }
 }
 
 function setupSearch() {

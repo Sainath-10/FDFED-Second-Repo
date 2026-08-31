@@ -5,7 +5,6 @@ function hasActiveSession() {
   if (window.NexusAuth && typeof window.NexusAuth.getSession === 'function') {
     return !!window.NexusAuth.getSession();
   }
-
   try {
     const raw = localStorage.getItem('nexus.auth.session');
     if (!raw) return false;
@@ -13,6 +12,44 @@ function hasActiveSession() {
     return !!(parsed && parsed.username && parsed.role);
   } catch (err) {
     return false;
+  }
+}
+
+/**
+ * Fetches active competitions from the backend API and maps them
+ * to the NexusData shape expected by compCard().
+ */
+async function fetchActiveCompetitionsFromAPI() {
+  if (!window.NexusAPI || !window.NexusAPI.Competitions) return null;
+  try {
+    const res = await window.NexusAPI.Competitions.getActive();
+    if (!res.ok || !Array.isArray(res.data) || res.data.length === 0) return null;
+
+    // Map backend shape → NexusData shape for compCard()
+    return res.data.map(c => ({
+      id: c.id,
+      name: c.name,
+      description: c.description,
+      status: c.status === 'active' ? 'ongoing' : c.status,
+      startDate: c.startDate,
+      endDate: c.endDate,
+      createdBy: c.createdBy,
+      organizers: c.organizers || [],
+      game: c.game || 'Esports',
+      type: c.type || 'tournament',
+      prizePool: c.prizePool || '—',
+      entryFee: c.entryFee || 'Free',
+      participants: c.participants || 0,
+      badge: 'New',
+      badgeClass: 'hot',
+      img: c.img || '../assets/b890c61489a080992ad7e99adabb1145e6d59606.png',
+      dates: c.startDate
+        ? `${new Date(c.startDate).toLocaleDateString('en-IN')} to ${new Date(c.endDate).toLocaleDateString('en-IN')}`
+        : 'TBD',
+    }));
+  } catch (err) {
+    console.warn('[NexusAPI] Could not fetch active competitions:', err.message);
+    return null;
   }
 }
 
@@ -44,19 +81,20 @@ function hasActiveSession() {
 
   renderGrid(comps);
 
-  // Try API in background — if it responds within 2s, re-render with API data
-  if (typeof fetchActiveCompetitionsFromAPI === 'function') {
-    try {
-      const apiComps = await Promise.race([
-        fetchActiveCompetitionsFromAPI(),
-        new Promise(resolve => setTimeout(() => resolve(null), 2000))
-      ]);
-      if (apiComps && apiComps.length > 0) {
-        comps = apiComps;
-        renderGrid(comps);
-      }
-    } catch(e) { /* keep local data */ }
-  }
+  // Try API in background — if it responds within 2s, re-render with API data merged with local
+  try {
+    const apiComps = await Promise.race([
+      fetchActiveCompetitionsFromAPI(),
+      new Promise(resolve => setTimeout(() => resolve(null), 2000))
+    ]);
+    if (apiComps && apiComps.length > 0) {
+      // Merge: API comps first, then local comps not already in API (by name match)
+      const apiNames = new Set(apiComps.map(c => c.name.toLowerCase()));
+      const localOnly = comps.filter(c => !apiNames.has((c.name || '').toLowerCase()));
+      const merged = [...apiComps, ...localOnly];
+      renderGrid(merged);
+    }
+  } catch(e) { /* keep local data */ }
 
   // Guard register action for guests only; keep existing behavior for logged-in users.
   grid.addEventListener('click', event => {

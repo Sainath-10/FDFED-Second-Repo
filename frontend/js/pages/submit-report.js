@@ -103,21 +103,36 @@ if (reportForm) {
         localStorage.setItem('nexus_admin_disputes', JSON.stringify(adminDisputes));
       } catch (err) {}
 
-      // Try sending to backend API in background
-      try {
-        fetch('http://localhost:3000/disputes', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-user-role': 'participant'
-          },
-          body: JSON.stringify({
-            competitionId: compId || '1',
-            teamId: against || 'team-1',
-            description: `${reportType} (${matchRound}): ${description}`
-          })
-        }).catch(() => {});
-      } catch(e) {}
+      // ── Wire to Backend API ──────────────────────────────────────
+      (async () => {
+        if (window.NexusAPI && window.NexusAPI.Disputes) {
+          try {
+            // compId might be a local ID (string-based) or backend UUID
+            const backendCompId = compId || null;
+            const disputeTitle = `${reportType} — ${against}`;
+            const fullDescription = `${reportType} (${matchRound}): ${description}`;
+
+            const apiRes = await window.NexusAPI.Disputes.create(
+              backendCompId,
+              null,         // teamId (optional)
+              'user',       // targetType
+              against || null, // targetId
+              disputeTitle,
+              fullDescription
+            );
+
+            if (apiRes.ok && apiRes.data) {
+              console.log('[NexusAPI] Dispute submitted to backend:', apiRes.data.id);
+              // Also store backend ID in the local dispute object for cross-reference
+              newDisputeObj._backendId = apiRes.data.id;
+            } else {
+              console.warn('[NexusAPI] Backend dispute create failed:', apiRes.error);
+            }
+          } catch (err) {
+            console.warn('[NexusAPI] Backend unreachable for dispute create:', err.message);
+          }
+        }
+      })();
 
       if (typeof showToast === 'function') {
         showToast('Report submitted! Sent directly to tournament organizers for review.');

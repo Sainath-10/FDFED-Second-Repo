@@ -404,9 +404,49 @@ if (createCompForm) {
       matchesCompleted: 0
     };
 
+    // Save locally for offline/fast access
     if (window.NexusData) {
       window.NexusData.addCompetition(newComp);
     }
+
+    // ── Wire to Backend API ──────────────────────────────────────
+    // Call backend in background (don't block the UI on API success)
+    (async () => {
+      if (window.NexusAPI && window.NexusAPI.Competitions) {
+        try {
+          // startDate/endDate need ISO format for the backend
+          const isoStart = startDate ? new Date(startDate).toISOString() : new Date().toISOString();
+          const isoEnd = endDate ? new Date(endDate).toISOString() : new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString();
+
+          const apiRes = await window.NexusAPI.Competitions.create(
+            name,
+            description,
+            isoStart,
+            isoEnd,
+            coOrganizers
+          );
+
+          if (apiRes.ok && apiRes.data && apiRes.data.id) {
+            const backendId = apiRes.data.id;
+            // Store the backend-assigned ID alongside local ID for cross-reference
+            newComp._backendId = backendId;
+            if (window.NexusData) {
+              window.NexusData.addCompetition(newComp); // update with backend ID
+            }
+
+            // Set revenue fee if prize pool or entry fee specified
+            if ((totalPrize > 0 || entryFee > 0) && window.NexusAPI.Revenue) {
+              await window.NexusAPI.Revenue.setCompetitionFee(backendId, entryFee, totalPrize).catch(() => {});
+            }
+            console.log('[NexusAPI] Competition created in backend:', backendId);
+          } else {
+            console.warn('[NexusAPI] Backend competition create failed:', apiRes.error);
+          }
+        } catch (err) {
+          console.warn('[NexusAPI] Backend unreachable, saved locally only:', err.message);
+        }
+      }
+    })();
 
     if (typeof showToast === 'function') {
       showToast('Tournament Created!');
