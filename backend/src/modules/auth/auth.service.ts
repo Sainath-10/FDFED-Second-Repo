@@ -3,6 +3,7 @@ import {
   ConflictException,
   NotFoundException,
   UnauthorizedException,
+  BadRequestException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -105,37 +106,42 @@ export class AuthService {
 
   async addAdmin(dto: { username: string; email?: string; password?: string; adminType: string }) {
     const { username, email, password, adminType } = dto;
-    const existing = await this.userRepository.findByEmailOrUsername(username) || (email ? await this.userRepository.findByEmailOrUsername(email) : null);
-    
-    // Admin role mapped directly to adminType
+    const existing = await this.userRepository.findByEmailOrUsername(username);
+
+    if (!existing) {
+      throw new BadRequestException('Username not present');
+    }
+
+    const currentRole = String(existing.role || '').toLowerCase();
+    const isAdmin = !!(existing.adminType || ['admin', 'super-admin', 'super_admin', 'comp_admin', 'dispute_admin', 'revenue_admin'].includes(currentRole));
+
+    if (isAdmin) {
+      throw new BadRequestException('User is already an admin');
+    }
+
     const roleValue = (Object.values(UserRole).includes(adminType as any) ? adminType : UserRole.COMP_ADMIN) as UserRole;
 
-    if (existing) {
-      const updates: any = {
-        role: roleValue,
-        adminType: adminType,
-        revokedReason: null,
-      };
-      if (password) {
-        updates.passwordHash = await bcrypt.hash(password, 10);
-      }
-      return await this.userRepository.update(existing.id, updates);
-    } else {
-      const pwd = password || 'admin123';
-      const mail = email || (username.includes('@') ? username : `${username}@nexus.gg`);
-      return await this.userRepository.createWithPassword(
-        mail,
-        username,
-        pwd,
-        roleValue,
-        adminType,
-      );
+    const updates: any = {
+      role: roleValue,
+      adminType: adminType,
+      revokedReason: null,
+    };
+    if (password) {
+      updates.passwordHash = await bcrypt.hash(password, 10);
     }
+    return await this.userRepository.update(existing.id, updates);
   }
 
   async revokeAdmin(usernameOrEmail: string, reason?: string) {
     const user = await this.userRepository.findByEmailOrUsername(usernameOrEmail);
-    if (!user) throw new NotFoundException('User not found');
+    if (!user) throw new BadRequestException('Username not present');
+
+    const currentRole = String(user.role || '').toLowerCase();
+    const isAdmin = !!(user.adminType || ['admin', 'super-admin', 'super_admin', 'comp_admin', 'dispute_admin', 'revenue_admin'].includes(currentRole));
+
+    if (!isAdmin) {
+      throw new BadRequestException('User is not an admin');
+    }
 
     const revocationReason = reason && reason.trim() ? reason.trim() : 'Administrative status revoked by Super Admin';
 

@@ -8,14 +8,34 @@ function normalize(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+function showRevokeFormError(msg) {
+  let errBox = document.getElementById('revoke-admin-error-box');
+  if (!errBox) {
+    errBox = document.createElement('div');
+    errBox.id = 'revoke-admin-error-box';
+    errBox.style.cssText = 'padding:12px 16px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);border-radius:10px;color:#ef4444;font-size:13px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:8px;';
+    const form = document.getElementById('revoke-admin-page-form');
+    if (form) form.insertBefore(errBox, form.firstChild);
+  }
+  errBox.innerHTML = `<span>⚠️</span> <span>${msg}</span>`;
+  errBox.style.display = 'flex';
+}
+
+function clearRevokeFormError() {
+  const errBox = document.getElementById('revoke-admin-error-box');
+  if (errBox) errBox.style.display = 'none';
+}
+
 async function handleRevokeAdminFormSubmit(e) {
   e.preventDefault();
+  clearRevokeFormError();
+
   const username = document.getElementById('page-revoke-username').value.trim();
   const reason = document.getElementById('page-revoke-reason').value.trim();
 
   if (!username || !reason) {
+    showRevokeFormError('Please enter both username and reason');
     if (typeof showToast === 'function') showToast('Please enter both username and reason', 'error');
-    else alert('Please enter both username and reason');
     return;
   }
 
@@ -32,9 +52,12 @@ async function handleRevokeAdminFormSubmit(e) {
       })
     });
 
+    const data = await res.json().catch(() => ({}));
+
     if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.message || 'Failed to revoke admin in database');
+      const msg = data.message || 'Failed to revoke admin in database';
+      showRevokeFormError(msg);
+      throw new Error(msg);
     }
 
     // Sync LocalStorage cache
@@ -55,7 +78,6 @@ async function handleRevokeAdminFormSubmit(e) {
     }, 600);
   } catch (err) {
     if (typeof showToast === 'function') showToast(err.message || 'Error revoking admin', 'error');
-    else alert(err.message || 'Error revoking admin');
     if (submitBtn) submitBtn.disabled = false;
   }
 }
