@@ -1,8 +1,11 @@
 export enum UserRole {
-  ADMIN = 'admin',
+  COMP_ADMIN = 'comp_admin',
+  DISPUTE_ADMIN = 'dispute_admin',
+  REVENUE_ADMIN = 'revenue_admin',
   SUPER_ADMIN = 'super_admin',
   TEAM_LEAD = 'team_lead',
   PARTICIPANT = 'participant',
+  ADMIN = 'admin',
 }
 
 export enum DisputeStatus {
@@ -24,6 +27,8 @@ export interface IUser {
   email: string;
   username: string;
   role: UserRole;
+  adminType?: string;
+  revokedReason?: string;
   banned?: boolean;
   createdAt: Date;
 }

@@ -1,5 +1,62 @@
-initSidebar('competitions', '../');
-initFooter('../');
+// ── Apply Super Admin Platform Settings ─────────────────────
+function applySuperAdminPlatformSettings() {
+  try {
+    const raw = localStorage.getItem('nexus.superadmin.dashboard.state');
+    if (!raw) return;
+    const settings = JSON.parse(raw);
+
+    // 1. Allowed Formats (e.g., Round Robin, Knockouts)
+    const formatSelect = document.getElementById('comp-format');
+    if (formatSelect) {
+      const allowKnockout = settings['cfg-format-knockouts'] !== false;
+      const allowRoundRobin = settings['cfg-format-roundrobin'] !== false;
+
+      Array.from(formatSelect.options).forEach(opt => {
+        const text = opt.textContent.toLowerCase();
+        if (text.includes('round robin')) {
+          if (!allowRoundRobin) {
+            opt.disabled = true;
+            opt.hidden = true;
+            if (opt.selected) formatSelect.value = '';
+          } else {
+            opt.disabled = false;
+            opt.hidden = false;
+          }
+        }
+        if (text.includes('single elimination') || text.includes('knockout') || text.includes('elimination')) {
+          if (!allowKnockout) {
+            opt.disabled = true;
+            opt.hidden = true;
+            if (opt.selected) formatSelect.value = '';
+          } else {
+            opt.disabled = false;
+            opt.hidden = false;
+          }
+        }
+      });
+    }
+
+    // 2. Maximum Teams per Tournament
+    const maxTeamsInput = document.getElementById('max-teams');
+    if (maxTeamsInput && settings['cfg-max-teams']) {
+      const limit = parseInt(settings['cfg-max-teams']) || 256;
+      maxTeamsInput.max = limit;
+      const label = document.querySelector('label[for="max-teams"]');
+      if (label) {
+        label.innerHTML = `Max Teams (2–${limit}) <span style="color:#ef4444">*</span>`;
+      }
+      if (parseInt(maxTeamsInput.value) > limit) {
+        maxTeamsInput.value = limit;
+      }
+    }
+  } catch (e) {
+    console.warn('Error applying super admin platform settings:', e);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  applySuperAdminPlatformSettings();
+});
 
 // ── Summary sidebar updater ──────────────────────────────────
 function updateSummary() {
@@ -499,7 +556,8 @@ function showOrganizerCheckoutModal(comp, prizePool, platformFee, onConfirm) {
   const existing = document.getElementById('org-checkout-modal');
   if (existing) existing.remove();
 
-  const feeRuleText = prizePool <= 700 ? 'Flat ₹50 Fee (Prize ≤ ₹700)' : '7% Platform Fee (Prize > ₹700)';
+  const config = window.NexusData ? window.NexusData.getRevenueConfig() : { percentage: 7, minCost: 50 };
+  const feeRuleText = `${config.percentage}% Prize Pool Fee (Min. ₹${config.minCost})`;
 
   const modal = document.createElement('div');
   modal.id = 'org-checkout-modal';

@@ -166,7 +166,9 @@
         const session = JSON.parse(localStorage.getItem('nexus.auth.session') || 'null');
         const btnWrap = document.getElementById('admin-config-btn-wrap');
         if (btnWrap) {
-          btnWrap.style.display = (session && String(session.role || '').toLowerCase() === 'admin') ? 'block' : 'none';
+          const role = String(session?.role || session?.adminType || '').toLowerCase();
+          const allowedRoles = ['admin', 'revenue_admin', 'super_admin', 'super-admin', 'comp_admin', 'dispute_admin'];
+          btnWrap.style.display = (session && allowedRoles.includes(role)) ? 'block' : 'none';
         }
       } catch (e) { }
     })();

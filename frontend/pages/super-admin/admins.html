@@ -13,10 +13,26 @@
 <body class="super-admin-body">
   <div id="sidebar-mount"></div>
   <main class="sa-main-v2">
-    <header class="sa-header-v2">
+    <header class="sa-header-v2" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;">
       <div class="sa-header-left">
         <h1 class="sa-title">Admins <span class="accent-text">Roster</span></h1>
-        <p class="sa-desc">All administrators and super administrators with their action logs.</p>
+        <p class="sa-desc">All administrators and super administrators with their assigned admin roles in PostgreSQL.</p>
+      </div>
+      <div class="sa-header-actions" style="display:flex;gap:12px;align-items:center;">
+        <a href="revoke-admin.html" class="btn-table-danger" style="display:inline-flex;align-items:center;gap:8px;padding:10px 18px;background:rgba(239,68,68,0.12);color:#ef4444;border:1px solid rgba(239,68,68,0.3);border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;transition:all 0.2s;">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8">
+            <circle cx="8" cy="8" r="6"/>
+            <line x1="5" y1="5" x2="11" y2="11"/>
+          </svg>
+          Revoke Admin
+        </a>
+        <a href="add-admin.html" class="btn-primary" style="display:inline-flex;align-items:center;gap:8px;padding:10px 18px;background:#c6ff33;color:#000;border:none;border-radius:8px;font-weight:800;font-size:13px;text-decoration:none;box-shadow:0 0 16px rgba(198,255,51,0.2);transition:all 0.2s;">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="8" y1="3" x2="8" y2="13"/>
+            <line x1="3" y1="8" x2="13" y2="8"/>
+          </svg>
+          Add Admin
+        </a>
       </div>
     </header>
 
@@ -28,7 +44,7 @@
             <circle cx="7" cy="7" r="5" />
             <line x1="10.5" y1="10.5" x2="14" y2="14" />
           </svg>
-          <input type="text" placeholder="Search by username, role, or email..." id="admins-search">
+          <input type="text" placeholder="Search by username, admin type, or email..." id="admins-search">
         </div>
       </div>
       <div class="sa-users-table-wrap">
@@ -36,7 +52,7 @@
           <thead>
             <tr>
               <th>Username</th>
-              <th>Role</th>
+              <th>Admin Type</th>
               <th>Email</th>
               <th style="text-align:right;">Action</th>
             </tr>

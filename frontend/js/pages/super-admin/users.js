@@ -46,16 +46,37 @@ function mergeAccountsWithBanStatus() {
   });
 }
 
-function formatRole(role) {
-  const map = {
-    regular: 'User',
-    participant: 'User',
-    team_lead: 'User',
-    admin: 'Admin',
-    'super-admin': 'Super Admin',
-    super_admin: 'Super Admin'
-  };
-  return map[normalize(role)] || 'User';
+function formatRole(role, adminType) {
+  const t = String(adminType || role || '').toLowerCase();
+  if (t.includes('super')) return 'Super Admin';
+  if (t.includes('dispute')) return 'Dispute Admin';
+  if (t.includes('revenue')) return 'Revenue Admin';
+  if (t.includes('comp')) return 'Comp Admin';
+  if (t === 'admin') return 'Admin';
+  return 'User';
+}
+
+function getRoleBadgeHtml(account) {
+  if (account.banned || account.isBanned) {
+    return `<span class="sa-role-pill" style="background:rgba(231,0,11,0.15);color:#e7000b;border:1px solid rgba(231,0,11,0.3);">BANNED</span>`;
+  }
+  const t = String(account.adminType || account.role || '').toLowerCase();
+  if (t.includes('super')) {
+    return `<span class="sa-role-pill" style="background:rgba(231,0,11,0.15);color:#e7000b;border:1px solid rgba(231,0,11,0.3);">SUPER ADMIN</span>`;
+  }
+  if (t.includes('comp')) {
+    return `<span class="sa-role-pill" style="background:rgba(198,255,51,0.15);color:#c6ff33;border:1px solid rgba(198,255,51,0.3);">COMP ADMIN</span>`;
+  }
+  if (t.includes('dispute')) {
+    return `<span class="sa-role-pill" style="background:rgba(168,85,247,0.15);color:#c084fc;border:1px solid rgba(168,85,247,0.3);">DISPUTE ADMIN</span>`;
+  }
+  if (t.includes('revenue')) {
+    return `<span class="sa-role-pill" style="background:rgba(34,197,94,0.15);color:#4ade80;border:1px solid rgba(34,197,94,0.3);">REVENUE ADMIN</span>`;
+  }
+  if (t === 'admin') {
+    return `<span class="sa-role-pill" style="background:rgba(198,255,51,0.15);color:#c6ff33;border:1px solid rgba(198,255,51,0.3);">ADMIN</span>`;
+  }
+  return `<span class="sa-role-pill" style="background:rgba(255,255,255,0.06);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);">USER</span>`;
 }
 
 function renderUsers(list) {
@@ -73,12 +94,9 @@ function renderUsers(list) {
 
   body.innerHTML = list.map(account => {
     const username = account.username || 'unknown';
-    const roleLabel = formatRole(account.role);
     const email = account.email || (username.includes('@') ? username : '—');
-    const isBanned = !!account.banned;
-    const rolePill = isBanned
-      ? `<span class="sa-role-pill" style="background:rgba(231,0,11,0.15);color:#e7000b;border:1px solid rgba(231,0,11,0.3);">BANNED</span>`
-      : `<span class="sa-role-pill">${roleLabel}</span>`;
+    const isBanned = !!(account.banned || account.isBanned);
+    const rolePill = getRoleBadgeHtml(account);
     const rowStyle = isBanned ? ' style="opacity:0.5;"' : '';
     return `
       <tr${rowStyle}>
@@ -106,6 +124,7 @@ function applySearch() {
     const haystack = [
       account.username,
       account.email,
+      account.adminType,
       account.role,
       account.banned ? 'banned' : ''
     ].map(normalize).join(' ');
@@ -144,7 +163,8 @@ async function syncAndRenderUsers() {
               id: u.id || existing.id,
               username: username,
               email: u.email || existing.email || (username.includes('@') ? username : '—'),
-              role: u.role || existing.role || 'regular',
+              role: u.adminType || u.role || existing.role || 'regular',
+              adminType: u.adminType || existing.adminType || u.role,
               banned: typeof u.banned === 'boolean' ? u.banned : !!existing.banned,
               warningCount: typeof u.warningCount === 'number' ? u.warningCount : (existing.warningCount || 0)
             });

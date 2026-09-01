@@ -52,6 +52,22 @@ export class AuthController {
     return this.authService.getAllUsers();
   }
 
+  @Post('add-admin')
+  @ApiOperation({ summary: 'Add or elevate an administrator with specified adminType' })
+  async addAdmin(
+    @Body() body: { username: string; email?: string; password?: string; adminType: string },
+  ) {
+    return this.authService.addAdmin(body);
+  }
+
+  @Post('revoke-admin')
+  @ApiOperation({ summary: 'Revoke administrator status from a user with reason' })
+  async revokeAdmin(
+    @Body() body: { username: string; reason?: string },
+  ) {
+    return this.authService.revokeAdmin(body.username, body.reason);
+  }
+
   @Patch('users/:id/ban')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

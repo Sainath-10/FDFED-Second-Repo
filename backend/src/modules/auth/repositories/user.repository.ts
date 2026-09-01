@@ -35,12 +35,14 @@ export class UserRepository {
     username: string,
     passwordHash: string,
     role: UserRole = UserRole.PARTICIPANT,
+    adminType: string | null = null,
   ): Promise<UserEntity> {
     const user = this.repo.create({
       email,
       username,
       passwordHash,
       role,
+      adminType: adminType || (role === UserRole.SUPER_ADMIN ? 'super_admin' : null),
       banned: false,
       warningCount: 0,
     });
@@ -52,9 +54,10 @@ export class UserRepository {
     username: string,
     password: string,
     role: UserRole = UserRole.PARTICIPANT,
+    adminType: string | null = null,
   ): Promise<UserEntity> {
     const passwordHash = await bcrypt.hash(password, 10);
-    return this.create(email, username, passwordHash, role);
+    return this.create(email, username, passwordHash, role, adminType);
   }
 
   // ─── Read ──────────────────────────────────────────────────────────────────
@@ -127,6 +130,7 @@ export class UserRepository {
     username: string;
     password: string;
     role: UserRole;
+    adminType?: string;
   }): Promise<void> {
     const existing = await this.findWithPasswordByEmailOrUsername(account.email);
     if (!existing) {
@@ -135,14 +139,14 @@ export class UserRepository {
         account.username,
         account.password,
         account.role,
+        account.adminType,
       );
-      console.log(`Seeded user: ${account.email}`);
+      console.log(`Seeded user: ${account.email} (${account.adminType || account.role})`);
       return;
     }
 
     const updates: Partial<UserEntity> = {
       username: existing.username || account.username,
-      role: account.role,
     };
 
     if (!existing.passwordHash) {
@@ -188,13 +192,13 @@ export class UserRepository {
     return (result.affected ?? 0) > 0;
   }
 
-  // ─── Seeding ───────────────────────────────────────────────────────────────
-
   async seedDemoAccounts(): Promise<void> {
     const demoAccounts = [
-      { email: 'regular@nexus.gg', username: 'regular@nexus.gg', password: 'regular123', role: UserRole.PARTICIPANT },
-      { email: 'admin@nexus.gg', username: 'admin@nexus.gg', password: 'admin123', role: UserRole.ADMIN },
-      { email: 'superadmin@nexus.gg', username: 'superadmin@nexus.gg', password: 'super123', role: UserRole.SUPER_ADMIN },
+      { email: 'regular@nexus.gg', username: 'regular@nexus.gg', password: 'regular123', role: UserRole.PARTICIPANT, adminType: null },
+      { email: 'admin@nexus.gg', username: 'admin@nexus.gg', password: 'admin123', role: UserRole.COMP_ADMIN, adminType: 'comp_admin' },
+      { email: 'dispute_admin@nexus.gg', username: 'dispute_admin@nexus.gg', password: 'admin123', role: UserRole.DISPUTE_ADMIN, adminType: 'dispute_admin' },
+      { email: 'revenue_admin@nexus.gg', username: 'revenue_admin@nexus.gg', password: 'admin123', role: UserRole.REVENUE_ADMIN, adminType: 'revenue_admin' },
+      { email: 'superadmin@nexus.gg', username: 'superadmin@nexus.gg', password: 'super123', role: UserRole.SUPER_ADMIN, adminType: 'super_admin' },
     ];
 
     for (const acc of demoAccounts) {

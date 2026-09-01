@@ -8,55 +8,23 @@ function normalize(value) {
   return String(value || '').trim().toLowerCase();
 }
 
-function readStoredAccounts() {
-  try {
-    const raw = localStorage.getItem(ACCOUNTS_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (err) {
-    return [];
+function formatAdminType(role, adminType) {
+  const normRole = normalize(role);
+  const normType = normalize(adminType);
+
+  if (normRole === 'comp_admin' || normType === 'comp_admin') {
+    return { label: 'Comp Admin', icon: '🏆', color: '#38bdf8', bg: 'rgba(56, 189, 248, 0.15)', border: 'rgba(56, 189, 248, 0.3)' };
   }
-}
-
-function getSeedAccounts() {
-  return Array.isArray(window.NEXUS_DEMO_ACCOUNTS) ? window.NEXUS_DEMO_ACCOUNTS : [];
-}
-
-function mergeAccountsWithBanStatus() {
-  const seed = getSeedAccounts();
-  const stored = readStoredAccounts();
-
-  const storedMap = {};
-  stored.forEach(a => {
-    if (a && a.username) storedMap[normalize(a.username)] = a;
-  });
-
-  const seen = new Set();
-  const allAccounts = seed.concat(stored).filter(account => {
-    const key = normalize(account && account.username);
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }).map(account => {
-    const key = normalize(account.username);
-    const storedEntry = storedMap[key];
-    return storedEntry ? Object.assign({}, account, storedEntry) : account;
-  });
-
-  // Filter ONLY admins & super admins
-  return allAccounts.filter(account => {
-    const r = normalize(account.role);
-    return r === 'admin' || r === 'super-admin' || r === 'super_admin';
-  });
-}
-
-function formatRole(role) {
-  const map = {
-    admin: 'Admin',
-    'super-admin': 'Super Admin',
-    super_admin: 'Super Admin'
-  };
-  return map[normalize(role)] || 'Admin';
+  if (normRole === 'dispute_admin' || normType === 'dispute_admin') {
+    return { label: 'Dispute Admin', icon: '🛡️', color: '#fb923c', bg: 'rgba(251, 146, 60, 0.15)', border: 'rgba(251, 146, 60, 0.3)' };
+  }
+  if (normRole === 'revenue_admin' || normType === 'revenue_admin') {
+    return { label: 'Revenue Admin', icon: '💳', color: '#c084fc', bg: 'rgba(192, 132, 252, 0.15)', border: 'rgba(192, 132, 252, 0.3)' };
+  }
+  if (normRole === 'super_admin' || normRole === 'super-admin' || normType === 'super_admin') {
+    return { label: 'Super Admin', icon: '⚡', color: '#c6ff33', bg: 'rgba(198, 255, 51, 0.15)', border: 'rgba(198, 255, 51, 0.3)' };
+  }
+  return { label: 'Comp Admin', icon: '🏆', color: '#38bdf8', bg: 'rgba(56, 189, 248, 0.15)', border: 'rgba(56, 189, 248, 0.3)' };
 }
 
 function renderAdmins(list) {
@@ -74,18 +42,19 @@ function renderAdmins(list) {
 
   body.innerHTML = list.map(account => {
     const username = account.username || 'unknown';
-    const roleLabel = formatRole(account.role);
-    const email = account.email || (username.includes('@') ? username : '—');
+    const typeInfo = formatAdminType(account.role, account.adminType);
+    const email = account.email || (username.includes('@') ? username : `${username}@nexus.gg`);
     const isBanned = !!account.banned;
+
     const rolePill = isBanned
       ? `<span class="sa-role-pill" style="background:rgba(231,0,11,0.15);color:#e7000b;border:1px solid rgba(231,0,11,0.3);">BANNED</span>`
-      : `<span class="sa-role-pill" style="background:rgba(198,255,51,0.12);color:#c6ff33;border:1px solid rgba(198,255,51,0.3);">${roleLabel}</span>`;
+      : `<span class="sa-role-pill" style="background:${typeInfo.bg};color:${typeInfo.color};border:1px solid ${typeInfo.border};font-weight:700;">${typeInfo.icon} ${typeInfo.label}</span>`;
     
     return `
       <tr style="cursor:pointer;" onclick="window.location.href='../admin/admin-activity.html?admin=${encodeURIComponent(username)}'">
         <td>
           <div style="display:flex;align-items:center;gap:10px;">
-            <div style="width:32px;height:32px;border-radius:50%;background:rgba(198,255,51,0.15);border:1px solid rgba(198,255,51,0.3);display:flex;align-items:center;justify-content:center;font-weight:800;color:#c6ff33;font-size:13px;">
+            <div style="width:32px;height:32px;border-radius:50%;background:${typeInfo.bg};border:1px solid ${typeInfo.border};display:flex;align-items:center;justify-content:center;font-weight:800;color:${typeInfo.color};font-size:13px;">
               ${username.charAt(0).toUpperCase()}
             </div>
             <span style="font-weight:600;color:#f5f5f5;">${username}</span>
@@ -94,14 +63,16 @@ function renderAdmins(list) {
         <td>${rolePill}</td>
         <td class="sa-email">${email}</td>
         <td style="text-align:right;" onclick="event.stopPropagation();">
-          <a href="../admin/admin-activity.html?admin=${encodeURIComponent(username)}" 
-             style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:rgba(198,255,51,0.12);color:#c6ff33;border:1px solid rgba(198,255,51,0.3);border-radius:8px;font-size:12px;font-weight:700;text-decoration:none;transition:all 0.2s ease;">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8">
-              <circle cx="8" cy="8" r="6"/>
-              <path d="M8 5v3.5l2.5 1.5"/>
-            </svg>
-            View Activity
-          </a>
+          <div style="display:flex;gap:8px;justify-content:flex-end;">
+            <a href="../admin/admin-activity.html?admin=${encodeURIComponent(username)}" 
+               style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:rgba(198,255,51,0.12);color:#c6ff33;border:1px solid rgba(198,255,51,0.3);border-radius:8px;font-size:12px;font-weight:700;text-decoration:none;transition:all 0.2s ease;">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8">
+                <circle cx="8" cy="8" r="6"/>
+                <path d="M8 5v3.5l2.5 1.5"/>
+              </svg>
+              Activity
+            </a>
+          </div>
         </td>
       </tr>`;
   }).join('');
@@ -112,18 +83,19 @@ let currentRoster = [];
 function applySearch() {
   const input = document.getElementById('admins-search');
   const query = normalize(input && input.value);
-  const list = currentRoster.length ? currentRoster : mergeAccountsWithBanStatus();
-
   if (!query) {
-    renderAdmins(list);
+    renderAdmins(currentRoster);
     return;
   }
 
-  const filtered = list.filter(account => {
+  const filtered = currentRoster.filter(account => {
+    const typeInfo = formatAdminType(account.role, account.adminType);
     const haystack = [
       account.username,
       account.email,
-      account.role
+      account.role,
+      account.adminType,
+      typeInfo.label
     ].map(normalize).join(' ');
     return haystack.includes(query);
   });
@@ -132,56 +104,73 @@ function applySearch() {
 }
 
 async function syncAndRenderAdmins() {
-  currentRoster = mergeAccountsWithBanStatus();
-  renderAdmins(currentRoster);
-
   try {
     const res = await fetch('http://localhost:3001/auth/users');
     if (res.ok) {
       const dbUsers = await res.json();
-      if (Array.isArray(dbUsers) && dbUsers.length > 0) {
-        const stored = readStoredAccounts();
-        const map = {};
-
-        getSeedAccounts().forEach(a => {
-          if (a && a.username) map[normalize(a.username)] = a;
-        });
-
-        stored.forEach(a => {
-          if (a && a.username) map[normalize(a.username)] = a;
-        });
-
-        dbUsers.forEach(u => {
-          if (u && (u.username || u.email)) {
-            const username = u.username || u.email;
-            const key = normalize(username);
-            map[key] = {
-              username: username,
-              role: u.role || 'regular',
-              email: u.email || (username.includes('@') ? username : `${username}@nexus.gg`),
-              banned: !!u.banned
-            };
+      if (Array.isArray(dbUsers)) {
+        currentRoster = dbUsers.filter(u => {
+          if (!u) return false;
+          const r = normalize(u.role);
+          const t = normalize(u.adminType);
+          
+          if (r === 'participant' || r === 'regular' || r === 'user') {
+            return false;
           }
-        });
 
-        const mergedAll = Object.values(map);
-        currentRoster = mergedAll.filter(a => {
-          const r = normalize(a.role);
-          return r === 'admin' || r === 'super-admin' || r === 'super_admin';
-        });
+          return [
+            'comp_admin',
+            'dispute_admin',
+            'revenue_admin',
+            'super_admin',
+            'super-admin',
+            'admin'
+          ].includes(r) || [
+            'comp_admin',
+            'dispute_admin',
+            'revenue_admin',
+            'super_admin',
+            'super-admin',
+            'admin'
+          ].includes(t);
+        }).map(u => ({
+          username: u.username || u.email,
+          email: u.email || `${u.username}@nexus.gg`,
+          role: u.role,
+          adminType: u.adminType || u.role,
+          banned: !!u.banned
+        }));
 
         renderAdmins(currentRoster);
+        return;
       }
     }
   } catch (e) {
-    console.warn('Could not fetch DB users for Admins roster, using local fallback:', e);
+    console.warn('Could not fetch DB users for Admins roster:', e);
   }
+
+  // Fallback to local accounts if server offline
+  try {
+    const stored = JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '[]');
+    currentRoster = stored.filter(a => {
+      const r = normalize(a.role);
+      if (r === 'participant' || r === 'regular') return false;
+      return [
+        'comp_admin',
+        'dispute_admin',
+        'revenue_admin',
+        'super_admin',
+        'super-admin',
+        'admin'
+      ].includes(r);
+    });
+    renderAdmins(currentRoster);
+  } catch (err) {}
 }
 
 document.addEventListener('DOMContentLoaded', () => {
   syncAndRenderAdmins();
+
   const searchInput = document.getElementById('admins-search');
-  if (searchInput) {
-    searchInput.addEventListener('input', applySearch);
-  }
+  if (searchInput) searchInput.addEventListener('input', applySearch);
 });

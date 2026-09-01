@@ -24,6 +24,12 @@ export class UserEntity {
   @Column({ type: 'varchar', default: UserRole.PARTICIPANT })
   role: UserRole;
 
+  @Column({ name: 'adminType', type: 'varchar', nullable: true, default: null })
+  adminType: string | null;
+
+  @Column({ name: 'revokedReason', type: 'text', nullable: true, default: null })
+  revokedReason: string | null;
+
   @Column({ default: false })
   banned: boolean;
 

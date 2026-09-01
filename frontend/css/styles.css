@@ -7,6 +7,7 @@
 
 /* ---- CSS Variables ---- */
 :root {
+  color-scheme: dark;
   --bg-black: #000000;
   --bg-dark: #0b0b0b;
   --bg-card: #0b0b0b;
@@ -34,6 +35,37 @@
   --sidebar-w: 83px;
   --font-display: 'Arvo', serif;
   --font-body: 'Lato', sans-serif;
+}
+
+/* ---- Dark Calendar & Date Picker Styling ---- */
+input[type="date"] {
+  color-scheme: dark !important;
+  background-color: #121212 !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 10px !important;
+  padding: 12px 16px !important;
+  font-family: inherit !important;
+  font-size: 14px !important;
+  outline: none !important;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+input[type="date"]:focus {
+  border-color: #c6ff33 !important;
+  box-shadow: 0 0 12px rgba(198, 255, 51, 0.3) !important;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer !important;
+  filter: invert(0.85) sepia(1) saturate(5) hue-rotate(35deg) !important;
+  opacity: 0.9 !important;
+  transition: opacity 0.2s, transform 0.1s !important;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1 !important;
+  transform: scale(1.15) !important;
 }
 
 /* ---- Reset & Base ---- */

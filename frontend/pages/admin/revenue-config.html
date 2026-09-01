@@ -12,7 +12,9 @@
     (function () {
       try {
         const session = JSON.parse(localStorage.getItem('nexus.auth.session') || 'null');
-        if (!session || String(session.role || '').toLowerCase() !== 'admin') {
+        const role = String(session?.role || session?.adminType || '').toLowerCase();
+        const allowedRoles = ['admin', 'comp_admin', 'dispute_admin', 'revenue_admin', 'super_admin', 'super-admin'];
+        if (!session || !allowedRoles.includes(role)) {
           alert('Access Denied: Only Admin can access Revenue Configuration.');
           window.location.replace('revenue-transactions.html');
         }

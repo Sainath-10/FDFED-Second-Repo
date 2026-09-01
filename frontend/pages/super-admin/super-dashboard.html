@@ -76,8 +76,6 @@
     <!-- Tab Navigation -->
     <div class="sa-tabs-bar">
       <button class="sa-tab-btn active" onclick="switchTab(this, 'dash')">Dashboard</button>
-      <button class="sa-tab-btn" onclick="switchTab(this, 'admin')">Administrator Control</button>
-      <button class="sa-tab-btn" onclick="switchTab(this, 'access')">Platform Rules & Access Control</button>
       <button class="sa-tab-btn" onclick="switchTab(this, 'tourney')">Tournament / League Configuration</button>
       <button class="sa-tab-btn" onclick="switchTab(this, 'security')">Security Settings</button>
       <button class="sa-tab-btn" onclick="switchTab(this, 'data')">Data Management & Maintenance</button>
@@ -171,125 +169,6 @@
         </div>
       </div>
 
-      <!-- Panel 2: Administrator Control -->
-      <div id="tab-admin" class="sa-tab-panel">
-        <div class="sa-section-card">
-          <div class="sa-section-header">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              style="margin-right: 10px;">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-            </svg>
-            Administrator control
-          </div>
-          <div class="sa-panel-content">
-            <div class="sa-toggle-row">
-              <div class="sa-toggle-info">
-                <div class="sa-toggle-title">Allow Admin Creation</div>
-                <div class="sa-toggle-desc">Enable authorized users to create new admin accounts</div>
-              </div>
-              <label class="sa-switch">
-                <input type="checkbox" checked>
-                <span class="sa-slider"></span>
-              </label>
-            </div>
-            <div class="sa-toggle-row">
-              <div class="sa-toggle-info">
-                <div class="sa-toggle-title">Require Super Admin Approval</div>
-                <div class="sa-toggle-desc">New admin accounts must be approved by a Super Admin</div>
-              </div>
-              <label class="sa-switch">
-                <input type="checkbox" checked>
-                <span class="sa-slider"></span>
-              </label>
-            </div>
-            <div class="sa-input-row">
-              <div class="sa-input-info">
-                <div class="sa-input-title">Maximum Admin Accounts</div>
-                <div class="sa-input-desc">Limit the total number of admin accounts</div>
-              </div>
-              <input type="number" class="sa-num-field" value="20">
-            </div>
-
-            <div class="sa-form-divider"></div>
-
-            <div class="sa-add-admin-form">
-              <div class="sa-form-label-box">
-                <div class="sa-input-title">Add admin</div>
-                <div class="sa-input-desc">Create a new administrator account by providing the user ID and email
-                  address.</div>
-              </div>
-              <div class="sa-form-fields">
-                <input id="add-admin-user-id" type="text" placeholder="User id">
-                <input id="add-admin-email" type="text" placeholder="Email id" style="margin-top: 8px;">
-              </div>
-            </div>
-            <button class="btn-full-action neon" onclick="handleAddAdmin()">ADD ADMIN</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Panel 3: Rules & Access -->
-      <div id="tab-access" class="sa-tab-panel">
-        <div class="sa-section-card">
-          <div class="sa-section-header">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              style="margin-right: 10px;">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-            </svg>
-            Platform Rules & Access Control
-          </div>
-          <div class="sa-panel-content">
-            <div class="sa-toggle-row">
-              <div class="sa-toggle-info">
-                <div class="sa-toggle-title">User Registration Enabled</div>
-                <div class="sa-toggle-desc">Allow or restrict new users from registering and creating accounts on the
-                  platform.</div>
-              </div>
-              <label class="sa-switch">
-                <input type="checkbox" checked>
-                <span class="sa-slider"></span>
-              </label>
-            </div>
-            <div class="sa-input-row">
-              <div class="sa-input-info">
-                <div class="sa-input-title">Default User Role</div>
-                <div class="sa-input-desc">New admin accounts must be approved by a Super Admin</div>
-              </div>
-              <select class="sa-select-field">
-                <option selected>Spectator</option>
-                <option>Player</option>
-                <option>Moderator</option>
-              </select>
-            </div>
-            <div class="sa-textarea-row">
-              <div class="sa-input-title">Regulations (Terms and Conditions)</div>
-              <div class="sa-input-desc">View and update the platform's detailed rules, terms, and legal policies.</div>
-              <button class="btn-slanted neon" style="margin-top: 16px; width: fit-content;" onclick="location.href='policy-management.html'">MANAGE</button>
-            </div>
-
-            <div class="sa-form-divider"></div>
-
-            <div class="sa-add-admin-form">
-              <div class="sa-form-label-box">
-                <div class="sa-input-title">Revoke Roles</div>
-                <div class="sa-input-desc">Remove a specific role or permission from a user</div>
-              </div>
-              <div class="sa-form-fields">
-                <input id="revoke-role-user-id" type="text" placeholder="User id">
-                <select id="revoke-role-select" class="sa-select-field" style="margin-top: 8px;">
-                  <option selected disabled>Role to revoke</option>
-                  <option>Admin</option>
-                  <option>Moderator</option>
-                  <option>VIP</option>
-                </select>
-              </div>
-            </div>
-            <button class="btn-full-action danger" onclick="handleRevokeRole()">REVOKE
-              ROLE</button>
-          </div>
-        </div>
-      </div>
-
       <!-- Panel 4: Tournament Config -->
       <div id="tab-tourney" class="sa-tab-panel">
         <div class="sa-section-card">
@@ -311,8 +190,8 @@
                 <div class="sa-toggle-desc">Define which competition formats are permitted.</div>
               </div>
               <div class="sa-check-options">
-                <label class="sa-check-label"><input type="checkbox" checked> <span>Knockouts</span></label>
-                <label class="sa-check-label"><input type="checkbox" checked> <span>Round Robin</span></label>
+                <label class="sa-check-label"><input type="checkbox" id="cfg-format-knockouts" checked> <span>Knockouts</span></label>
+                <label class="sa-check-label"><input type="checkbox" id="cfg-format-roundrobin" checked> <span>Round Robin</span></label>
               </div>
             </div>
             <div class="sa-input-row">
@@ -320,20 +199,7 @@
                 <div class="sa-input-title">Maximum Teams per Tournament</div>
                 <div class="sa-input-desc">Set the maximum number of teams allowed to participate in a tournament.</div>
               </div>
-              <input type="number" class="sa-num-field" value="40">
-            </div>
-            <div class="sa-input-row">
-              <div class="sa-input-info">
-                <div class="sa-input-title">Allowed Games</div>
-                <div class="sa-input-desc">Specify which games are permitted for tournaments organized on the platform.
-                </div>
-              </div>
-              <select class="sa-select-field">
-                <option selected>Games</option>
-                <option>Counter-Strike 2</option>
-                <option>Valorant</option>
-                <option>League of Legends</option>
-              </select>
+              <input type="number" id="cfg-max-teams" class="sa-num-field" value="40">
             </div>
           </div>
         </div>
@@ -353,30 +219,27 @@
             <div class="sa-input-row">
               <div class="sa-input-info">
                 <div class="sa-input-title">Session Timeout Duration</div>
-                <div class="sa-input-desc">Define the period of inactivity after which a user session is automatically
-                  logged out.</div>
+                <div class="sa-input-desc">Define the period of inactivity after which a user session is automatically logged out.</div>
               </div>
               <div class="sa-input-with-unit">
-                <input type="number" class="sa-num-field" value="30">
+                <input type="number" id="cfg-session-timeout" class="sa-num-field" value="30">
                 <span>mins</span>
               </div>
             </div>
             <div class="sa-input-row">
               <div class="sa-input-info">
                 <div class="sa-input-title">Maximum Login Attempts</div>
-                <div class="sa-input-desc">Set the number of failed login attempts allowed before the account is
-                  temporarily locked.</div>
+                <div class="sa-input-desc">Set the number of failed login attempts allowed before the account is temporarily locked.</div>
               </div>
-              <input type="number" class="sa-num-field" value="5">
+              <input type="number" id="cfg-max-login-attempts" class="sa-num-field" value="5">
             </div>
             <div class="sa-toggle-row">
               <div class="sa-toggle-info">
                 <div class="sa-toggle-title">Two-Factor Authentication Requirement</div>
-                <div class="sa-toggle-desc">Require users to verify their identity using an additional authentication
-                  method.</div>
+                <div class="sa-toggle-desc">Require users to verify their identity using an additional authentication method.</div>
               </div>
               <label class="sa-switch">
-                <input type="checkbox" checked>
+                <input type="checkbox" id="cfg-2fa-required" checked>
                 <span class="sa-slider"></span>
               </label>
             </div>

@@ -496,6 +496,23 @@
     },
   };
 
+  // ============ ADMIN API ============
+  const AdminAPI = {
+    async getStats() {
+      return makeRequest('/admin/stats', { method: 'GET' });
+    },
+    async getActivity(adminUsername) {
+      const q = adminUsername ? `?adminUsername=${encodeURIComponent(adminUsername)}` : '';
+      return makeRequest(`/admin/activity${q}`, { method: 'GET' });
+    },
+    async logActivity(adminUsername, actionType, details, metadata) {
+      return makeRequest('/admin/activity', {
+        method: 'POST',
+        body: JSON.stringify({ adminUsername, actionType, details, metadata }),
+      });
+    },
+  };
+
   // Export API
   window.NexusAPI = {
     Auth: AuthAPI,
@@ -505,6 +522,7 @@
     Notifications: NotificationsAPI,
     Policies: PoliciesAPI,
     Matches: MatchesAPI,
+    Admin: AdminAPI,
     getToken,
     setToken,
     removeToken,

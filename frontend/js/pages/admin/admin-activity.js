@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   const sessionRaw = localStorage.getItem('nexus.auth.session');
   let loggedInUser = 'admin@nexus.gg';
   let loggedInRole = 'admin';
@@ -6,7 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
   try {
     const s = JSON.parse(sessionRaw || '{}');
     loggedInUser = s.username || s.email || 'admin@nexus.gg';
-    loggedInRole = String(s.role || 'admin').toLowerCase();
+    loggedInRole = String(s.role || s.adminType || 'admin').toLowerCase();
   } catch (e) {}
 
   // Parse URL query param `?admin=...`
@@ -24,11 +24,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  renderAdminProfile(targetAdmin);
-  renderActivityLogs(targetAdmin);
+  await renderAdminProfile(targetAdmin);
+  await renderActivityLogs(targetAdmin);
 });
 
-function renderAdminProfile(username) {
+async function renderAdminProfile(username) {
   const titleEl = document.getElementById('admin-username-title');
   const emailEl = document.getElementById('admin-email-text');
   const roleEl = document.getElementById('admin-role-badge');
@@ -38,19 +38,40 @@ function renderAdminProfile(username) {
   if (emailEl) emailEl.textContent = username.includes('@') ? username : `${username}@nexus.gg`;
   if (avatarEl && username) avatarEl.textContent = username.charAt(0).toUpperCase();
 
-  // Role detection
-  const isSuper = username.toLowerCase().includes('super');
+  // Detect role badge for target admin
+  let detectedType = 'Administrator';
+  let isSuper = username.toLowerCase().includes('super');
+
+  try {
+    const res = await fetch('http://localhost:3001/auth/users');
+    if (res.ok) {
+      const users = await res.json();
+      const u = users.find(x => String(x.username || x.email).toLowerCase() === username.toLowerCase());
+      if (u) {
+        const t = String(u.adminType || u.role || '').toLowerCase();
+        if (t.includes('dispute')) detectedType = 'Dispute Admin';
+        else if (t.includes('revenue')) detectedType = 'Revenue Admin';
+        else if (t.includes('comp') || t === 'admin') detectedType = 'Comp Admin';
+        else if (t.includes('super')) { detectedType = 'Super Admin'; isSuper = true; }
+      }
+    }
+  } catch (e) {}
+
   if (roleEl) {
-    roleEl.textContent = isSuper ? 'Super Admin' : 'Administrator';
+    roleEl.textContent = detectedType;
     if (isSuper) {
       roleEl.style.background = 'rgba(231,0,11,0.15)';
       roleEl.style.color = '#e7000b';
       roleEl.style.border = '1px solid rgba(231,0,11,0.3)';
+    } else {
+      roleEl.style.background = 'rgba(198,255,51,0.15)';
+      roleEl.style.color = '#c6ff33';
+      roleEl.style.border = '1px solid rgba(198,255,51,0.3)';
     }
   }
 }
 
-function renderActivityLogs(username) {
+async function renderActivityLogs(username) {
   const listEl = document.getElementById('activity-timeline-list');
   const emptyEl = document.getElementById('activity-empty-state');
   const countText = document.getElementById('log-count-text');
@@ -60,33 +81,61 @@ function renderActivityLogs(username) {
   const approvalsCountEl = document.getElementById('stat-approvals-count');
 
   let logs = [];
+
+  // 1. Fetch from local store
   if (window.NexusData && typeof window.NexusData.getAdminActivityLogs === 'function') {
-    logs = window.NexusData.getAdminActivityLogs(username);
+    logs = window.NexusData.getAdminActivityLogs(username) || [];
   } else if (typeof getAdminActivityLogs === 'function') {
-    logs = getAdminActivityLogs(username);
+    logs = getAdminActivityLogs(username) || [];
   }
 
-  // Calculate statistics
-  const configCount = logs.filter(l => l.actionType === 'REVENUE_CONFIG_CHANGE').length;
-  const disputesCount = logs.filter(l => l.actionType === 'DISPUTE_RESOLVED').length;
-  const approvalsCount = logs.filter(l => l.actionType === 'COMPETITION_APPROVAL' || l.actionType === 'COMPETITION_APPROVED').length;
+  // 2. Fetch from PostgreSQL DB API if connected
+  try {
+    if (window.NexusAPI && window.NexusAPI.Admin && typeof window.NexusAPI.Admin.getActivity === 'function') {
+      const res = await window.NexusAPI.Admin.getActivity(username);
+      if (res && res.ok && Array.isArray(res.data)) {
+        const dbLogs = res.data;
+        const mergedMap = new Map();
+        [...logs, ...dbLogs].forEach(item => {
+          if (item && item.id) mergedMap.set(item.id, item);
+        });
+        logs = Array.from(mergedMap.values());
+      }
+    }
+  } catch (e) {}
+
+  // Strictly filter logs for the target admin only
+  const targetNorm = String(username || '').trim().toLowerCase();
+  const adminLogs = logs.filter(l => {
+    if (!l) return false;
+    const author = String(l.adminUsername || l.username || '').trim().toLowerCase();
+    return author === targetNorm || (!author && targetNorm === 'admin');
+  });
+
+  // Calculate statistics for this admin
+  const configCount = adminLogs.filter(l => l.actionType === 'REVENUE_CONFIG_CHANGE').length;
+  const disputesCount = adminLogs.filter(l => l.actionType === 'DISPUTE_RESOLVED').length;
+  const approvalsCount = adminLogs.filter(l => l.actionType === 'COMPETITION_APPROVAL' || l.actionType === 'COMPETITION_APPROVED').length;
 
   if (configCountEl) configCountEl.textContent = configCount;
   if (disputesCountEl) disputesCountEl.textContent = disputesCount;
   if (approvalsCountEl) approvalsCountEl.textContent = approvalsCount;
 
-  if (countText) countText.textContent = `Showing ${logs.length} activity log${logs.length === 1 ? '' : 's'} for ${username}`;
+  if (countText) countText.textContent = `Showing ${adminLogs.length} activity log${adminLogs.length === 1 ? '' : 's'} for ${username}`;
 
-  if (!logs.length) {
+  if (!adminLogs.length) {
     if (listEl) listEl.style.display = 'none';
     if (emptyEl) emptyEl.style.display = 'block';
     return;
   }
 
+  // Sort descending by timestamp
+  adminLogs.sort((a, b) => new Date(b.timestamp || Date.now()) - new Date(a.timestamp || Date.now()));
+
   if (emptyEl) emptyEl.style.display = 'none';
   if (listEl) {
     listEl.style.display = 'flex';
-    listEl.innerHTML = logs.map(item => renderActivityItem(item)).join('');
+    listEl.innerHTML = adminLogs.map(item => renderActivityItem(item)).join('');
   }
 }
 

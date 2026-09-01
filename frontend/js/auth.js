@@ -340,11 +340,12 @@
       return { ok: false, error: 'Your account has been permanently banned for platform violations.' };
     }
 
-    const userRole = normalizeRole((account && account.role) || user?.role || 'participant');
-    console.log('Using role for redirect:', userRole);
+    const userRole = normalizeRole(user?.role || (account && account.role) || 'participant');
+    const adminType = user?.adminType || null;
+    const revokedReason = user?.revokedReason || null;
+    console.log('Using role for redirect:', userRole, 'AdminType:', adminType, 'RevokedReason:', revokedReason);
 
-    // Build and persist the session object so that page-level auth guards
-    // (which check for 'nexus.auth.session' in localStorage) allow access.
+    // Build and persist the session object
     const firstName = user?.firstName || '';
     const lastName = user?.lastName || '';
     let displayName = user?.username || 'User';
@@ -355,6 +356,7 @@
     const sessionObj = {
       username: user?.username || opts.username,
       role: userRole,
+      adminType: adminType,
       displayName: displayName,
       email: user?.email || '',
       joinedAt: account && account.createdAt ? account.createdAt : null,
@@ -367,20 +369,20 @@
     // Get redirect path from roleRoutes passed in options
     const redirectPath = getRoleProfilePath(userRole, opts.roleRoutes) || opts.fallbackPath || '../index.html';
 
-    console.log('getRoleProfilePath result:', getRoleProfilePath(userRole, opts.roleRoutes));
-    console.log('Final redirect path:', redirectPath);
-    console.log('About to redirect to:', redirectPath);
-
-    // Redirect after short delay
-    setTimeout(() => {
-      console.log('Executing redirect to:', redirectPath);
-      window.location.href = redirectPath;
-    }, 300);
+    if (!revokedReason) {
+      // Redirect after short delay
+      setTimeout(() => {
+        console.log('Executing redirect to:', redirectPath);
+        window.location.href = redirectPath;
+      }, 300);
+    }
 
     return {
       ok: true,
       message: 'Login successful!',
-      redirectPath
+      user: sessionObj,
+      revokedReason: revokedReason,
+      redirectPath: redirectPath
     };
   }
 

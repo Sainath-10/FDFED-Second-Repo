@@ -52,7 +52,10 @@ function formatRole(role) {
     regular: 'User',
     participant: 'User',
     team_lead: 'Team Lead',
-    admin: 'Admin',
+    admin: 'Comp Admin',
+    comp_admin: 'Comp Admin',
+    dispute_admin: 'Dispute Admin',
+    revenue_admin: 'Revenue Admin',
     'super-admin': 'Super Admin',
     super_admin: 'Super Admin'
   };

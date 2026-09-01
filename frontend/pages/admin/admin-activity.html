@@ -8,12 +8,20 @@
   <link rel="stylesheet" href="../../css/styles.css">
   <link rel="stylesheet" href="../../css/pages/admin/dashboard.css">
   <script>
-    // Strict Authorization Guard
+    // Authorization Guard for all Admin Types & Super Admin
     (function () {
       try {
         const session = JSON.parse(localStorage.getItem('nexus.auth.session') || 'null');
-        const role = String(session?.role || '').toLowerCase();
-        if (!session || (role !== 'admin' && role !== 'super-admin' && role !== 'super_admin')) {
+        const role = String(session?.role || session?.adminType || '').toLowerCase();
+        const allowedRoles = [
+          'admin',
+          'comp_admin',
+          'dispute_admin',
+          'revenue_admin',
+          'super_admin',
+          'super-admin'
+        ];
+        if (!session || !allowedRoles.includes(role)) {
           alert('Access Denied: Only Administrators can access Admin Activity.');
           window.location.replace('../dashboard.html');
         }

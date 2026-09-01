@@ -563,17 +563,55 @@ function getTeamSidebar(activePage, activeTab, base = '../../') {
 }
 
 /**
- * Admin sidebar: Home, Disputes, Revenue, Users, Profile
+ * Admin sidebar: Isolated per Admin Type (comp_admin, dispute_admin, revenue_admin, super_admin)
  */
 function getAdminSidebar(activePage, base = '../../') {
-  const items = [
-    { id: 'home', label: 'Home', href: base + 'pages/admin/dashboard.html', icon: homeIcon() },
-    { id: 'disputes', label: 'Disputes', href: base + 'pages/admin/disputes.html', icon: shieldIcon() },
-    { id: 'revenue', label: 'Revenue', href: base + 'pages/admin/revenue-transactions.html', icon: moneyIcon() },
-    { id: 'users', label: 'Users', href: base + 'pages/admin/users.html', icon: usersIcon() },
-    { id: 'activity', label: 'Activity', href: base + 'pages/admin/admin-activity.html', icon: checkCircleIcon() },
-    { id: 'profile', label: 'Profile', href: base + 'pages/admin/admin-profile.html', icon: profileIcon() },
-  ];
+  let session = null;
+  try {
+    const raw = localStorage.getItem('nexus.auth.session');
+    if (raw) session = JSON.parse(raw);
+  } catch(e) {}
+
+  let normType = String((session && (session.adminType || session.role)) || '').trim().toLowerCase();
+  if (normType === 'admin') normType = 'comp_admin';
+
+  let items = [];
+
+  if (normType === 'comp_admin') {
+    items = [
+      { id: 'home', label: 'Comp Dashboard', href: base + 'pages/admin/dashboard.html', icon: homeIcon() },
+      { id: 'users', label: 'Users', href: base + 'pages/admin/users.html', icon: usersIcon() },
+      { id: 'activity', label: 'Activity', href: base + 'pages/admin/admin-activity.html', icon: checkCircleIcon() },
+      { id: 'profile', label: 'Profile', href: base + 'pages/admin/admin-profile.html', icon: profileIcon() },
+    ];
+  } else if (normType === 'dispute_admin') {
+    items = [
+      { id: 'disputes', label: 'Dispute Dashboard', href: base + 'pages/admin/disputes.html', icon: shieldIcon() },
+      { id: 'users', label: 'Users', href: base + 'pages/admin/users.html', icon: usersIcon() },
+      { id: 'activity', label: 'Activity', href: base + 'pages/admin/admin-activity.html', icon: checkCircleIcon() },
+      { id: 'profile', label: 'Profile', href: base + 'pages/admin/admin-profile.html', icon: profileIcon() },
+    ];
+  } else if (normType === 'revenue_admin') {
+    items = [
+      { id: 'revenue', label: 'Revenue Dashboard', href: base + 'pages/admin/revenue-transactions.html', icon: moneyIcon() },
+      { id: 'users', label: 'Users', href: base + 'pages/admin/users.html', icon: usersIcon() },
+      { id: 'activity', label: 'Activity', href: base + 'pages/admin/admin-activity.html', icon: checkCircleIcon() },
+      { id: 'profile', label: 'Profile', href: base + 'pages/admin/admin-profile.html', icon: profileIcon() },
+    ];
+  } else {
+    // Super Admin or General Admin
+    items = [
+      { id: 'home', label: 'Comp Dashboard', href: base + 'pages/admin/dashboard.html', icon: homeIcon() },
+      { id: 'disputes', label: 'Disputes', href: base + 'pages/admin/disputes.html', icon: shieldIcon() },
+      { id: 'revenue', label: 'Revenue', href: base + 'pages/admin/revenue-transactions.html', icon: moneyIcon() },
+      { id: 'users', label: 'Users', href: base + 'pages/admin/users.html', icon: usersIcon() },
+      { id: 'activity', label: 'Activity', href: base + 'pages/admin/admin-activity.html', icon: checkCircleIcon() },
+      { id: 'profile', label: 'Profile', href: base + 'pages/admin/admin-profile.html', icon: profileIcon() },
+    ];
+  }
+
+  const navTop = items.slice(0, items.length > 4 ? 4 : 2);
+  const navBottom = items.slice(items.length > 4 ? 4 : 2);
 
   return `
   <aside class="sidebar">
@@ -583,18 +621,48 @@ function getAdminSidebar(activePage, base = '../../') {
       <div class="logo-sub">ESPORTS</div>
     </div>
     <nav class="sidebar-nav">
-      ${items.slice(0, 4).map(item => `
+      ${navTop.map(item => `
         <a href="${item.href}" class="nav-item ${activePage === item.id ? 'active' : ''}">
           ${item.icon}<span>${item.label}</span>
         </a>`).join('')}
     </nav>
     <div class="sidebar-nav-bottom">
-      ${items.slice(4).map(item => `
+      ${navBottom.map(item => `
         <a href="${item.href}" class="nav-item ${activePage === item.id ? 'active' : ''}">
           ${item.icon}<span>${item.label}</span>
         </a>`).join('')}
     </div>
   </aside>`;
+}
+
+/**
+ * Injects admin sidebar with dashboard isolation guards
+ */
+function initAdminSidebar(activePage, base = '../../') {
+  let session = null;
+  try {
+    const raw = localStorage.getItem('nexus.auth.session');
+    if (raw) session = JSON.parse(raw);
+  } catch(e) {}
+
+  let normType = String((session && (session.adminType || session.role)) || '').trim().toLowerCase();
+  if (normType === 'admin') normType = 'comp_admin';
+
+  // Guard against navigating to other admin type dashboards
+  const path = window.location.pathname.toLowerCase();
+  if (normType === 'dispute_admin' && (path.includes('/admin/dashboard.html') || path.includes('/admin/revenue-transactions.html'))) {
+    window.location.replace(base + 'pages/admin/disputes.html');
+    return;
+  } else if (normType === 'comp_admin' && (path.includes('/admin/disputes.html') || path.includes('/admin/revenue-transactions.html'))) {
+    window.location.replace(base + 'pages/admin/dashboard.html');
+    return;
+  } else if (normType === 'revenue_admin' && (path.includes('/admin/dashboard.html') || path.includes('/admin/disputes.html'))) {
+    window.location.replace(base + 'pages/admin/revenue-transactions.html');
+    return;
+  }
+
+  const el = document.getElementById('sidebar-mount');
+  if (el) el.innerHTML = getAdminSidebar(activePage, base);
 }
 
 /**

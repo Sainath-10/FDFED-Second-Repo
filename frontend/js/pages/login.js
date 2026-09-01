@@ -14,9 +14,12 @@ const roleRoutes = {
 	regular: 'profile.html',
 	participant: 'profile.html',
 	team_lead: 'team-lead-dashboard.html',
-	admin: 'admin/admin-profile.html',
-	'super-admin': 'super-admin/profile.html',
-	super_admin: 'super-admin/profile.html'
+	admin: 'admin/dashboard.html',
+	comp_admin: 'admin/dashboard.html',
+	dispute_admin: 'admin/disputes.html',
+	revenue_admin: 'admin/revenue-transactions.html',
+	'super-admin': 'super-admin/super-dashboard.html',
+	super_admin: 'super-admin/super-dashboard.html'
 };
 
 function setFeedback(message, isSuccess) {
@@ -73,6 +76,26 @@ if (loginForm) {
 		if (!result.ok) {
 			setFeedback(result.error || 'Login failed. Please try again.', false);
 			console.error('Login error:', result.error);
+			return;
+		}
+
+		if (result.revokedReason) {
+			const noticeMsg = `⚠️ Notice: Your administrator status was revoked by Super Admin.\nReason: "${result.revokedReason}"\nRedirecting to standard participant dashboard...`;
+			setFeedback(noticeMsg, true);
+			
+			if (loginFeedback) {
+				loginFeedback.style.background = 'rgba(234, 179, 8, 0.15)';
+				loginFeedback.style.border = '1px solid rgba(234, 179, 8, 0.4)';
+				loginFeedback.style.color = '#fde047';
+				loginFeedback.style.padding = '12px 16px';
+				loginFeedback.style.borderRadius = '8px';
+				loginFeedback.style.whiteSpace = 'pre-line';
+				loginFeedback.style.fontWeight = '600';
+			}
+
+			setTimeout(() => {
+				window.location.href = result.redirectPath || 'profile.html';
+			}, 4000);
 			return;
 		}
 
