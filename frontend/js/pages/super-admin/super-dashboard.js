@@ -102,6 +102,31 @@ document.addEventListener('DOMContentLoaded', () => {
     if (persisted) {
         applyDashboardState(persisted);
     }
+
+    // Fetch real-time system stats from backend /admin/stats endpoint
+    try {
+        fetch('http://localhost:3001/admin/stats')
+            .then(res => res.ok ? res.json() : null)
+            .then(stats => {
+                if (!stats) return;
+                const items = document.querySelectorAll('.sa-mon-item');
+                if (items.length >= 4) {
+                    if (stats.totalUsers !== undefined) {
+                        items[0].querySelector('.sa-mon-value').textContent = stats.totalUsers.toLocaleString();
+                    }
+                    if (stats.activeCompetitions !== undefined) {
+                        items[1].querySelector('.sa-mon-value').textContent = stats.activeCompetitions.toLocaleString();
+                    }
+                    if (stats.systemStatus !== undefined) {
+                        items[2].querySelector('.sa-mon-value').innerHTML = `<span class="status-dot"></span> ${stats.systemStatus}`;
+                    }
+                    if (stats.uptimePercentage !== undefined) {
+                        items[3].querySelector('.sa-mon-value').textContent = `${stats.uptimePercentage}%`;
+                    }
+                }
+            })
+            .catch(() => {});
+    } catch (_) {}
 });
 
 /**

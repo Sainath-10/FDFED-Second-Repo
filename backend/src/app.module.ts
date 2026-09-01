@@ -45,13 +45,13 @@ import { AdminActivityLogEntity } from './entities/admin-activity-log.entity';
         const connection = databaseUrl
           ? { type: 'postgres' as const, url: databaseUrl }
           : {
-              type: 'postgres' as const,
-              host: config.get<string>('DB_HOST', '127.0.0.1'),
-              port: Number(config.get<string>('DB_PORT', '5432')),
-              username: config.get<string>('DB_USERNAME', 'postgres'),
-              password: config.get<string>('DB_PASSWORD', 'postgres'),
-              database: config.get<string>('DB_DATABASE', 'fdfed'),
-            };
+            type: 'postgres' as const,
+            host: config.get<string>('DB_HOST', '127.0.0.1'),
+            port: Number(config.get<string>('DB_PORT', '5432')),
+            username: config.get<string>('DB_USERNAME') || config.get<string>('DB_USER') || 'postgres',
+            password: config.get<string>('DB_PASSWORD', 'postgres'),
+            database: config.get<string>('DB_DATABASE') || config.get<string>('DB_NAME') || 'nexus_db',
+          };
 
         return {
           ...connection,
