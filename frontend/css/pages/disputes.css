@@ -1,0 +1,39 @@
+.main-content {
+  padding: 40px 60px 80px 100px;
+  min-height: 100vh;
+}
+
+.page-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 32px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.page-title {
+  font-family: var(--font-display);
+  font-size: 36px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-white);
+}
+
+.page-subtitle {
+  font-size: 15px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+.header-btn {
+  font-size: 13px;
+  padding: 10px 20px;
+}
+
+.tabs-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+}

@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Team Settings</title>
+  <link rel="stylesheet" href="../../css/styles.css">
+  <link rel="stylesheet" href="../../css/pages/team/team-settings.css">
+</head>
+
+<body>
+  <div id="sidebar-mount"></div>
+  <div class="page-with-sidebar">
+    <main class="main-content">
+      <h1 class="page-title">Storm Riders</h1>
+      <p class="page-subtitle">Team settings and management options</p>
+
+      <div class="team-tabs-nav">
+        <a href="team-roster.html" class="team-tab">Roster</a>
+        <a href="add-players.html" class="team-tab">Add Players</a>
+        <a href="join-requests.html" class="team-tab">Join Requests <span class="notif-badge-sm">2</span></a>
+        <a href="invitations-sent.html" class="team-tab">Invitations Sent</a>
+        <a href="team-settings.html" class="team-tab active">Settings</a>
+      </div>
+
+      <div class="settings-container-centered">
+
+        <!-- Card 1: Team Name -->
+        <div class="design-card">
+          <label class="design-label">Team Name</label>
+          <div class="design-input-wrapper">
+            <input type="text" id="team-name" value="Storm Riders" class="design-input">
+          </div>
+        </div>
+
+        <!-- Card 2: Team Tag -->
+        <div class="design-card">
+          <label class="design-label">Team Tag</label>
+          <div class="design-input-wrapper">
+            <input type="text" id="team-tag" value="SR" class="design-input" maxlength="5">
+          </div>
+        </div>
+
+        <!-- Card 3: Team Logo -->
+        <div class="design-card">
+          <label class="design-label">Team Logo</label>
+          <div class="logo-grid">
+            <div class="logo-option active" data-logo="shield">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+              </svg>
+            </div>
+            <div class="logo-option" data-logo="trophy">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path>
+                <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path>
+                <path d="M4 22h16"></path>
+                <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path>
+                <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path>
+                <path d="M18 2H6v7a6 6 0 0 0 12 0V2z"></path>
+              </svg>
+            </div>
+            <div class="logo-option" data-logo="gamepad">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="6" width="20" height="12" rx="2"></rect>
+                <path d="M6 12h4"></path>
+                <path d="M8 10v4"></path>
+                <line x1="15" y1="13" x2="15.01" y2="13"></line>
+                <line x1="18" y1="11" x2="18.01" y2="11"></line>
+              </svg>
+            </div>
+            <div class="logo-option" data-logo="bolt">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+              </svg>
+            </div>
+            <div class="logo-option" data-logo="star">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon
+                  points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2">
+                </polygon>
+              </svg>
+            </div>
+            <div class="logo-option" data-logo="diamond">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M6 3h12l4 6-10 12L2 9z"></path>
+                <path d="M11 3 8 9l3 12"></path>
+                <path d="M13 3l3 6-3 12"></path>
+                <path d="M2.2 9h19.6"></path>
+              </svg>
+            </div>
+            <div class="logo-option upload-btn">
+              <div class="upload-content">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="17 8 12 3 7 8"></polyline>
+                  <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
+                <span>UPLOAD</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 4: Join Requests -->
+        <div class="design-card">
+          <label class="design-label">Join Requests</label>
+          <div class="join-policy-selector">
+            <button type="button" class="policy-option active" id="policy-open" onclick="setJoinPolicy('open')">
+              OPEN (ANYONE CAN REQUEST)
+            </button>
+            <button type="button" class="policy-option" id="policy-invite" onclick="setJoinPolicy('invite')">
+              INVITE ONLY
+            </button>
+          </div>
+        </div>
+
+        <!-- Footer Buttons -->
+        <div class="footer-actions">
+          <button class="btn-action create" onclick="saveChanges()">SAVE CHANGES</button>
+        </div>
+
+        <!-- Danger Zone -->
+        <div class="design-card danger-card-red-border">
+          <label class="design-label" style="color:#f87171;">⚠ Danger Zone</label>
+          <p class="danger-desc-v2">Disbanding this team is permanent and cannot be undone. All members will be removed
+            from the competition registry immediately.</p>
+          <button class="btn-action btn-disband-v2" onclick="disbandTeam()">DISBAND TEAM PERMANENTLY</button>
+        </div>
+
+      </div>
+
+    </main>
+    <div id="footer-mount"></div>
+  </div>
+  <script src="../../js/script.js"></script>
+  <script src="../../js/pages/competitions-data.js"></script>
+  <script src="../../js/pages/team/team-workflow.js"></script>
+  <script src="../../js/pages/team/team-settings.js"></script>
+</body>
+
+</html>

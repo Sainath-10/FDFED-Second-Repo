@@ -1,0 +1,340 @@
+/* ── Policy Management Styles ── */
+
+/* Header */
+.pm-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 40px;
+  gap: 32px;
+}
+
+.pm-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.btn-back {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 14px;
+  font-weight: 700;
+  transition: color 0.2s;
+}
+
+.btn-back:hover {
+  color: #fff;
+}
+
+.pm-title {
+  font-family: var(--font-display);
+  font-size: 40px;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1.1;
+}
+
+.pm-desc {
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 8px;
+}
+
+.btn-new-policy {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 800;
+  border-radius: 8px;
+  transition: transform 0.2s, filter 0.2s;
+}
+
+.btn-new-policy.neon {
+  background: var(--accent);
+  color: #000;
+}
+
+.btn-new-policy:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.1);
+}
+
+/* Stats Cards */
+.pm-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  margin-bottom: 40px;
+}
+
+.pm-stat-card {
+  background: #0a0a0a;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.pm-stat-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pm-stat-icon.green { background: rgba(34, 197, 94, 0.1); color: #22c55e; }
+.pm-stat-icon.orange { background: rgba(245, 73, 0, 0.1); color: #f54900; }
+.pm-stat-icon.blue { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
+
+.pm-stat-label {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 4px;
+}
+
+.pm-stat-value {
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 800;
+  color: #fff;
+}
+
+/* Tabs */
+.pm-tabs-bar {
+  display: flex;
+  gap: 48px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  margin-bottom: 32px;
+  padding: 0 4px;
+}
+
+.pm-tab-btn {
+  padding: 12px 0;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 15px;
+  font-weight: 700;
+  position: relative;
+  transition: color 0.2s;
+}
+
+.pm-tab-btn:hover {
+  color: #fff;
+}
+
+.pm-tab-btn.active {
+  color: var(--accent);
+}
+
+.pm-tab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent);
+}
+
+/* Policy Cards */
+.pm-policy-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.policy-card {
+  background: #0a0a0a;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 24px;
+  display: flex;
+  gap: 24px;
+  transition: border-color 0.2s;
+}
+
+.policy-card:hover {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.policy-icon-box {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.policy-icon-box.financial { background: rgba(34, 197, 94, 0.1); color: #22c55e; }
+.policy-icon-box.conduct { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
+.policy-icon-box.eligibility { background: rgba(245, 73, 0, 0.1); color: #f54900; }
+.policy-icon-box.security { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+.policy-icon-box.privacy { background: rgba(168, 85, 247, 0.1); color: #a855f7; }
+
+.policy-details {
+  flex: 1;
+}
+
+.policy-header-row {
+  margin-bottom: 12px;
+}
+
+.policy-title-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.policy-name {
+  font-size: 20px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.policy-tags {
+  display: flex;
+  gap: 8px;
+}
+
+.tag {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 4px;
+}
+
+.tag.financial { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
+.tag.conduct { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
+.tag.eligibility { background: rgba(245, 73, 0, 0.15); color: #f54900; }
+.tag.security { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+.tag.privacy { background: rgba(168, 85, 247, 0.15); color: #a855f7; }
+.tag.version { background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.6); }
+
+.policy-description {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.4);
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+
+.policy-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.policy-meta {
+  display: flex;
+  gap: 24px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.policy-meta strong {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.compliance-text {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.policy-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.btn-policy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.btn-policy.outline {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.btn-policy.edit {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border: 1px solid var(--accent-border);
+}
+
+.btn-policy:hover {
+  transform: translateY(-1px);
+}
+
+.btn-policy.outline:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.btn-policy.edit:hover {
+  background: var(--accent);
+  color: #000;
+}
+
+/* Footer Overrides for PM */
+.site-footer {
+  margin-top: 60px;
+  padding: 40px 0;
+  background: transparent;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.footer-socials {
+  display: flex;
+  gap: 12px;
+}
+
+.social-btn {
+  width: 40px;
+  height: 40px;
+  background: #0a0a0a;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.4);
+  transition: all 0.2s;
+}
+
+.social-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: translateY(-2px);
+}
+
+@media (max-width: 1200px) {
+  .pm-stats-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 768px) {
+  .pm-header { flex-direction: column; }
+  .pm-stats-grid { grid-template-columns: 1fr; }
+  .policy-card { flex-direction: column; }
+  .pm-tabs-bar { gap: 24px; overflow-x: auto; white-space: nowrap; }
+}

@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Create Competition</title>
+  <link rel="stylesheet" href="../css/styles.css">
+  <link rel="stylesheet" href="../css/pages/create-competition.css">
+  <script>
+    // Blocking Auth Guard (Runs BEFORE body renders)
+    if (!localStorage.getItem('nexus.auth.session')) {
+      window.location.replace('login.html');
+    }
+  </script>
+</head>
+
+<body>
+
+  <!-- Sidebar -->
+  <div id="sidebar-mount"></div>
+
+  <div class="page-with-sidebar">
+    <main class="create-comp-page">
+
+      <a href="competitions.html" class="back-btn">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+          stroke-linecap="round">
+          <path d="M12 8H4M4 8L8 12M4 8L8 4" />
+        </svg>
+        Back to Competitions
+      </a>
+
+      <h1 class="page-title">Create Competition</h1>
+      <p class="page-subtitle">Set up a new tournament for your community.</p>
+
+      <div class="create-layout">
+
+        <!-- Main Form -->
+        <div class="form-card">
+          <form id="create-comp-form" novalidate>
+
+            <!-- Basic Info -->
+            <div class="form-section-title">Basic Information</div>
+
+            <div class="form-group">
+              <label class="form-label" for="comp-name">Competition Name <span style="color:#ef4444">*</span></label>
+              <input class="form-input" type="text" id="comp-name" placeholder="e.g. Summer Showdown 2026"
+                oninput="updateSummary()" required>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="comp-game">Game <span style="color:#ef4444">*</span></label>
+                <select class="form-select" id="comp-game" onchange="updateSummary()" required>
+                  <option value="">Select game…</option>
+                  <option>Counter-Strike 2</option>
+                  <option>League of Legends</option>
+                  <option>Dota 2</option>
+                  <option>Fortnite</option>
+                  <option>Valorant</option>
+                  <option>Rocket League</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="comp-format">Format <span style="color:#ef4444">*</span></label>
+                <select class="form-select" id="comp-format" onchange="updateSummary()" required>
+                  <option value="">Select format…</option>
+                  <option>Single Elimination</option>
+                  <option>Round Robin</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="comp-desc">Description <span style="color:#ef4444">*</span></label>
+              <textarea class="form-textarea" id="comp-desc"
+                placeholder="Describe your tournament — rules, schedule, eligibility requirements… (at least 10 characters)" required></textarea>
+            </div>
+
+            <!-- Co-Organizers -->
+            <div class="form-section-title">Tournament Co-Organizers</div>
+            <div class="form-group">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <label class="form-label" style="margin:0;">Co-Organizers (Assign Multiple)</label>
+                <button type="button" class="btn-table-secondary" id="btn-add-coorganizer" onclick="addOrganizerInputRow('', true)" style="padding:6px 14px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(198,255,51,0.3);color:#c6ff33;cursor:pointer;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  Add Co-Organizer
+                </button>
+              </div>
+              
+              <div id="co-organizers-container" style="display:flex;flex-direction:column;gap:10px;"></div>
+              
+              <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">
+                Click <strong>+ Add Co-Organizer</strong> to assign organizers. Co-organizers can manage brackets, approve teams, and resolve disputes for this tournament.
+              </p>
+            </div>
+
+            <!-- Banner Upload -->
+            <div class="form-section-title">Tournament Banner</div>
+            <div class="upload-area" onclick="document.getElementById('banner-file').click()">
+              <div class="upload-icon">🖼️</div>
+              <div class="upload-text">
+                <span>Click to upload custom banner</span> or drag &amp; drop<br>
+                Automatic game-tailored banner will be used if left empty
+              </div>
+              <input type="file" id="banner-file" accept="image/*" style="display:none;"
+                onchange="previewBanner(event)">
+            </div>
+            <img id="banner-preview" src="" alt=""
+              style="display:none;width:100%;border-radius:10px;margin-top:12px;max-height:180px;object-fit:cover;">
+
+            <!-- Dates & Capacity -->
+            <div class="form-section-title">Dates &amp; Capacity</div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="reg-open">Registration Opens <span style="color:#ef4444">*</span></label>
+                <input class="form-input" type="date" id="reg-open" oninput="updateSummary()" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="reg-close">Registration Closes <span style="color:#ef4444">*</span></label>
+                <input class="form-input" type="date" id="reg-close" oninput="updateSummary()" required>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="start-date">Tournament Start Date <span style="color:#ef4444">*</span></label>
+                <input class="form-input" type="date" id="start-date" oninput="updateSummary()" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="end-date">Tournament End Date <span style="color:#ef4444">*</span></label>
+                <input class="form-input" type="date" id="end-date" oninput="updateSummary()" required>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="max-teams">Max Teams (2–256) <span style="color:#ef4444">*</span></label>
+                <input class="form-input" type="number" id="max-teams" placeholder="e.g. 16" min="2" max="256" value="16" oninput="updateSummary()" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="max-players">Max Players per Team (1–20) <span style="color:#ef4444">*</span></label>
+                <input class="form-input" type="number" id="max-players" placeholder="e.g. 5" min="1" max="20" value="5" oninput="updateSummary()" required>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="entry-fee">Entry Fee (₹, 0 = Free)</label>
+                <input class="form-input" type="number" id="entry-fee" placeholder="0 = Free" min="0" value="0">
+              </div>
+              <div class="form-group" style="visibility: hidden;"></div>
+            </div>
+
+            <!-- Prize Pool -->
+            <div class="form-section-title">Prize Pool Distribution (₹)</div>
+
+            <div class="prize-tiers">
+              <div class="prize-tier">
+                <div class="prize-rank">🥇</div>
+                <div class="prize-label">1st Place</div>
+                <input class="prize-input" type="number" id="prize-1" placeholder="0" min="0"
+                  oninput="updatePrizeTotal()">
+              </div>
+              <div class="prize-tier">
+                <div class="prize-rank">🥈</div>
+                <div class="prize-label">2nd Place</div>
+                <input class="prize-input" type="number" id="prize-2" placeholder="0" min="0"
+                  oninput="updatePrizeTotal()">
+              </div>
+              <div class="prize-tier">
+                <div class="prize-rank">🥉</div>
+                <div class="prize-label">3rd Place</div>
+                <input class="prize-input" type="number" id="prize-3" placeholder="0" min="0"
+                  oninput="updatePrizeTotal()">
+              </div>
+            </div>
+
+            <!-- Prize total display -->
+            <div id="prize-total-row"
+              style="margin-top:14px;display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:8px;background:rgba(198,255,51,0.06);border:1px solid rgba(198,255,51,0.15);">
+              <span style="font-size:13px;color:var(--text-muted);font-weight:600;letter-spacing:0.5px;">TOTAL PRIZE
+                POOL</span>
+              <span id="prize-total-display" style="font-size:18px;font-weight:800;color:#c6ff33;">₹0</span>
+            </div>
+            <p id="prize-total-error" style="color:#f87171;font-size:12px;margin-top:6px;display:none;">
+              ⚠ The sum of prizes must be greater than ₹0 to publish.
+            </p>
+
+            <div style="margin-top:32px;">
+              <button type="submit" class="btn-submit">Publish Competition</button>
+            </div>
+
+          </form>
+        </div>
+
+        <!-- Summary Sidebar -->
+        <div class="summary-card">
+          <h3>Summary</h3>
+
+          <div class="summary-row"><span class="k">Name</span> <span class="v" id="s-name">—</span></div>
+          <div class="summary-row"><span class="k">Game</span> <span class="v" id="s-game">—</span></div>
+          <div class="summary-row"><span class="k">Format</span> <span class="v" id="s-format">—</span></div>
+          <div class="summary-row"><span class="k">Teams</span> <span class="v" id="s-teams">—</span></div>
+          <div class="summary-row"><span class="k">Reg. Opens</span> <span class="v" id="s-reg">—</span></div>
+
+          <div style="margin-top:24px;">
+            <h3>Next Steps</h3>
+            <div class="steps-list">
+              <div class="step-item">
+                <div class="step-num done">✓</div><span class="step-text">Fill in competition details</span>
+              </div>
+              <div class="step-item">
+                <div class="step-num">2</div><span class="step-text">Publish your competition</span>
+              </div>
+              <div class="step-item">
+                <div class="step-num">3</div><span class="step-text">Share with your community</span>
+              </div>
+              <div class="step-item">
+                <div class="step-num">4</div><span class="step-text">Manage registrations & schedule matches</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </main>
+
+    <!-- Footer -->
+    <div id="footer-mount"></div>
+
+  </div>
+
+  <script src="../js/api.js"></script>
+  <script src="../js/script.js"></script>
+  <script src="../js/pages/competitions-data.js"></script>
+  <script src="../js/pages/create-competition.js"></script>
+
+</body>
+
+</html>

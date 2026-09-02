@@ -1,0 +1,118 @@
+.main-content {
+  padding: 40px 60px 80px 100px;
+  min-height: 100vh;
+}
+
+.page-title {
+  font-family: var(--font-display);
+  font-size: 36px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-white);
+  margin-bottom: 4px;
+}
+
+.page-subtitle {
+  font-size: 15px;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+}
+
+.notif-badge-sm {
+  background: var(--red);
+  color: #fff;
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 9999px;
+  margin-left: 4px;
+}
+
+.invites-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 720px;
+}
+
+.invite-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+  background: var(--bg-card);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  flex-wrap: wrap;
+}
+
+.invite-avatar-sm {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(198, 255, 51, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.invite-info-wrapper {
+  flex: 1;
+  min-width: 140px;
+}
+
+.invite-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.invite-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.btn-revoke-mini {
+  font-size: 12px;
+}
+
+.invite-row-accepted {
+  opacity: 0.7;
+}
+
+.avatar-accepted {
+  background: rgba(34, 197, 94, 0.1);
+  color: var(--green);
+}
+
+.status-text-green {
+  font-size: 12px;
+  color: var(--green);
+}
+
+.invite-row-declined {
+  opacity: 0.6;
+}
+
+.avatar-declined {
+  background: rgba(231, 0, 11, 0.1);
+  color: var(--red);
+}
+
+.status-text-red {
+  font-size: 12px;
+  color: var(--red);
+}
+
+.invites-footer-actions {
+  padding: 20px;
+  text-align: center;
+}
+
+.invite-more-btn {
+  font-size: 14px;
+  padding: 12px 28px;
+}

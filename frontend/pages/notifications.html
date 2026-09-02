@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Notifications</title>
+  <link rel="stylesheet" href="../css/styles.css">
+  <link rel="stylesheet" href="../css/pages/notifications.css">
+</head>
+<body>
+<div id="sidebar-mount"></div>
+<div class="page-with-sidebar">
+  <main class="main-content">
+
+    <div class="page-header-row">
+      <div>
+        <h1 class="page-title">Notifications</h1>
+        <p class="page-subtitle">Stay updated on your competitions, team, and matches.</p>
+      </div>
+      <button onclick="markAllRead()" class="btn-outline header-btn">Mark All Read</button>
+    </div>
+
+    <!-- Search Bar -->
+    <div class="search-wrap">
+      <div class="search-inner">
+        <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <input type="text" id="notif-search" placeholder="Search notifications by title, content or status..." onkeyup="filterNotifications()">
+      </div>
+    </div>
+
+    <!-- Filter chips -->
+    <div class="tabs-row-high">
+      <div class="notif-tab active" data-filter="all">
+        All <span class="count-badge">7</span>
+      </div>
+      <div class="notif-tab" data-filter="pending">
+        Pending <span class="count-badge">3</span>
+      </div>
+      <div class="notif-tab" data-filter="approved">
+        Approved <span class="count-badge">2</span>
+      </div>
+      <div class="notif-tab" data-filter="rejected">
+        Rejected <span class="count-badge">2</span>
+      </div>
+    </div>
+
+    <!-- Notification items (populated dynamically by notifications.js) -->
+    <div class="notif-container">
+      <div class="notif-list" id="notif-list">
+        <!-- Dynamic notifications from team/competition activity will be injected here -->
+        <!-- Static sample items below are hidden for new users with no activity -->
+      </div>
+      <!-- Empty state shown when no notifications exist -->
+      <div id="notif-empty-state" style="display:none;padding:48px 0;text-align:center;">
+        <div style="font-size:40px;margin-bottom:12px;">🔔</div>
+        <h3 style="color:var(--text-white);margin-bottom:8px;">No notifications yet</h3>
+        <p style="color:var(--text-muted);font-size:14px;">You'll be notified about team invites, competition updates, and match results here.</p>
+      </div>
+    </div>
+
+  </main>
+  <div id="footer-mount"></div>
+</div>
+
+<script src="../js/script.js"></script>
+<script src="../js/pages/competitions-data.js"></script>
+<script src="../js/pages/team/team-workflow.js"></script>
+<script src="../js/pages/notifications.js"></script>
+</body>
+</html>

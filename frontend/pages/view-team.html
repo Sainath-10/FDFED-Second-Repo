@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — View Team</title>
+  <link rel="stylesheet" href="../css/styles.css">
+  <link rel="stylesheet" href="../css/pages/view-team.css">
+</head>
+<body>
+<div id="sidebar-mount"></div>
+<div class="page-with-sidebar">
+  <main class="main-content">
+    <a href="competitions-participated.html" class="back-btn-alt">← Back to Competition</a>
+
+    <div class="team-header-row">
+      <div class="team-logo-lg">⚡</div>
+      <div>
+        <h1 class="team-title-lg">Storm Riders</h1>
+        <p class="team-subtitle-lg">Counter-Strike 2 · South Asia · Captain: AryanX99</p>
+        <div class="team-meta-row">
+          <span class="status-pill ongoing">Active</span>
+          <span class="player-count-badge">4 / 5 Players</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="layout-wrapper">
+      <div>
+        <!-- Roster -->
+        <div class="roster-card">
+          <h2 class="card-title-sm">Roster</h2>
+          <div class="roster-grid">
+            <div class="player-card">
+              <img class="player-avatar" src="../assets/88bb61dd411e2e781af6284e0036a9672ba8ef32.png" alt="" onerror="this.style.background='#222';this.removeAttribute('src')">
+              <div class="p-name">AryanX99</div>
+              <div class="p-role">Captain · IGL</div>
+              <div class="p-stats">Diamond I</div>
+              <div class="btn-profile-wrapper"><button class="btn-table-secondary btn-profile-mini" onclick="location.href='../pages/profile.html'">View Profile</button></div>
+            </div>
+            <div class="player-card">
+              <div class="player-avatar-placeholder">N</div>
+              <div class="p-name">ninja_byte</div>
+              <div class="p-role">AWPer</div>
+              <div class="p-stats">Platinum II</div>
+              <div class="btn-profile-wrapper"><button class="btn-table-secondary btn-profile-mini" onclick="showToast('Viewing profile...')">View Profile</button></div>
+            </div>
+            <div class="player-card">
+              <div class="player-avatar-placeholder">X</div>
+              <div class="p-name">xXProSlayer</div>
+              <div class="p-role">Entry Fragger</div>
+              <div class="p-stats">Gold I</div>
+              <div class="btn-profile-wrapper"><button class="btn-table-secondary btn-profile-mini" onclick="showToast('Viewing profile...')">View Profile</button></div>
+            </div>
+            <div class="player-card">
+              <div class="player-avatar-placeholder">S</div>
+              <div class="p-name">SniperGod99</div>
+              <div class="p-role">Support</div>
+              <div class="p-stats">Platinum I</div>
+              <div class="btn-profile-wrapper"><button class="btn-table-secondary btn-profile-mini" onclick="showToast('Viewing profile...')">View Profile</button></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Match history -->
+        <div class="match-card">
+          <h2 class="card-title-sm">Recent Matches</h2>
+          <div class="match-history">
+            <div class="match-item"><div><div class="game">CS2</div><div class="event">World Championship 2026 · QF</div><div class="date match-date-alt">Jul 12, 2026</div></div><div class="result-win">WIN 16–9</div></div>
+            <div class="match-item"><div><div class="game">CS2</div><div class="event">World Championship 2026 · R16</div><div class="date match-date-alt">Jul 10, 2026</div></div><div class="result-win">WIN 16–11</div></div>
+            <div class="match-item"><div><div class="game">CS2</div><div class="event">Regional Cup · SF</div><div class="date match-date-alt">Jun 20, 2026</div></div><div class="result-loss">LOSS 9–16</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sidebar-stack">
+        <div class="comp-sidebar-block">
+          <h3>Team Stats</h3>
+          <div class="info-row"><span class="key">Win Rate</span><span class="val stat-val-accent">66.7%</span></div>
+          <div class="info-row"><span class="key">Matches</span><span class="val">48</span></div>
+          <div class="info-row"><span class="key">Wins</span><span class="val">32</span></div>
+          <div class="info-row"><span class="key">Trophies</span><span class="val">2</span></div>
+        </div>
+        <a href="team/team-roster.html" class="btn-primary manage-team-btn">Manage My Team</a>
+      </div>
+    </div>
+  </main>
+  <div id="footer-mount"></div>
+</div>
+<script src="../js/script.js"></script>
+<script src="../js/pages/view-team.js"></script>
+</body></html>

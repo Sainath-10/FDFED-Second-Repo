@@ -1,0 +1,297 @@
+/* ============================================================
+   NEXUS ESPORTS — View Policy Stylesheet
+   ============================================================ */
+
+/* ── Page shell ── */
+.policy-page-wrap {
+  padding: 40px 60px 80px 100px;
+  min-height: 100vh;
+}
+
+/* ── Page header row ── */
+.policy-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 36px;
+}
+
+.policy-page-header h1 {
+  font-family: var(--font-display);
+  font-size: 36px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-white);
+  margin-bottom: 6px;
+}
+
+.policy-page-header p {
+  font-size: 15px;
+  color: var(--text-muted);
+}
+
+/* ── Back link ── */
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-muted);
+  text-decoration: none;
+  margin-bottom: 24px;
+  transition: color 0.2s;
+}
+
+.back-link:hover { color: var(--accent); }
+.back-link svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+/* ── Two-column page layout ── */
+.policy-two-col {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 28px;
+  align-items: start;
+}
+
+/* ── Sidebar panel (right column) ── */
+.policy-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: sticky;
+  top: 24px;
+}
+
+.policy-sidebar-block {
+  background: var(--bg-card);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 14px;
+  padding: 22px;
+}
+
+.policy-sidebar-block h3 {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+}
+
+.sidebar-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  font-size: 13px;
+}
+
+.sidebar-info-row:last-child { border-bottom: none; }
+.sidebar-info-row .k { color: var(--text-muted); }
+.sidebar-info-row .v { color: var(--text-white); font-weight: 700; }
+
+/* ── View Full Policy specific ── */
+.policy-view-hero {
+  background: linear-gradient(135deg, rgba(198,255,51,0.07) 0%, rgba(0,0,0,0) 60%);
+  border: 1px solid rgba(198,255,51,0.15);
+  border-radius: 16px;
+  padding: 36px;
+  margin-bottom: 28px;
+}
+
+.policy-view-hero .version-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(198,255,51,0.1);
+  border: 1px solid rgba(198,255,51,0.25);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 4px 12px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+}
+
+.policy-view-hero h1 {
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-white);
+  margin-bottom: 10px;
+}
+
+.policy-view-hero .meta {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.policy-view-hero .meta span strong {
+  color: var(--text-white);
+  font-weight: 700;
+}
+
+/* Policy body content area */
+.policy-content-block {
+  background: var(--bg-card);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 14px;
+  padding: 32px;
+  margin-bottom: 16px;
+}
+
+.policy-content-block h2 {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-white);
+  margin-bottom: 18px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.policy-content-block h2 .section-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(198,255,51,0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.policy-clause {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.policy-clause:last-child { border-bottom: none; padding-bottom: 0; }
+
+.clause-index {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(198,255,51,0.08);
+  border: 1px solid rgba(198,255,51,0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.clause-body {
+  font-size: 14px;
+  color: #c8ccd4;
+  line-height: 1.65;
+}
+
+.clause-body strong { color: var(--text-white); font-weight: 700; }
+
+/* Highlight box */
+.policy-highlight {
+  background: rgba(198,255,51,0.04);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+  padding: 14px 18px;
+  margin: 16px 0;
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.policy-highlight strong { color: var(--text-white); }
+
+/* Warning box */
+.policy-warning {
+  background: rgba(231,0,11,0.06);
+  border-left: 3px solid var(--red);
+  border-radius: 0 8px 8px 0;
+  padding: 14px 18px;
+  margin: 16px 0;
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+/* Print / export button */
+.btn-export {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 9px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.1);
+  cursor: pointer;
+  font-family: var(--font-body);
+  transition: all 0.2s;
+}
+
+.btn-export:hover { border-color: rgba(198,255,51,0.4); color: var(--accent); }
+.btn-export svg { width: 15px; height: 15px; }
+
+/* Change log list */
+.changelog-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.changelog-item {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.changelog-item:last-child { border-bottom: none; }
+
+.changelog-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+.changelog-dot.old { background: rgba(255,255,255,0.2); }
+
+.changelog-info .cl-ver  { font-size: 12px; font-weight: 700; color: var(--accent); margin-bottom: 2px; }
+.changelog-info .cl-date { font-size: 11px; color: var(--text-dimmer); margin-bottom: 4px; }
+.changelog-info .cl-desc { font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+
+/* ── Responsive ── */
+@media (max-width: 1024px) {
+  .policy-page-wrap { padding: 24px 24px 60px; }
+  .policy-two-col { grid-template-columns: 1fr; }
+  .policy-sidebar { position: static; }
+}

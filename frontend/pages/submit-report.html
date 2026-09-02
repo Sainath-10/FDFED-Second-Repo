@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Submit Report</title>
+  <link rel="stylesheet" href="../css/styles.css">
+  <link rel="stylesheet" href="../css/pages/submit-report.css">
+</head>
+<body>
+<div id="sidebar-mount"></div>
+<div class="page-with-sidebar">
+  <main class="main-content">
+    <a href="my-activity.html" class="back-btn-alt">← Back</a>
+    <h1 class="page-title">Submit Report</h1>
+    <p class="page-subtitle">Report a match issue, cheating, or rule violation.</p>
+
+    <div class="layout-wrapper">
+      <div class="form-card">
+        <form id="report-form" class="form-stack">
+          <div class="form-group">
+            <label class="form-label">Report Type</label>
+            <select class="form-select">
+              <option>Match Result Dispute</option>
+              <option>Cheating / Exploit</option>
+              <option>Late Forfeit / No-show</option>
+              <option>Unsportsmanlike Conduct</option>
+              <option>Technical Issue</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div class="form-grid-2col">
+            <div class="form-group">
+              <label class="form-label">Competition</label>
+              <select class="form-select">
+                <option>World Championship 2026</option>
+                <option>Pro League Season 5</option>
+                <option>Regional Cup 2026</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Match / Round</label>
+              <input class="form-input" type="text" placeholder="e.g. QF Match 1, Round 18">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Reporting Against (Team/Player)</label>
+            <input class="form-input" type="text" placeholder="Team name or player username">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Description</label>
+            <textarea class="form-textarea form-textarea-lg" placeholder="Describe the issue in detail. Include timestamps, round numbers, and any relevant context. The more detail, the faster admins can act." required></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Evidence</label>
+            <div class="evidence-upload" onclick="document.getElementById('evidence-files').click()">
+              <div class="upload-icon">📎</div>
+              <div class="upload-text-wrapper">
+                <span class="upload-accent">Upload evidence</span> — screenshots, video clips, demo files<br>
+                <span class="upload-note">Max 100MB per file · PNG, JPG, MP4, DEM accepted</span>
+              </div>
+              <input type="file" id="evidence-files" multiple accept="image/*,video/*,.dem" style="display:none;" onchange="showFiles(this)">
+            </div>
+            <div id="file-list" class="file-list-stack"></div>
+          </div>
+          <button type="submit" class="btn-primary form-submit-btn">Submit Report</button>
+        </form>
+      </div>
+
+      <div class="sidebar-stack">
+        <div class="comp-sidebar-block">
+          <h3>Report Guidelines</h3>
+          <div class="guidelines-stack">
+            <p>✅ Reports are sent directly to the Tournament Organizer &amp; Co-Organizers.</p>
+            <p>✅ Provide timestamped evidence where possible.</p>
+            <p>✅ Organizers typically review and resolve within 12–24 hours.</p>
+            <p>⚡ If unresolved, dispute can be escalated to Super Admin.</p>
+            <p>❌ False reports may result in penalties.</p>
+          </div>
+        </div>
+        <div class="comp-sidebar-block">
+          <h3>My Recent Reports</h3>
+          <div class="empty-state-text">No recent reports on file.</div>
+        </div>
+      </div>
+    </div>
+  </main>
+  <div id="footer-mount"></div>
+</div>
+<script src="../js/script.js"></script>
+<script src="../js/pages/submit-report.js"></script>
+</body></html>

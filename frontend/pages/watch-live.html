@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Watch Live</title>
+  <link rel="stylesheet" href="../css/styles.css">
+  <link rel="stylesheet" href="../css/pages/watch-live.css">
+</head>
+<body>
+<div id="sidebar-mount"></div>
+<div class="page-with-sidebar">
+  <main class="main-content">
+    <div class="page-header-row">
+      <div>
+        <h1 class="page-title">Watch Live</h1>
+        <p class="page-subtitle">Catch every match as it happens, streamed live.</p>
+      </div>
+      <div class="live-status-badge">
+        <span class="pulse-dot"></span>
+        <span class="live-status-text">5 Streams Live</span>
+      </div>
+    </div>
+
+    <!-- Featured Stream -->
+    <div class="featured-stream" onclick="showToast('Opening stream...')">
+      <img src="../assets/b890c61489a080992ad7e99adabb1145e6d59606.png" alt="Featured Stream">
+      <div class="featured-overlay">
+        <div class="featured-game">Counter-Strike 2 · World Championship 2026</div>
+        <div class="featured-title">Storm Riders vs FaZe Clan — Quarter Final</div>
+        <div class="featured-meta">
+          <span>🔴 LIVE</span>
+          <span>👁 24,803 viewers</span>
+          <span>⏱ 1:23:45</span>
+          <span>Map 2 of 3</span>
+        </div>
+      </div>
+      <div class="play-btn">
+        <svg viewBox="0 0 24 24" fill="#000"><polygon points="5,3 19,12 5,21"/></svg>
+      </div>
+      <div class="stream-live-badge featured-live-badge">● LIVE</div>
+    </div>
+
+    <!-- Section heading -->
+    <div class="section-header">
+      <div class="section-title-group">
+        <div class="section-accent-bar"></div>
+        <h2 class="section-title section-title-alt">All Live Streams</h2>
+      </div>
+    </div>
+
+    <div class="stream-grid streams-grid-alt">
+
+      <div class="stream-card" onclick="showToast('Opening stream...')">
+        <div class="stream-thumb">
+          <img src="../assets/7b04655f1d50a8b1b25ad53f36d80ff99cb3184e.png" alt="">
+          <span class="stream-live-badge">● LIVE</span>
+          <div class="stream-viewers">👁 12,441</div>
+        </div>
+        <div class="stream-card-body">
+          <div class="stream-game">League of Legends</div>
+          <div class="stream-title">Spring Split Finals — SF Game 3</div>
+          <div class="stream-teams">Cloud9 vs T1 · Map 3 of 5</div>
+        </div>
+      </div>
+
+      <div class="stream-card" onclick="showToast('Opening stream...')">
+        <div class="stream-thumb">
+          <img src="../assets/0e6f51d89fed056f96d58f2c51d79eb797ccdf75.png" alt="">
+          <span class="stream-live-badge">● LIVE</span>
+          <div class="stream-viewers">👁 8,902</div>
+        </div>
+        <div class="stream-card-body">
+          <div class="stream-game">Dota 2</div>
+          <div class="stream-title">Champions League QF — Game 2</div>
+          <div class="stream-teams">OG vs EG · Game 2 of 3</div>
+        </div>
+      </div>
+
+      <div class="stream-card" onclick="showToast('Opening stream...')">
+        <div class="stream-thumb">
+          <img src="../assets/fad13be991fc17a28771191ca710b201fb3ee4fb.png" alt="">
+          <span class="stream-live-badge">● LIVE</span>
+          <div class="stream-viewers">👁 6,117</div>
+        </div>
+        <div class="stream-card-body">
+          <div class="stream-game">Valorant</div>
+          <div class="stream-title">Pro League S5 — Group Stage</div>
+          <div class="stream-teams">Sentinels vs NaVi · Live</div>
+        </div>
+      </div>
+
+      <div class="stream-card" onclick="showToast('Opening stream...')">
+        <div class="stream-thumb">
+          <img src="../assets/61fe8554e6377c0b431ed18f65529b1847d225cb.png" alt="">
+          <span class="stream-live-badge">● LIVE</span>
+          <div class="stream-viewers">👁 3,280</div>
+        </div>
+        <div class="stream-card-body">
+          <div class="stream-game">Rocket League</div>
+          <div class="stream-title">Championship Series — Round 2</div>
+          <div class="stream-teams">NRG vs G2 · Game 3 of 5</div>
+        </div>
+      </div>
+
+      <!-- Upcoming -->
+      <div class="stream-card card-upcoming">
+        <div class="stream-thumb thumb-upcoming">
+          <span class="emoji-large">🕐</span>
+        </div>
+        <div class="stream-card-body">
+          <div class="stream-game">Counter-Strike 2</div>
+          <div class="stream-title">World Championship — Semi Final</div>
+          <div class="stream-teams">Starts in 2h 15m · Aug 5 @ 20:00 IST</div>
+        </div>
+      </div>
+
+      <div class="stream-card card-upcoming">
+        <div class="stream-thumb thumb-upcoming">
+          <span class="emoji-large">🕑</span>
+        </div>
+        <div class="stream-card-body">
+          <div class="stream-game">Fortnite</div>
+          <div class="stream-title">Battle Royale Masters — Finals</div>
+          <div class="stream-teams">Starts Aug 28 · 100 players</div>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+  <div id="footer-mount"></div>
+</div>
+<script src="../js/script.js"></script>
+<script src="../js/pages/watch-live.js"></script>
+</body>
+</html>

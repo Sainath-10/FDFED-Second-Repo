@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Dispute Review</title>
+  <link rel="stylesheet" href="../css/styles.css">
+  <link rel="stylesheet" href="../css/pages/subpage.css">
+</head>
+<body>
+<div id="sidebar-mount"></div>
+<div class="page-with-sidebar">
+  <main class="sub-main">
+
+    <div class="sub-page-header">
+      <div class="sub-header-content">
+        <h1 class="sub-page-title">Dispute Review</h1>
+        <p class="sub-page-subtitle">Review and resolve match disputes submitted by teams</p>
+      </div>
+      <a class="btn-back" id="btn-back-to-comp">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="10" y1="3" x2="4" y2="8"/><line x1="4" y1="8" x2="10" y2="13"/></svg>
+        Back to Dashboard
+      </a>
+    </div>
+
+    <div class="disputes-stats-row" id="disputes-stats-row"></div>
+
+    <div class="results-toolbar">
+      <div class="search-box-wrapper search-box-wide">
+        <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="#9aa4b2" stroke-width="1.67" stroke-linecap="round"><circle cx="9" cy="9" r="6"/><line x1="14" y1="14" x2="18" y2="18"/></svg>
+        <input type="text" class="sub-search" id="disputes-search" placeholder="Search dispute ID, match ID, or team name...">
+      </div>
+      <select class="sub-select" id="disputes-status-filter">
+        <option value="all">Status: All</option>
+        <option value="awaiting">Awaiting Review</option>
+        <option value="resolved">Resolved</option>
+      </select>
+      <select class="sub-select" id="disputes-sort">
+        <option>Sort: Newest</option>
+        <option>Sort: Oldest</option>
+      </select>
+    </div>
+
+    <div class="disputes-body">
+      <div class="disputes-list-panel" id="disputes-list-panel"></div>
+      <div class="dispute-detail-panel" id="dispute-detail-panel">
+        <div class="detail-empty-state">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#2a3a4a" stroke-width="1.5" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <p>Select a dispute to review</p>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+<div id="footer-mount"></div>
+
+<script src="../js/script.js"></script>
+<script src="../js/pages/competitions-data.js"></script>
+<script src="../js/pages/comp-dispute-review.js"></script>
+<script>
+  document.getElementById('sidebar-mount').innerHTML = getSidebar('activity', '../');
+  document.getElementById('footer-mount').innerHTML = getFooter('../');
+</script>
+</body>
+</html>

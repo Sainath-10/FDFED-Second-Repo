@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — My Activity</title>
+  <link rel="stylesheet" href="../css/styles.css">
+  <link rel="stylesheet" href="../css/pages/my-activity.css">
+  <script>
+    // Blocking Auth Guard (Runs BEFORE body renders)
+    if (!localStorage.getItem('nexus.auth.session')) {
+      window.location.replace('login.html');
+    }
+  </script>
+</head>
+<body>
+<div id="sidebar-mount"></div>
+<div class="page-with-sidebar">
+  <main class="activity-main">
+
+    <div class="act-page-header">
+      <div class="act-header-row">
+        <div>
+          <h1 class="act-page-title">Your Activity</h1>
+          <p class="act-page-subtitle">Track all your competitions and tournaments.</p>
+        </div>
+        <a href="../pages/create-competition.html" class="btn-create" id="btn-create-comp">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>
+          Create Competition
+        </a>
+      </div>
+    </div>
+
+    <div class="act-search-wrapper">
+      <svg class="act-search-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.67" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="9" cy="9" r="6"/><line x1="14" y1="14" x2="18" y2="18"/>
+      </svg>
+      <input type="text" class="act-search-input" placeholder="Search competitions by name, game, or location..." id="act-search">
+    </div>
+
+    <!-- ── Competitions Organized ── -->
+    <section class="act-section" id="section-organized">
+      <div class="act-section-heading">
+        <div class="act-section-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C6FF33" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4.5 2h15l-2 9a5.5 5.5 0 0 1-11 0L4.5 2z"/>
+            <path d="M2.5 2h2m17 0h2"/><path d="M12 18v3m-4 0h8"/>
+          </svg>
+        </div>
+        <div>
+          <h2 class="act-section-title">Competitions Organized</h2>
+          <p class="act-section-count" id="organized-count">0 competitions</p>
+        </div>
+      </div>
+      <div class="act-comp-grid" id="organized-grid"></div>
+    </section>
+
+    <!-- ── Competitions Participated ── -->
+    <section class="act-section" id="section-participated">
+      <div class="act-section-heading">
+        <div class="act-section-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C6FF33" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="8" r="4"/>
+            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+          </svg>
+        </div>
+        <div>
+          <h2 class="act-section-title">Competitions Participated</h2>
+          <p class="act-section-count" id="participated-count">0 tournaments</p>
+        </div>
+      </div>
+      <div class="act-comp-grid" id="participated-grid"></div>
+    </section>
+
+    <!-- ── Competitions as Team Lead ── -->
+    <section class="act-section" id="section-teamlead">
+      <div class="act-section-heading">
+        <div class="act-section-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C6FF33" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+        </div>
+        <div>
+          <h2 class="act-section-title">Competitions as Team Lead</h2>
+          <p class="act-section-count" id="teamlead-count">0 tournaments</p>
+        </div>
+      </div>
+      <div class="act-comp-grid" id="teamlead-grid"></div>
+    </section>
+
+  </main>
+</div>
+<div id="footer-mount"></div>
+
+<!-- script.js first (provides getSidebar/getFooter) -->
+<script src="../js/script.js"></script>
+<!-- competitions-data.js second (provides window.NexusData) -->
+<script src="../js/pages/competitions-data.js"></script>
+<!-- my-activity.js last (consumes window.NexusData) -->
+<script src="../js/pages/my-activity.js"></script>
+<script>
+  document.getElementById('sidebar-mount').innerHTML = getSidebar('activity', '../');
+  document.getElementById('footer-mount').innerHTML  = getFooter('../');
+</script>
+</body>
+</html>

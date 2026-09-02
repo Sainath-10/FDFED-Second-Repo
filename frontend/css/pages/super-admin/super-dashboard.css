@@ -1,0 +1,567 @@
+/* ── Super Admin Sidebar V2 ── */
+.sa-sidebar-v2 {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 260px;
+  background: #080808;
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+  padding: 32px 0;
+}
+
+.sa-brand-v2 {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 24px 32px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  margin-bottom: 24px;
+}
+
+.sa-logo-box {
+  width: 42px;
+  height: 42px;
+  background: var(--accent);
+  color: #000;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.sa-brand-title {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: 0.5px;
+}
+
+.sa-brand-role {
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.sa-nav-v2 {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sa-nav-label {
+  font-size: 10px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.2);
+  letter-spacing: 1.5px;
+  padding: 16px 24px 8px;
+}
+
+.sa-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 24px;
+  color: rgba(255, 255, 255, 0.5);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.sa-nav-link:hover, .sa-nav-link.active {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.sa-nav-link.active {
+  color: var(--accent);
+  border-right: 3px solid var(--accent);
+}
+
+.sa-nav-link svg {
+  opacity: 0.7;
+}
+
+.sa-nav-link.active svg {
+  opacity: 1;
+}
+
+/* ── Main Layout ── */
+.sa-main-v2 {
+  margin-left: 260px;
+  padding: 48px 64px 80px;
+  min-height: 100vh;
+  background: #000;
+}
+
+/* Use admin-style sidebar shell on super-admin pages */
+.super-admin-classic-shell .sa-main-v2 {
+  margin-left: 110px;
+}
+
+/* ── Header ── */
+.sa-header-v2 {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 48px;
+  gap: 32px;
+}
+
+.sa-title {
+  font-family: var(--font-display);
+  font-size: 44px;
+  font-weight: 900;
+  color: #fff;
+  text-transform: uppercase;
+  line-height: 1.1;
+}
+
+.accent-text {
+  color: var(--accent);
+}
+
+.sa-desc {
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 12px;
+  max-width: 600px;
+}
+
+.sa-header-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* ── Slanted Buttons ── */
+
+/* Rectangle button for super admin dashboard header */
+.sa-btn-rect {
+  padding: 12px 24px;
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  border: none;
+  border-radius: 4px;
+  background: var(--accent);
+  color: #000;
+  transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+  box-shadow: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.sa-btn-rect:hover {
+  background: #b8f020;
+  color: #000;
+}
+.sa-btn-rect.sa-btn-icon svg {
+  margin-right: 6px;
+}
+
+/* ── Tabs ── */
+.sa-tabs-bar {
+  display: flex;
+  gap: 32px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  margin-bottom: 40px;
+}
+
+.sa-tab-btn {
+  padding: 16px 4px;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.2s;
+}
+
+.sa-tab-btn:hover {
+  color: #fff;
+}
+
+.sa-tab-btn.active {
+  color: var(--accent);
+}
+
+.sa-tab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent);
+}
+
+/* ── Panels ── */
+.sa-tab-panel {
+  display: none;
+  animation: saFadeIn 0.3s ease-out;
+}
+
+.sa-tab-panel.active {
+  display: block;
+}
+
+@keyframes saFadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Section Cards ── */
+.sa-section-card {
+  background: #0a0a0a;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+
+.sa-section-header {
+  background: #151515;
+  padding: 16px 24px;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* ── Monitoring Grid ── */
+.sa-monitoring-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  padding: 32px 24px;
+  gap: 40px;
+}
+
+.sa-mon-item {
+  border-left: 4px solid var(--accent);
+  padding-left: 20px;
+}
+
+.sa-mon-label {
+  font-size: 11px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+
+.sa-mon-value {
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.status-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  background: var(--accent);
+  border-radius: 50%;
+  margin-right: 8px;
+  box-shadow: 0 0 8px var(--accent);
+}
+
+/* ── Platform Settings ── */
+.sa-platform-settings {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  padding: 32px 24px;
+  gap: 48px;
+}
+
+.sa-logo-preview {
+  width: 160px;
+  height: 160px;
+  background: #111;
+  border: 2px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sa-logo-brand {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 900;
+  color: var(--accent);
+}
+
+.sa-settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.form-row-dual {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.form-group-v2 label {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.3);
+  margin-bottom: 8px;
+  letter-spacing: 0.5px;
+}
+
+.form-group-v2 input, .form-group-v2 select {
+  width: 100%;
+  background: #080808;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 12px 16px;
+  color: #fff;
+  font-size: 14px;
+  outline: none;
+}
+
+.form-group-v2 input:focus {
+  border-color: var(--accent);
+}
+
+/* ── Panel Components ── */
+.sa-panel-content {
+  padding: 32px 24px;
+}
+
+.sa-toggle-row, .sa-input-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.sa-toggle-info, .sa-input-info {
+  max-width: 70%;
+}
+
+.sa-toggle-title, .sa-input-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 4px;
+}
+
+.sa-toggle-desc, .sa-input-desc {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* ── Custom Switch ── */
+.sa-switch {
+  position: relative;
+  display: inline-block;
+  width: 48px;
+  height: 24px;
+}
+
+.sa-switch input { opacity: 0; width: 0; height: 0; }
+
+.sa-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: #222;
+  transition: .4s;
+  border-radius: 24px;
+}
+
+.sa-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px; width: 18px;
+  left: 3px; bottom: 3px;
+  background: #666;
+  transition: .4s;
+  border-radius: 50%;
+}
+
+input:checked + .sa-slider { background: var(--accent); }
+input:checked + .sa-slider:before { transform: translateX(24px); background: #000; }
+
+/* ── Inputs/Selects ── */
+.sa-num-field, .sa-select-field, .sa-textarea-field {
+  background: #080808;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 10px 14px;
+  color: #fff;
+  outline: none;
+}
+
+.sa-num-field { width: 80px; text-align: center; font-weight: 700; }
+.sa-select-field { min-width: 160px; }
+
+.sa-textarea-field {
+  width: 100%;
+  min-height: 100px;
+  margin-top: 16px;
+  resize: vertical;
+}
+
+.sa-input-with-unit {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sa-input-with-unit span {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* ── Add Admin Form ── */
+.sa-form-divider {
+  margin: 40px 0;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.sa-add-admin-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  margin-bottom: 32px;
+}
+
+.sa-form-fields input {
+  width: 100%;
+  background: #111;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 14px 16px;
+  color: #fff;
+  outline: none;
+}
+
+.sa-form-fields input:focus {
+  border-color: var(--accent);
+}
+
+.btn-full-action {
+  width: 100%;
+  padding: 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+
+.btn-full-action.neon {
+  background: var(--accent);
+  color: #000;
+}
+
+.btn-full-action.danger {
+  background: rgba(231, 1, 1, 0.1);
+  border: 1px solid rgba(231, 1, 1, 0.3);
+  color: #ff4d4d;
+}
+
+.btn-full-action:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.1);
+}
+
+/* ── Checkboxes ── */
+.sa-checkbox-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 24px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.sa-check-options {
+  display: flex;
+  gap: 16px;
+}
+
+.sa-check-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 10px 16px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.sa-check-label input:checked + span {
+  color: var(--accent);
+}
+
+/* ── Status Pill ── */
+.status-pill {
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  background: rgba(198, 255, 51, 0.1);
+  color: var(--accent);
+  border: 1px solid rgba(198, 255, 51, 0.2);
+}
+
+.active-glow {
+  box-shadow: 0 0 15px rgba(198, 255, 51, 0.2);
+}
+
+/* ── Dual Grid for Data ── */
+.sa-panel-dual-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 32px 24px;
+  gap: x 48px;
+}
+
+@media (max-width: 1200px) {
+  .sa-monitoring-grid { grid-template-columns: repeat(2, 1fr); }
+  .sa-header-v2 { flex-direction: column; align-items: flex-start; }
+}
+
+@media (max-width: 768px) {
+  .sa-sidebar-v2 { display: none; }
+  .sa-main-v2 { margin-left: 0; padding: 24px; }
+  .sa-add-admin-form { grid-template-columns: 1fr; }
+}

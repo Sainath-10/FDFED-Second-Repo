@@ -1,0 +1,1276 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/auth/register": {
+      "post": {
+        "operationId": "AuthController_register",
+        "summary": "Register a new user",
+        "description": "Create a new user account with email, username, and password",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User successfully registered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Email or username already exists"
+          }
+        },
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/competitions": {
+      "post": {
+        "operationId": "CompetitionsController_createCompetition",
+        "summary": "Create a new competition",
+        "description": "Only Admins and Super Admins can create competitions",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCompetitionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Competition successfully created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompetitionResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Missing or invalid x-user-role header"
+          },
+          "403": {
+            "description": "Forbidden - Admin role required"
+          }
+        },
+        "tags": [
+          "Competitions"
+        ],
+        "security": [
+          {
+            "x-user-role": []
+          }
+        ]
+      },
+      "get": {
+        "operationId": "CompetitionsController_getAllCompetitions",
+        "summary": "Get all competitions",
+        "description": "Retrieve a list of all competitions",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "List of competitions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CompetitionResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Competitions"
+        ],
+        "security": [
+          {
+            "x-user-role": []
+          }
+        ]
+      }
+    },
+    "/competitions/active": {
+      "get": {
+        "operationId": "CompetitionsController_getActiveCompetitions",
+        "summary": "Get active competitions",
+        "description": "Retrieve only active competitions",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "List of active competitions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CompetitionResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Competitions"
+        ],
+        "security": [
+          {
+            "x-user-role": []
+          }
+        ]
+      }
+    },
+    "/competitions/{id}": {
+      "get": {
+        "operationId": "CompetitionsController_getCompetition",
+        "summary": "Get competition by ID",
+        "description": "Retrieve a specific competition by its ID",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Competition details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompetitionResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Competition not found"
+          }
+        },
+        "tags": [
+          "Competitions"
+        ],
+        "security": [
+          {
+            "x-user-role": []
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "CompetitionsController_updateCompetition",
+        "summary": "Update a competition",
+        "description": "Update competition details (Admin only)",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCompetitionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Competition successfully updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompetitionResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Competition not found"
+          },
+          "403": {
+            "description": "Forbidden - Admin role required"
+          }
+        },
+        "tags": [
+          "Competitions"
+        ],
+        "security": [
+          {
+            "x-user-role": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "CompetitionsController_deleteCompetition",
+        "summary": "Delete a competition",
+        "description": "Delete a competition (Super Admin only)",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Competition successfully deleted"
+          },
+          "403": {
+            "description": "Forbidden - Super Admin role required"
+          }
+        },
+        "tags": [
+          "Competitions"
+        ],
+        "security": [
+          {
+            "x-user-role": []
+          }
+        ]
+      }
+    },
+    "/teams": {
+      "post": {
+        "operationId": "TeamsController_createTeam",
+        "summary": "Create a new team",
+        "description": "Create a new team for a competition (Admin, Super Admin, or Team Lead)",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTeamDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Team successfully created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Missing or invalid x-user-role header"
+          },
+          "403": {
+            "description": "Forbidden - Team Lead or Admin role required"
+          }
+        },
+        "tags": [
+          "Teams"
+        ],
+        "security": [
+          {
+            "x-user-role": []
+          }
+        ]
+      },
+      "get": {
+        "operationId": "TeamsController_getAllTeams",
+        "summary": "Get all teams",
+        "description": "Retrieve a list of all teams",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "List of teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TeamResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Teams"
+        ],
+        "security": [
+          {
+            "x-user-role": []
+          }
+        ]
+      }
+    },
+    "/teams/competition/{competitionId}": {
+      "get": {
+        "operationId": "TeamsController_getTeamsByCompetition",
+        "summary": "Get teams by competition",
+        "description": "Retrieve all teams participating in a specific competition",
+        "parameters": [
+          {
+            "name": "competitionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of teams in competition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TeamResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Teams"
+        ],
+        "security": [
+          {
+            "x-user-role": []
+          }
+        ]
+      }
+    },
+    "/teams/{id}": {
+      "get": {
+        "operationId": "TeamsController_getTeam",
+        "summary": "Get team by ID",
+        "description": "Retrieve a specific team by its ID",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Team details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Team not found"
+          }
+        },
+        "tags": [
+          "Teams"
+        ],
+        "security": [
+          {
+            "x-user-role": []
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "TeamsController_updateTeam",
+        "summary": "Update team details",
+        "description": "Update team name or members (Team Lead, Admin, or Super Admin)",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTeamDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Team successfully updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Team not found"
+          }
+        },
+        "tags": [
+          "Teams"
+        ],
+        "security": [
+          {
+            "x-user-role": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "TeamsController_deleteTeam",
+        "summary": "Delete a team",
+        "description": "Delete a team (Admin or Super Admin only)",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Team successfully deleted"
+          }
+        },
+        "tags": [
+          "Teams"
+        ],
+        "security": [
+          {
+            "x-user-role": []
+          }
+        ]
+      }
+    },
+    "/teams/{id}/members": {
+      "post": {
+        "operationId": "TeamsController_addMember",
+        "summary": "Add member to team",
+        "description": "Add a new member to a team (Team Lead, Admin, or Super Admin)",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddTeamMemberDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Member successfully added",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Member already in team"
+          }
+        },
+        "tags": [
+          "Teams"
+        ],
+        "security": [
+          {
+            "x-user-role": []
+          }
+        ]
+      }
+    },
+    "/teams/{id}/members/{memberId}": {
+      "delete": {
+        "operationId": "TeamsController_removeMember",
+        "summary": "Remove member from team",
+        "description": "Remove a member from team (Team Lead, Admin, or Super Admin)",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "memberId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Member successfully removed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cannot remove team leader"
+          }
+        },
+        "tags": [
+          "Teams"
+        ],
+        "security": [
+          {
+            "x-user-role": []
+          }
+        ]
+      }
+    },
+    "/disputes": {
+      "post": {
+        "operationId": "DisputesController_createDispute",
+        "summary": "Create a new dispute/report",
+        "description": "Create a dispute or report for a team in a competition",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDisputeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Dispute successfully created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DisputeResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Missing or invalid x-user-role header"
+          }
+        },
+        "tags": [
+          "Disputes"
+        ],
+        "security": [
+          {
+            "x-user-role": []
+          }
+        ]
+      },
+      "get": {
+        "operationId": "DisputesController_getAllDisputes",
+        "summary": "Get all disputes",
+        "description": "Retrieve all disputes and reports (filter by status with optional query param)",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["open", "under_review", "resolved", "escalated"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of disputes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DisputeResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Disputes"
+        ],
+        "security": [
+          {
+            "x-user-role": []
+          }
+        ]
+      }
+    },
+    "/disputes/open": {
+      "get": {
+        "operationId": "DisputesController_getOpenDisputes",
+        "summary": "Get open disputes",
+        "description": "Retrieve only open disputes",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "List of open disputes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DisputeResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Disputes"
+        ],
+        "security": [
+          {
+            "x-user-role": []
+          }
+        ]
+      }
+    },
+    "/disputes/escalated": {
+      "get": {
+        "operationId": "DisputesController_getEscalatedDisputes",
+        "summary": "Get escalated disputes",
+        "description": "Retrieve escalated disputes (Admin/Super Admin only)",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "List of escalated disputes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DisputeResponseDto"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - Admin role required"
+          }
+        },
+        "tags": [
+          "Disputes"
+        ],
+        "security": [
+          {
+            "x-user-role": []
+          }
+        ]
+      }
+    },
+    "/disputes/competition/{competitionId}": {
+      "get": {
+        "operationId": "DisputesController_getDisputesByCompetition",
+        "summary": "Get disputes by competition",
+        "description": "Retrieve all disputes for a specific competition",
+        "parameters": [
+          {
+            "name": "competitionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of disputes in competition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DisputeResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Disputes"
+        ],
+        "security": [
+          {
+            "x-user-role": []
+          }
+        ]
+      }
+    },
+    "/disputes/{id}": {
+      "get": {
+        "operationId": "DisputesController_getDispute",
+        "summary": "Get dispute by ID",
+        "description": "Retrieve a specific dispute by its ID",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Dispute details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DisputeResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Dispute not found"
+          }
+        },
+        "tags": [
+          "Disputes"
+        ],
+        "security": [
+          {
+            "x-user-role": []
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "DisputesController_updateDispute",
+        "summary": "Update dispute status",
+        "description": "Update dispute status or add resolution notes (Admin/Super Admin only)",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDisputeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Dispute successfully updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DisputeResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Dispute not found"
+          },
+          "403": {
+            "description": "Forbidden - Admin role required"
+          }
+        },
+        "tags": [
+          "Disputes"
+        ],
+        "security": [
+          {
+            "x-user-role": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "DisputesController_deleteDispute",
+        "summary": "Delete a dispute",
+        "description": "Delete a dispute record (Super Admin only)",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Dispute successfully deleted"
+          },
+          "403": {
+            "description": "Forbidden - Super Admin role required"
+          }
+        },
+        "tags": [
+          "Disputes"
+        ],
+        "security": [
+          {
+            "x-user-role": []
+          }
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "Competition Management API",
+    "description": "REST API for Competition Management System with Role-based Access Control",
+    "version": "1.0.0",
+    "contact": {}
+  },
+  "tags": [
+    {
+      "name": "Auth",
+      "description": "Authentication endpoints"
+    },
+    {
+      "name": "Competitions",
+      "description": "Competition management endpoints"
+    },
+    {
+      "name": "Teams",
+      "description": "Team management endpoints"
+    },
+    {
+      "name": "Disputes",
+      "description": "Dispute and escalation endpoints"
+    }
+  ],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "x-user-role": {
+        "type": "apiKey",
+        "name": "x-user-role",
+        "in": "header",
+        "description": "User role for access control"
+      }
+    },
+    "schemas": {
+      "RegisterDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "User email address",
+            "example": "user@example.com"
+          },
+          "username": {
+            "type": "string",
+            "description": "Username for login",
+            "example": "john_doe"
+          },
+          "password": {
+            "type": "string",
+            "description": "User password",
+            "example": "SecurePassword123!"
+          },
+          "firstName": {
+            "type": "string",
+            "description": "User first name",
+            "example": "John"
+          },
+          "lastName": {
+            "type": "string",
+            "description": "User last name",
+            "example": "Doe"
+          },
+          "role": {
+            "type": "string",
+            "description": "User role",
+            "enum": [
+              "admin",
+              "super_admin",
+              "team_lead",
+              "participant"
+            ],
+            "example": "participant"
+          }
+        },
+        "required": [
+          "email",
+          "username",
+          "password",
+          "firstName",
+          "lastName",
+          "role"
+        ]
+      },
+      "AuthResponseDto": {
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "type": "string"
+          },
+          "user": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "access_token",
+          "user"
+        ]
+      },
+      "CreateCompetitionDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Competition name",
+            "example": "Football Championship 2024"
+          },
+          "description": {
+            "type": "string",
+            "description": "Competition description",
+            "example": "Annual football championship for all teams"
+          },
+          "startDate": {
+            "type": "string",
+            "description": "Start date in ISO format",
+            "example": "2024-06-01T00:00:00Z"
+          },
+          "endDate": {
+            "type": "string",
+            "description": "End date in ISO format",
+            "example": "2024-12-31T23:59:59Z"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "startDate",
+          "endDate"
+        ]
+      },
+      "CompetitionResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "startDate": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "endDate": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "createdBy": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "startDate",
+          "endDate",
+          "status",
+          "createdBy",
+          "createdAt"
+        ]
+      },
+      "UpdateCompetitionDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Competition name"
+          },
+          "description": {
+            "type": "string",
+            "description": "Competition description"
+          },
+          "status": {
+            "type": "string",
+            "description": "Competition status",
+            "enum": [
+              "draft",
+              "active",
+              "completed"
+            ]
+          },
+          "endDate": {
+            "type": "string",
+            "description": "End date in ISO format"
+          }
+        }
+      },
+      "CreateTeamDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Team name",
+            "example": "Team Alpha"
+          },
+          "competitionId": {
+            "type": "string",
+            "description": "Competition ID this team will participate in",
+            "example": "1"
+          },
+          "members": {
+            "description": "Initial team members (user IDs)",
+            "example": [
+              "2",
+              "3",
+              "4"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "competitionId"
+        ]
+      },
+      "TeamResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "competitionId": {
+            "type": "string"
+          },
+          "leaderId": {
+            "type": "string"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "competitionId",
+          "leaderId",
+          "members",
+          "createdAt"
+        ]
+      },
+      "UpdateTeamDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Team name"
+          },
+          "members": {
+            "description": "Team members",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "AddTeamMemberDto": {
+        "type": "object",
+        "properties": {
+          "memberId": {
+            "type": "string",
+            "description": "User ID to add to the team",
+            "example": "5"
+          }
+        },
+        "required": [
+          "memberId"
+        ]
+      },
+      "CreateDisputeDto": {
+        "type": "object",
+        "properties": {
+          "competitionId": {
+            "type": "string",
+            "description": "Competition ID related to the dispute",
+            "example": "1"
+          },
+          "teamId": {
+            "type": "string",
+            "description": "Team ID involved in the dispute",
+            "example": "2"
+          },
+          "description": {
+            "type": "string",
+            "description": "Description of the dispute or report",
+            "example": "Team violated competition rules during match 5"
+          }
+        },
+        "required": [
+          "competitionId",
+          "teamId",
+          "description"
+        ]
+      },
+      "DisputeResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "competitionId": {
+            "type": "string"
+          },
+          "teamId": {
+            "type": "string"
+          },
+          "reportedBy": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "competitionId",
+          "teamId",
+          "reportedBy",
+          "description",
+          "status",
+          "createdAt"
+        ]
+      },
+      "UpdateDisputeDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "Dispute status",
+            "enum": [
+              "open",
+              "under_review",
+              "resolved",
+              "escalated"
+            ]
+          },
+          "description": {
+            "type": "string",
+            "description": "Additional description or resolution notes"
+          }
+        }
+      }
+    }
+  }
+}

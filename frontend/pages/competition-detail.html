@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Competition</title>
+  <link rel="stylesheet" href="../css/styles.css">
+  <link rel="stylesheet" href="../css/pages/competition-detail.css">
+</head>
+<body>
+<div id="sidebar-mount"></div>
+<div class="page-with-sidebar">
+  <main class="comp-main" id="comp-main">
+
+    <div class="comp-hero" id="comp-hero">
+      <div class="comp-hero-content">
+        <div class="comp-hero-tags" id="comp-hero-tags"></div>
+        <h1 class="comp-hero-title" id="comp-hero-title">Loading…</h1>
+        <div class="comp-hero-meta" id="comp-hero-meta"></div>
+      </div>
+      <div class="comp-hero-actions" id="comp-hero-actions"></div>
+    </div>
+
+    <div class="comp-stats-row" id="comp-stats-row"></div>
+
+    <div class="comp-body">
+      <div class="comp-panel">
+        <div class="comp-panel-header">
+          <div class="comp-panel-title-row">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C6FF33" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg>
+            <span>Registered Teams</span>
+          </div>
+          <span class="comp-panel-count" id="teams-count-label"></span>
+        </div>
+        <div class="comp-teams-table" id="comp-teams-table"></div>
+        <a class="comp-view-all" id="link-manage-teams">View All Registered Teams →</a>
+      </div>
+
+      <div class="comp-panel">
+        <div class="comp-panel-header">
+          <div class="comp-panel-title-row">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C6FF33" stroke-width="2" stroke-linecap="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <span>Match Schedule</span>
+          </div>
+          <div class="comp-panel-nav">
+            <button class="comp-nav-btn" id="match-prev">&#8249;</button>
+            <button class="comp-nav-btn" id="match-next">&#8250;</button>
+          </div>
+        </div>
+        <div class="comp-matches-list" id="comp-matches-list"></div>
+      </div>
+    </div>
+
+    <!-- Shared bracket section for both League and Tournament -->
+    <div class="comp-bracket-section" id="comp-bracket-section" style="display:none">
+      <div class="comp-panel-header">
+        <div class="comp-panel-title-row">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C6FF33" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="6" height="4" rx="1"/><rect x="15" y="3" width="6" height="4" rx="1"/><rect x="9" y="10" width="6" height="4" rx="1"/><rect x="9" y="17" width="6" height="4" rx="1"/><line x1="6" y1="7" x2="6" y2="12"/><line x1="18" y1="7" x2="18" y2="12"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="12" y1="12" x2="12" y2="14"/><line x1="12" y1="21" x2="12" y2="24"/></svg>
+          <span id="bracket-section-title">Tournament Bracket</span>
+        </div>
+      </div>
+      <div class="comp-bracket-info" id="comp-bracket-info">
+        <p style="color:#9aa4b2;font-size:14px;">Bracket view available once all teams are confirmed.</p>
+      </div>
+    </div>
+
+    <!-- Manage Organizers Modal -->
+    <div id="organizers-modal" class="custom-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;align-items:center;justify-content:center;backdrop-filter:blur(4px);">
+      <div style="background:#131b24;border:1px solid rgba(255,255,255,0.12);border-radius:14px;padding:26px;max-width:500px;width:90%;box-shadow:0 12px 36px rgba(0,0,0,0.6);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:1px solid rgba(255,255,255,0.08);padding-bottom:12px;">
+          <div>
+            <h3 style="color:#fff;margin:0;font-size:18px;display:flex;align-items:center;gap:8px;">
+              <span>👥</span> Tournament Organizers
+            </h3>
+            <p style="color:var(--text-muted);font-size:12px;margin:4px 0 0 0;">Add and manage co-organizers for this tournament.</p>
+          </div>
+          <button onclick="closeOrganizersModal()" style="background:none;border:none;color:#9aa4b2;font-size:22px;cursor:pointer;line-height:1;">&times;</button>
+        </div>
+
+        <div style="margin-bottom:18px;">
+          <label style="display:block;font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;">Add Co-Organizer</label>
+          <div style="display:flex;gap:8px;">
+            <div style="position:relative;flex:1;">
+              <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:13px;font-weight:700;">@</span>
+              <input type="text" id="modal-new-organizer" class="form-input" placeholder="Enter username or User ID" style="padding-left:28px;width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:8px;padding-top:8px;padding-bottom:8px;">
+            </div>
+            <button class="btn-table-primary" onclick="submitAddOrganizer()" style="padding:8px 16px;font-size:12px;font-weight:700;background:#c6ff33;color:#000;border:none;border-radius:8px;cursor:pointer;">
+              + Add
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Current Organizers</label>
+          <div id="modal-organizers-list" style="display:flex;flex-direction:column;gap:8px;max-height:220px;overflow-y:auto;">
+            <!-- Dynamically rendered -->
+          </div>
+        </div>
+
+        <div style="margin-top:20px;text-align:right;">
+          <button class="btn-table-secondary" onclick="closeOrganizersModal()" style="padding:8px 18px;font-size:13px;border-radius:8px;">Done</button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+<div id="footer-mount"></div>
+
+<script src="../js/script.js"></script>
+<script src="../js/pages/competitions-data.js"></script>
+<script src="../js/pages/competition-detail.js"></script>
+<script>
+  document.getElementById('sidebar-mount').innerHTML = getSidebar('activity', '../');
+  document.getElementById('footer-mount').innerHTML = getFooter('../');
+</script>
+</body>
+</html>

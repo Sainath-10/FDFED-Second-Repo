@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Matches</title>
+  <link rel="stylesheet" href="../../css/styles.css">
+  <link rel="stylesheet" href="../../css/pages/admin/manage-matches.css">
+</head>
+<body>
+<div id="sidebar-mount"></div>
+<div class="page-with-sidebar">
+  <main class="main-content">
+    <a href="competition-detail2.html" class="back-btn-alt">← Spring Invitational</a>
+    <h1 class="admin-title-lg">Matches</h1>
+    <p class="admin-subtitle-accent">Spring Invitational · Group Stage</p>
+
+    <div class="admin-comp-tabs">
+      <a href="competition-detail2.html" class="admin-tab">Overview</a>
+      <a href="manage-teams2.html"       class="admin-tab">Teams</a>
+      <a href="manage-matches2.html"     class="admin-tab active">Matches</a>
+      <a href="match-results2.html"      class="admin-tab">Results</a>
+      <a href="view-standings.html"      class="admin-tab">Standings</a>
+    </div>
+
+    <div class="actions-bar">
+      <div class="filter-tabs-row">
+        <button class="filter-tab active" data-filter="all">All</button>
+        <button class="filter-tab" data-filter="upcoming">Upcoming</button>
+        <button class="filter-tab" data-filter="live">Live</button>
+        <button class="filter-tab" data-filter="completed">Completed</button>
+      </div>
+    </div>
+
+    <div class="matches-list-stack" id="matches-list">
+      <div class="match-card-row" data-status="live">
+        <div class="match-info-flex">
+          <div class="match-status-row"><span class="status-pill ongoing">● LIVE</span><span class="match-meta-sm">Group A · Match 1</span></div>
+          <div class="match-grid-display">
+            <div class="team-name-bold">Storm Riders</div>
+            <div class="score-display-lg score-display-accent">14 – 9</div>
+            <div class="team-name-right">Inferno Squad</div>
+          </div>
+        </div>
+        <div class="match-time-muted">Mar 10 · 18:00 IST</div>
+      </div>
+
+      <div class="match-card-row" data-status="upcoming">
+        <div class="match-info-flex">
+          <div class="match-status-row"><span class="status-pill upcoming">Upcoming</span><span class="match-meta-sm">Group A · Match 2</span></div>
+          <div class="match-grid-display">
+            <div class="team-name-bold">Apex Predators</div>
+            <div class="score-display-lg score-display-muted">vs</div>
+            <div class="team-name-right">Cloud9</div>
+          </div>
+        </div>
+        <div class="match-time-muted">Mar 10 · 20:00 IST</div>
+      </div>
+
+      <div class="match-card-row" data-status="completed">
+        <div class="match-info-flex">
+          <div class="match-status-row"><span class="status-pill completed">Completed</span><span class="match-meta-sm">Group B · Match 1</span></div>
+          <div class="match-grid-display">
+            <div class="team-name-bold">NaVi <span class="win-indicator-sm">W</span></div>
+            <div class="score-display-lg">16 – 8</div>
+            <div class="team-name-muted-right">FaZe Clan</div>
+          </div>
+        </div>
+        <div class="match-time-muted">Mar 10 · 16:00 IST</div>
+      </div>
+    </div>
+  </main>
+  <div id="footer-mount"></div>
+</div>
+<script src="../../js/script.js"></script>
+<script src="../../js/pages/admin/manage-matches2.js"></script>
+</body>
+</html>

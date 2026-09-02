@@ -1,0 +1,173 @@
+.main-content {
+  padding: 40px 60px 80px 100px;
+  min-height: 100vh;
+}
+
+.admin-header-block { margin-bottom: 28px; }
+
+.admin-title-xl {
+  font-family: var(--font-display);
+  font-size: 40px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-white);
+}
+
+.admin-subtitle-muted {
+  font-size: 15px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+.disputes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dispute-full-card {
+  background: var(--bg-card);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 14px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: border-color 0.2s;
+}
+
+.dispute-full-card:hover {
+  border-color: rgba(255,255,255,0.12);
+}
+
+.dispute-card-escalated {
+  border-color: rgba(198,255,51,0.2);
+}
+
+.dispute-card-resolved {
+  opacity: 0.55;
+}
+
+.dfc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.dfc-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dfc-competition {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.dfc-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-white);
+}
+
+.dfc-desc {
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.dfc-meta-row {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.dfc-meta-row strong {
+  color: var(--text-white);
+}
+
+.dfc-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.btn-escalate {
+  background: rgba(198,255,51,0.08);
+  border: 1px solid rgba(198,255,51,0.25);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+  font-family: var(--font-body);
+  letter-spacing: 0.3px;
+}
+
+.btn-escalate:hover {
+  background: rgba(198,255,51,0.15);
+  border-color: rgba(198,255,51,0.5);
+}
+
+.status-pill-escalated {
+  background: rgba(198,255,51,0.1);
+  color: var(--accent);
+  border: 1px solid rgba(198,255,51,0.3);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.dfc-escalated-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(198,255,51,0.06);
+  border: 1px solid rgba(198,255,51,0.2);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+/* Evidence + notes reuse from dispute-review.css */
+.evidence-section {
+  padding: 16px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 8px;
+}
+.evidence-label-sm {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+.evidence-btns-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.admin-notes-section { }
+.notes-label-sm {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.notes-textarea-sm { min-height: 72px; }

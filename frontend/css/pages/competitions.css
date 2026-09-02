@@ -1,0 +1,29 @@
+.create-comp-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--accent);
+  color: var(--bg-dark);
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-body);
+  box-shadow: 0 8px 16px rgba(198,255,51,0.3);
+  transition: background 0.2s;
+  text-decoration: none;
+}
+.create-comp-btn:hover { background: #b8f020; }
+
+.comps-page-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 40px;
+}

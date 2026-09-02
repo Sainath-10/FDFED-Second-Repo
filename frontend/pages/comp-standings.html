@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Standings</title>
+  <link rel="stylesheet" href="../css/styles.css">
+  <link rel="stylesheet" href="../css/pages/subpage.css">
+  <link rel="stylesheet" href="../css/pages/comp-standings.css">
+</head>
+<body>
+<div id="sidebar-mount"></div>
+<div class="page-with-sidebar">
+  <main class="sub-main">
+
+    <div class="sub-page-header">
+      <div class="sub-header-content">
+        <h1 class="sub-page-title">Standings</h1>
+        <p class="sub-page-subtitle">Live leaderboard and recent results</p>
+      </div>
+      <a class="btn-back" id="btn-back-to-comp">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="10" y1="3" x2="4" y2="8"/><line x1="4" y1="8" x2="10" y2="13"/></svg>
+        Back to Dashboard
+      </a>
+    </div>
+
+    <div class="comp-summary-card" id="standings-summary"></div>
+
+    <div class="sub-panel">
+      <div class="standings-table-header">
+        <span class="col-rank">RANK</span>
+        <span class="col-team">TEAM</span>
+        <span class="col-mp">MP</span>
+        <span class="col-w">W</span>
+        <span class="col-l">L</span>
+        <span class="col-d">D</span>
+        <span class="col-pts">POINTS</span>
+        <span class="col-last5">LAST 5</span>
+      </div>
+      <div id="standings-rows"></div>
+    </div>
+
+  </main>
+</div>
+<div id="footer-mount"></div>
+
+<script src="../js/script.js"></script>
+<script src="../js/pages/competitions-data.js"></script>
+<script src="../js/pages/comp-standings.js"></script>
+<script>
+  document.getElementById('sidebar-mount').innerHTML = getSidebar('activity', '../');
+  document.getElementById('footer-mount').innerHTML = getFooter('../');
+</script>
+</body>
+</html>

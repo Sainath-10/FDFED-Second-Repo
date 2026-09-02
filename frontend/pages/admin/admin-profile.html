@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ESPORTS — Admin Profile</title>
+  <link rel="stylesheet" href="../../css/styles.css">
+  <link rel="stylesheet" href="../../css/pages/admin/admin-profile.css">
+  <script>
+    // Blocking Auth Guard (Runs BEFORE body renders)
+    const session = localStorage.getItem('nexus.auth.session');
+    if (!session || !session.includes('admin')) {
+      window.location.replace('../login.html');
+    }
+  </script>
+</head>
+<body>
+<div id="sidebar-mount"></div>
+<div class="page-with-sidebar">
+  <main class="main-content">
+    <div class="admin-header-block">
+      <h1 class="admin-title-xl">Admin Profile</h1>
+      <p class="admin-subtitle-muted">Manage your account information and settings.</p>
+    </div>
+
+    <div class="profile-layout">
+
+      <!-- Left: Avatar + Role card -->
+      <div class="profile-sidebar-col">
+        <div class="profile-avatar-card">
+          <div class="avatar-wrap">
+            <div class="avatar-circle" id="avatar-display">S</div>
+            <button class="avatar-edit-btn" onclick="document.getElementById('avatar-upload').click()">✏️</button>
+            <input type="file" id="avatar-upload" accept="image/*" class="hidden-file-input" onchange="previewAvatar(event)">
+          </div>
+          <div class="profile-name-lg" id="display-name">Admin</div>
+          <div class="profile-role-badge">Admin</div>
+          <div class="profile-since">Member since Jan 2024</div>
+          <div class="profile-status-row">
+            <span class="status-dot-green"></span>
+            <span class="profile-status-txt">Active</span>
+          </div>
+        </div>
+
+        <div class="comp-sidebar-block">
+          <h3>Quick Stats</h3>
+          <div class="info-row"><span class="key">Tournaments Managed</span><span class="val stat-val-accent">24</span></div>
+          <div class="info-row"><span class="key">Disputes Resolved</span><span class="val stat-val-accent">87</span></div>
+          <div class="info-row"><span class="key">Approvals Processed</span><span class="val stat-val-accent">142</span></div>
+          <div class="info-row"><span class="key">Last Login</span><span class="val">Today, 09:14 IST</span></div>
+          <button type="button" class="btn-table-secondary quick-logout-btn" id="admin-profile-logout-btn">Log Out</button>
+        </div>
+      </div>
+
+      <!-- Right: Forms -->
+      <div class="profile-main-col">
+
+        <!-- Account Info -->
+        <div class="profile-card">
+          <div class="profile-card-header">
+            <h2 class="profile-card-title">Account Information</h2>
+          </div>
+          <div class="form-grid-2col">
+            <div class="form-group">
+              <label class="form-label">Full Name</label>
+              <input class="form-input" type="text" id="field-name" value="Sudhan">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Username</label>
+              <input class="form-input" type="text" value="@admin_nexus">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Email Address</label>
+              <input class="form-input" type="email" value="admin@nexusesports.com">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Phone</label>
+              <input class="form-input" type="tel" value="+91 98765 43210">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Role</label>
+              <input class="form-input" type="text" value="Admin" disabled>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Region</label>
+              <select class="form-input">
+                <option selected>South Asia</option>
+                <option>Southeast Asia</option>
+                <option>Europe</option>
+                <option>North America</option>
+                <option>Global</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group" style="margin-top:4px;">
+            <label class="form-label">Bio</label>
+            <textarea class="form-input notes-textarea-sm">Platform administrator responsible for managing tournaments, resolving disputes, and maintaining fair play across all competitions.</textarea>
+          </div>
+          <div class="profile-card-footer">
+            <button class="btn-primary" onclick="saveAccountInfo()">Save Changes</button>
+          </div>
+        </div>
+
+        <!-- Security -->
+        <div class="profile-card">
+          <div class="profile-card-header">
+            <h2 class="profile-card-title">Security</h2>
+          </div>
+          <div class="form-grid-2col">
+            <div class="form-group">
+              <label class="form-label">Current Password</label>
+              <div class="password-input-wrap">
+                <input class="form-input" type="password" id="pwd-current" placeholder="Enter current password">
+                <button type="button" class="pwd-eye-btn" onclick="togglePwd('pwd-current',this)" aria-label="Show/hide password">👁️</button>
+              </div>
+            </div>
+            <div class="form-group"></div>
+            <div class="form-group">
+              <label class="form-label">New Password</label>
+              <div class="password-input-wrap">
+                <input class="form-input" type="password" id="pwd-new" placeholder="Enter new password">
+                <button type="button" class="pwd-eye-btn" onclick="togglePwd('pwd-new',this)" aria-label="Show/hide password">👁️</button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Confirm New Password</label>
+              <div class="password-input-wrap">
+                <input class="form-input" type="password" id="pwd-confirm" placeholder="Confirm new password">
+                <button type="button" class="pwd-eye-btn" onclick="togglePwd('pwd-confirm',this)" aria-label="Show/hide password">👁️</button>
+              </div>
+            </div>
+          </div>
+          <div class="security-extras">
+            <div class="security-row">
+              <div>
+                <div class="security-label">Two-Factor Authentication</div>
+                <div class="security-desc">Add an extra layer of security to your account.</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" checked>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="profile-card-footer">
+            <button class="btn-primary" onclick="updatePassword()">Update Password</button>
+          </div>
+        </div>
+
+        <!-- Notification Preferences -->
+        <div class="profile-card">
+          <div class="profile-card-header">
+            <h2 class="profile-card-title">Notification Preferences</h2>
+          </div>
+          <div class="notif-list">
+            <div class="security-row">
+              <div>
+                <div class="security-label">New Tournament Submission</div>
+                <div class="security-desc">Notify when an organizer submits a new tournament for approval.</div>
+              </div>
+              <label class="toggle-switch"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+            </div>
+            <div class="security-row">
+              <div>
+                <div class="security-label">Dispute Filed</div>
+                <div class="security-desc">Notify when a team files a new dispute.</div>
+              </div>
+              <label class="toggle-switch"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+            </div>
+            <div class="security-row">
+              <div>
+                <div class="security-label">Team Registration</div>
+                <div class="security-desc">Notify on new team registrations requiring approval.</div>
+              </div>
+              <label class="toggle-switch"><input type="checkbox"><span class="toggle-slider"></span></label>
+            </div>
+          </div>
+          <div class="profile-card-footer">
+            <button class="btn-primary" onclick="showToast('Notification preferences saved!')">Save Preferences</button>
+          </div>
+        </div>
+
+        <!-- Activity Log -->
+        <div class="profile-card">
+          <div class="profile-card-header">
+            <h2 class="profile-card-title">Recent Activity</h2>
+          </div>
+          <div class="activity-list" id="admin-activity-list">
+            <div class="activity-item">
+              <span class="activity-icon">⏳</span>
+              <div class="activity-info">
+                <div class="activity-title" style="color:var(--text-muted)">No recent activity yet.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Danger Zone -->
+        <div class="danger-zone-block">
+          <div class="danger-zone-title">Danger Zone</div>
+          <div class="danger-zone-desc">These actions are irreversible. Proceed with caution.</div>
+          <div class="danger-btns-row">
+            <button class="btn-table-danger" onclick="if(confirm('Deactivate your account?'))showToast('Account deactivated.','error')">Deactivate Account</button>
+            <button class="btn-table-secondary" onclick="showToast('Logged out from all sessions.','error')">Logout All Sessions</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+  <div id="footer-mount"></div>
+</div>
+<script src="../../js/script.js"></script>
+<script src="../../js/pages/admin/admin-profile.js"></script>
+</body>
+</html>

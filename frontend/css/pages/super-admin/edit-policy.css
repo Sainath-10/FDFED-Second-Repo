@@ -1,0 +1,408 @@
+/* ============================================================
+   NEXUS ESPORTS — Edit Policy Stylesheet
+   ============================================================ */
+
+/* ── Page shell ── */
+.policy-page-wrap {
+  padding: 40px 60px 80px 100px;
+  min-height: 100vh;
+}
+
+/* ── Page header row ── */
+.policy-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 36px;
+}
+
+.policy-page-header h1 {
+  font-family: var(--font-display);
+  font-size: 36px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-white);
+  margin-bottom: 6px;
+}
+
+.policy-page-header p {
+  font-size: 15px;
+  color: var(--text-muted);
+}
+
+/* ── Back link ── */
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-muted);
+  text-decoration: none;
+  margin-bottom: 24px;
+  transition: color 0.2s;
+}
+
+.back-link:hover { color: var(--accent); }
+.back-link svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+/* ── Form card ── */
+.policy-form-card {
+  background: var(--bg-card);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 16px;
+  padding: 36px;
+}
+
+/* ── Section divider label inside form ── */
+.form-section-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  margin-bottom: 20px;
+}
+
+.form-section-label:not(:first-child) {
+  margin-top: 28px;
+}
+
+/* ── Form field group ── */
+.pf-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.pf-group:last-of-type {
+  margin-bottom: 0;
+}
+
+.pf-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #a1a1aa;
+}
+
+.pf-hint {
+  font-size: 12px;
+  color: var(--text-dimmer);
+  margin-top: -4px;
+}
+
+.pf-input,
+.pf-select,
+.pf-textarea {
+  width: 100%;
+  background: var(--bg-input, #1e1e1e);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  padding: 13px 16px;
+  font-size: 15px;
+  color: var(--text-white);
+  outline: none;
+  font-family: var(--font-body);
+  transition: border-color 0.2s;
+}
+
+.pf-input::placeholder,
+.pf-textarea::placeholder { color: #444; }
+
+.pf-input:focus,
+.pf-select:focus,
+.pf-textarea:focus {
+  border-color: rgba(198,255,51,0.45);
+  background: rgba(30,30,30,0.9);
+}
+
+.pf-select {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2399a1af' stroke-width='1.5' stroke-linecap='round' fill='none'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 36px;
+}
+
+.pf-select option { background: #1e1e1e; color: #fff; }
+
+.pf-textarea {
+  resize: vertical;
+  line-height: 1.65;
+  min-height: 120px;
+}
+
+/* Two-column row */
+.pf-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* ── Tag input / clause chips ── */
+.pf-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg-input, #1e1e1e);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  min-height: 48px;
+  cursor: text;
+  transition: border-color 0.2s;
+}
+
+.pf-tags:focus-within { border-color: rgba(198,255,51,0.45); }
+
+.pf-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(198,255,51,0.12);
+  border: 1px solid rgba(198,255,51,0.25);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 4px;
+}
+
+.pf-tag button {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.pf-tag button:hover { opacity: 1; }
+
+.pf-tag-input {
+  flex: 1;
+  min-width: 100px;
+  background: none;
+  border: none;
+  outline: none;
+  font-size: 14px;
+  color: var(--text-white);
+  font-family: var(--font-body);
+}
+
+.pf-tag-input::placeholder { color: #444; }
+
+/* ── Clause list (ordered rules editor) ── */
+.clause-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.clause-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 8px;
+  padding: 12px 14px;
+  transition: border-color 0.2s;
+}
+
+.clause-item:hover { border-color: rgba(198,255,51,0.15); }
+
+.clause-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(198,255,51,0.1);
+  border: 1px solid rgba(198,255,51,0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.clause-text {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  font-size: 14px;
+  color: var(--text-white);
+  font-family: var(--font-body);
+  line-height: 1.55;
+  resize: none;
+  min-height: 24px;
+}
+
+.clause-del {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #555;
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 4px;
+  transition: color 0.15s;
+  flex-shrink: 0;
+}
+
+.clause-del:hover { color: var(--red); }
+
+.add-clause-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px dashed rgba(198,255,51,0.25);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: var(--font-body);
+  margin-top: 8px;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.add-clause-btn:hover { background: rgba(198,255,51,0.06); border-color: rgba(198,255,51,0.5); }
+
+/* ── Form action row ── */
+.pf-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(255,255,255,0.07);
+}
+
+.pf-btn-submit {
+  flex: 1;
+  min-width: 140px;
+  background: var(--accent);
+  color: var(--bg-dark, #0b0b0b);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  padding: 14px 24px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-body);
+  box-shadow: 0 8px 20px rgba(198,255,51,0.25);
+  transition: background 0.2s, transform 0.1s;
+}
+
+.pf-btn-submit:hover { background: #b8f020; transform: translateY(-1px); }
+
+.pf-btn-draft {
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 14px 22px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.12);
+  cursor: pointer;
+  font-family: var(--font-body);
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.pf-btn-draft:hover { border-color: rgba(255,255,255,0.3); color: var(--text-white); }
+
+.pf-btn-cancel {
+  background: transparent;
+  color: var(--text-dimmer);
+  font-size: 14px;
+  font-weight: 700;
+  padding: 14px 18px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-body);
+  transition: color 0.2s;
+}
+
+.pf-btn-cancel:hover { color: var(--text-white); }
+
+/* ── Sidebar panel (right column) ── */
+.policy-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: sticky;
+  top: 24px;
+}
+
+.policy-sidebar-block {
+  background: var(--bg-card);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 14px;
+  padding: 22px;
+}
+
+.policy-sidebar-block h3 {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+}
+
+.sidebar-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  font-size: 13px;
+}
+
+.sidebar-info-row:last-child { border-bottom: none; }
+.sidebar-info-row .k { color: var(--text-muted); }
+.sidebar-info-row .v { color: var(--text-white); font-weight: 700; }
+
+/* ── Two-column page layout ── */
+.policy-two-col {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 28px;
+  align-items: start;
+}
+
+/* ── Responsive ── */
+@media (max-width: 1024px) {
+  .policy-page-wrap { padding: 24px 24px 60px; }
+  .policy-two-col { grid-template-columns: 1fr; }
+  .policy-sidebar { position: static; }
+  .pf-row { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 600px) {
+  .pf-actions { flex-direction: column; }
+  .pf-btn-submit { flex: none; width: 100%; }
+}
