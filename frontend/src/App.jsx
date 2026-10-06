@@ -1,11 +1,11 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import ScrollToTop from './components/Common/ScrollToTop';
 import LandingPage from './pages/LandingPage';
 import AboutPage from './pages/AboutPage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 
-// Group 2: Player & Competition Discovery
 import CompetitionsPage from './pages/CompetitionsPage';
 import CompetitionDetailPage from './pages/CompetitionDetailPage';
 import CompInfoPage from './pages/CompInfoPage';
@@ -14,7 +14,6 @@ import JoinTeamsPage from './pages/JoinTeamsPage';
 import CreateCompetitionPage from './pages/CreateCompetitionPage';
 import EditCompetitionPage from './pages/EditCompetitionPage';
 
-// Group 3: Team Management & Roster
 import CreateTeamPage from './pages/CreateTeamPage';
 import TeamRosterPage from './pages/team/TeamRosterPage';
 import TeamFindPlayersPage from './pages/team/TeamFindPlayersPage';
@@ -22,7 +21,6 @@ import TeamInvitesPage from './pages/team/TeamInvitesPage';
 import TeamJoinRequestsPage from './pages/team/TeamJoinRequestsPage';
 import TeamSettingsPage from './pages/team/TeamSettingsPage';
 
-// Group 4: Competition Management & Organizer
 import CompManageTeamsPage from './pages/CompManageTeamsPage';
 import CompManageMatchesPage from './pages/CompManageMatchesPage';
 import CompMatchResultsPage from './pages/CompMatchResultsPage';
@@ -31,7 +29,6 @@ import CompManageOrganizersPage from './pages/CompManageOrganizersPage';
 import CompDisputeReviewPage from './pages/CompDisputeReviewPage';
 import OrganizerRevenuePage from './pages/OrganizerRevenuePage';
 
-// Group 5: User Activity, Team Lead & Public Views
 import ProfilePage from './pages/ProfilePage';
 import MyActivityPage from './pages/MyActivityPage';
 import NotificationsPage from './pages/NotificationsPage';
@@ -42,7 +39,6 @@ import WatchLivePage from './pages/WatchLivePage';
 import SubmitReportPage from './pages/SubmitReportPage';
 import DisputesPage from './pages/DisputesPage';
 
-// Group 6: Admin & Super Admin Sections
 import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 import AdminUsersPage from './pages/admin/AdminUsersPage';
 import AdminActivityPage from './pages/admin/AdminActivityPage';
@@ -78,11 +74,11 @@ function RedirectWithSearch({ to }) {
 export default function App() {
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/index.html" element={<RedirectWithSearch to="/" />} />
         
-        {/* Public & Auth Routes (Group 1) */}
         <Route path="/about" element={<AboutPage />} />
         <Route path="/pages/about.html" element={<RedirectWithSearch to="/about" />} />
         
@@ -92,7 +88,6 @@ export default function App() {
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/pages/signup.html" element={<RedirectWithSearch to="/signup" />} />
 
-        {/* Player & Competition Discovery (Group 2) */}
         <Route path="/competitions" element={<CompetitionsPage />} />
         <Route path="/pages/competitions.html" element={<RedirectWithSearch to="/competitions" />} />
 
@@ -114,7 +109,6 @@ export default function App() {
         <Route path="/edit-competition" element={<EditCompetitionPage />} />
         <Route path="/pages/edit-competition.html" element={<RedirectWithSearch to="/edit-competition" />} />
 
-        {/* Team Management & Roster (Group 3) */}
         <Route path="/create-team" element={<CreateTeamPage />} />
         <Route path="/pages/create-team.html" element={<RedirectWithSearch to="/create-team" />} />
 
@@ -135,7 +129,6 @@ export default function App() {
         <Route path="/team/team-settings" element={<TeamSettingsPage />} />
         <Route path="/pages/team/team-settings.html" element={<RedirectWithSearch to="/team/team-settings" />} />
 
-        {/* Competition Management & Organizer (Group 4) */}
         <Route path="/comp-manage-teams" element={<CompManageTeamsPage />} />
         <Route path="/pages/comp-manage-teams.html" element={<RedirectWithSearch to="/comp-manage-teams" />} />
 
@@ -157,7 +150,6 @@ export default function App() {
         <Route path="/organizer-revenue" element={<OrganizerRevenuePage />} />
         <Route path="/pages/organizer-revenue.html" element={<RedirectWithSearch to="/organizer-revenue" />} />
 
-        {/* User Activity, Team Lead & Public Views (Group 5) */}
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/pages/profile.html" element={<RedirectWithSearch to="/profile" />} />
 
@@ -185,7 +177,6 @@ export default function App() {
         <Route path="/disputes" element={<DisputesPage />} />
         <Route path="/pages/disputes.html" element={<RedirectWithSearch to="/disputes" />} />
 
-        {/* Admin & Super Admin Sections (Group 6) */}
         <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
         <Route path="/pages/admin/dashboard.html" element={<RedirectWithSearch to="/admin/dashboard" />} />
 
