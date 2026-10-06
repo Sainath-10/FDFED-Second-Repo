@@ -1,2 +1,0 @@
-initAdminSidebar('competitions');
-initFooter('../../');

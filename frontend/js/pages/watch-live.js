@@ -1,2 +1,0 @@
-initSidebar('competitions', '../');
-initFooter('../');

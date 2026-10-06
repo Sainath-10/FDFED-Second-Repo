@@ -33,3 +33,5 @@ uploads/
 Thumbs.db
 *.swp
 *.swo
+
+.agents
