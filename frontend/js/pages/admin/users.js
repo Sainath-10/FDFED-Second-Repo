@@ -1,5 +1,10 @@
-initAdminSidebar('users');
-initFooter('../../');
+if (typeof initAdminSidebar === 'function') {
+  initAdminSidebar('users');
+}
+document.body.classList.add('super-admin-classic-shell');
+if (typeof initFooter === 'function') {
+  initFooter('../../');
+}
 
 const ACCOUNTS_KEY = 'nexus.auth.accounts';
 
@@ -21,17 +26,32 @@ function getSeedAccounts() {
   return Array.isArray(window.NEXUS_DEMO_ACCOUNTS) ? window.NEXUS_DEMO_ACCOUNTS : [];
 }
 
-function mergeAccounts() {
+function mergeAccountsWithBanStatus() {
   const seed = getSeedAccounts();
   const stored = readStoredAccounts();
-  const seen = new Set();
 
+  // Build a map of stored accounts by username for quick lookup
+  const storedMap = {};
+  stored.forEach(a => {
+    if (a && a.username) storedMap[normalize(a.username)] = a;
+  });
+
+  const seen = new Set();
   return seed.concat(stored).filter(account => {
     const key = normalize(account && account.username);
     if (!key || seen.has(key)) return false;
     seen.add(key);
     return true;
+  }).map(account => {
+    // Overlay stored data (including banned flag) onto seed data
+    const key = normalize(account.username);
+    const storedEntry = storedMap[key];
+    return storedEntry ? Object.assign({}, account, storedEntry) : account;
   });
+}
+
+function mergeAccounts() {
+  return mergeAccountsWithBanStatus();
 }
 
 function formatRole(role, adminType) {
@@ -174,8 +194,14 @@ async function syncAndRenderUsers() {
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+function initUsersPage() {
   syncAndRenderUsers();
   const input = document.getElementById('users-search');
   if (input) input.addEventListener('input', applySearch);
-});
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initUsersPage);
+} else {
+  initUsersPage();
+}
