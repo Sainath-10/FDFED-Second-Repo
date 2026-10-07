@@ -24,7 +24,11 @@ export default function CreateTeamPage() {
 
   // Auth check
   useEffect(() => {
-    if (!NexusAuth.isLoggedIn()) {
+    const isAuthed = NexusAuth && typeof NexusAuth.isLoggedIn === 'function'
+      ? NexusAuth.isLoggedIn()
+      : (NexusAuth && typeof NexusAuth.getSession === 'function' ? !!NexusAuth.getSession() : false);
+
+    if (!isAuthed) {
       navigate('/login', { replace: true });
     }
   }, [navigate]);

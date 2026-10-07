@@ -143,6 +143,10 @@ export function isAuthenticated() {
   return !!getSession();
 }
 
+export function isLoggedIn() {
+  return !!getSession();
+}
+
 export function authenticate(username, password) {
   const usernameNorm = normalize(username);
   const passwordValue = String(password || '');
@@ -347,6 +351,7 @@ export const NexusAuth = {
   login,
   normalizeRole,
   isAuthenticated,
+  isLoggedIn,
   getRoleProfilePath
 };
 

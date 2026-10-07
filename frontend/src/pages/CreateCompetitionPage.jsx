@@ -11,11 +11,15 @@ export default function CreateCompetitionPage() {
   const navigate = useNavigate();
   const { showToast } = useToast();
 
-  const session = NexusAuth.getSession();
+  const session = (NexusAuth && typeof NexusAuth.getSession === 'function') ? NexusAuth.getSession() : null;
 
   // Auth guard
   useEffect(() => {
-    if (!NexusAuth.isLoggedIn()) {
+    const isAuthed = NexusAuth && typeof NexusAuth.isLoggedIn === 'function'
+      ? NexusAuth.isLoggedIn()
+      : (NexusAuth && typeof NexusAuth.getSession === 'function' ? !!NexusAuth.getSession() : false);
+
+    if (!isAuthed) {
       navigate('/login', { replace: true });
     }
   }, [navigate]);
@@ -119,7 +123,9 @@ export default function CreateCompetitionPage() {
   const p3 = parseInt(prize3) || 0;
   const totalPrize = p1 + p2 + p3;
 
-  const platformFee = NexusData.calculatePlatformFee(totalPrize);
+  const platformFee = (NexusData && typeof NexusData.calculatePlatformFee === 'function')
+    ? NexusData.calculatePlatformFee(totalPrize)
+    : Math.max(Math.round((totalPrize * 7) / 100), 50);
 
   const clearError = (field) => {
     setErrors(prev => {
@@ -354,11 +360,13 @@ export default function CreateCompetitionPage() {
     }, 1500);
   };
 
-  const revenueConfig = NexusData.getRevenueConfig();
+  const revenueConfig = (NexusData && typeof NexusData.getRevenueConfig === 'function')
+    ? NexusData.getRevenueConfig()
+    : { percentage: 7, minCost: 50 };
   const feeRuleText = `${revenueConfig.percentage}% Prize Pool Fee (Min. ₹${revenueConfig.minCost})`;
 
   return (
-    <Shell activeItem="competitions">
+    <Shell activePage="competitions">
       <main className="create-comp-page">
         <Link to="/competitions" className="back-btn">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
