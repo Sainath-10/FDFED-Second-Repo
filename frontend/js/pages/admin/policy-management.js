@@ -1,2 +1,0 @@
-initAdminSidebar('home');
-initFooter('../../');

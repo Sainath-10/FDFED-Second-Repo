@@ -105,11 +105,18 @@ export class AuthService {
   }
 
   async addAdmin(dto: { username: string; email?: string; password?: string; adminType: string }) {
-    const { username, email, password, adminType } = dto;
+    const { username, adminType } = dto;
+    const roleValue = (Object.values(UserRole).includes(adminType as any) ? adminType : UserRole.COMP_ADMIN) as UserRole;
+
     const existing = await this.userRepository.findByEmailOrUsername(username);
 
+    // "Add or elevate": create the account when it does not exist yet.
     if (!existing) {
-      throw new BadRequestException('Username not present');
+      const email = dto.email && dto.email.includes('@')
+        ? dto.email
+        : (username.includes('@') ? username : `${username}@nexus.gg`);
+      const password = dto.password && dto.password.trim() ? dto.password : 'nexus';
+      return this.userRepository.createWithPassword(email, username, password, roleValue, adminType);
     }
 
     const currentRole = String(existing.role || '').toLowerCase();
@@ -119,15 +126,13 @@ export class AuthService {
       throw new BadRequestException('User is already an admin');
     }
 
-    const roleValue = (Object.values(UserRole).includes(adminType as any) ? adminType : UserRole.COMP_ADMIN) as UserRole;
-
     const updates: any = {
       role: roleValue,
       adminType: adminType,
       revokedReason: null,
     };
-    if (password) {
-      updates.passwordHash = await bcrypt.hash(password, 10);
+    if (dto.password && dto.password.trim()) {
+      updates.passwordHash = await bcrypt.hash(dto.password, 10);
     }
     return await this.userRepository.update(existing.id, updates);
   }

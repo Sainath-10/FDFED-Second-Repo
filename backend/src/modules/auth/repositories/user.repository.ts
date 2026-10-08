@@ -193,12 +193,17 @@ export class UserRepository {
   }
 
   async seedDemoAccounts(): Promise<void> {
+    const password = 'nexus';
+
     const demoAccounts = [
-      { email: 'regular@nexus.gg', username: 'regular@nexus.gg', password: 'regular123', role: UserRole.PARTICIPANT, adminType: null },
-      { email: 'admin@nexus.gg', username: 'admin@nexus.gg', password: 'admin123', role: UserRole.COMP_ADMIN, adminType: 'comp_admin' },
-      { email: 'dispute_admin@nexus.gg', username: 'dispute_admin@nexus.gg', password: 'admin123', role: UserRole.DISPUTE_ADMIN, adminType: 'dispute_admin' },
-      { email: 'revenue_admin@nexus.gg', username: 'revenue_admin@nexus.gg', password: 'admin123', role: UserRole.REVENUE_ADMIN, adminType: 'revenue_admin' },
-      { email: 'superadmin@nexus.gg', username: 'superadmin@nexus.gg', password: 'super123', role: UserRole.SUPER_ADMIN, adminType: 'super_admin' },
+      { email: 'superadmin1@nexus.gg', username: 'superadmin1', password, role: UserRole.SUPER_ADMIN, adminType: 'super_admin' },
+      { email: 'superadmin2@nexus.gg', username: 'superadmin2', password, role: UserRole.SUPER_ADMIN, adminType: 'super_admin' },
+      { email: 'compadmin@nexus.gg', username: 'compadmin', password, role: UserRole.COMP_ADMIN, adminType: 'comp_admin' },
+      { email: 'revenueadmin@nexus.gg', username: 'revenueadmin', password, role: UserRole.REVENUE_ADMIN, adminType: 'revenue_admin' },
+      { email: 'disputeadmin@nexus.gg', username: 'disputeadmin', password, role: UserRole.DISPUTE_ADMIN, adminType: 'dispute_admin' },
+      { email: 'regular1@nexus.gg', username: 'regular1', password, role: UserRole.PARTICIPANT, adminType: null },
+      { email: 'regular2@nexus.gg', username: 'regular2', password, role: UserRole.PARTICIPANT, adminType: null },
+      { email: 'regular3@nexus.gg', username: 'regular3', password, role: UserRole.PARTICIPANT, adminType: null },
     ];
 
     for (const acc of demoAccounts) {

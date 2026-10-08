@@ -33,3 +33,20 @@ uploads/
 Thumbs.db
 *.swp
 *.swo
+.vscode/
+.idea/
+
+# Build caches / tooling
+.vite/
+.cache/
+coverage/
+.eslintcache
+*.local
+
+# Agent / tooling artefacts
+.commandcode/
+.agents/
+.freebuff/
+
+# Migration log / local planning notes
+project.md
