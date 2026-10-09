@@ -64,9 +64,11 @@ export default function SubmitReport() {
       if (comp) compId = comp.id;
     }
 
-    const organizers = comp && Array.isArray(comp.organizers) && comp.organizers.length > 0
-      ? comp.organizers
-      : (comp && comp.createdBy ? [comp.createdBy] : ['organizer']);
+    const organizers = NexusData && typeof NexusData.getCompetitionOrganizers === 'function' && comp
+      ? NexusData.getCompetitionOrganizers(comp)
+      : (comp && Array.isArray(comp.organizers) && comp.organizers.length > 0
+        ? comp.organizers
+        : (comp && comp.createdBy ? [comp.createdBy] : ['organizer']));
 
     const newDisputeObj = {
       id: disputeId,

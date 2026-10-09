@@ -15,6 +15,25 @@ import NexusTeamWorkflow from '../services/teamWorkflow.js';
 import { showToast } from '../lib/toast.js';
 import '../styles/pages/join-teams.css';
 
+function renderTeamAvatar(avatar, name) {
+  const fallback = name ? String(name).slice(0, 4).toUpperCase() : 'TEAM';
+  if (!avatar) return fallback;
+  const str = String(avatar).trim();
+  if (str.startsWith('<svg') && str.endsWith('</svg>')) {
+    return (
+      <span
+        dangerouslySetInnerHTML={{ __html: str }}
+        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}
+      />
+    );
+  }
+  if (str.startsWith('http://') || str.startsWith('https://') || str.startsWith('/') || str.startsWith('data:image/')) {
+    return <img src={str} alt={name || 'Team'} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />;
+  }
+  if (str.length <= 4) return str;
+  return fallback;
+}
+
 export default function JoinTeams() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -198,7 +217,7 @@ export default function JoinTeams() {
             return (
               <div className="request-card" data-name={team.name} data-team-id={team.id} key={team.id || team.name}>
                 <div className="request-card-left">
-                  <div className="team-icon">{team.avatar || 'TEAM'}</div>
+                  <div className="team-icon">{renderTeamAvatar(team.avatar, team.name)}</div>
                   <div>
                     <div className="team-name">{team.name}</div>
                     <div className="team-info">
@@ -235,7 +254,7 @@ export default function JoinTeams() {
             {mine.map((entry) => (
               <div className="pending-card" key={entry.request.id || entry.teamName}>
                 <div className="pending-content">
-                  <div className="team-icon">{entry.teamAvatar || 'TEAM'}</div>
+                  <div className="team-icon">{renderTeamAvatar(entry.teamAvatar, entry.teamName)}</div>
                   <div className="pending-info">
                     <div className="pending-team-name">{entry.teamName}</div>
                     <div className="pending-time">Sent {entry.request.requestedAt ? new Date(entry.request.requestedAt).toLocaleString() : 'just now'}</div>

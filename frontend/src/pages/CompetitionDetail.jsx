@@ -32,6 +32,25 @@ function formatPrizePool(prize) {
   return str.toLowerCase().includes('prize pool') ? str : `${str} Prize Pool`;
 }
 
+function renderTeamAvatar(avatar, name) {
+  const fallback = name ? String(name).charAt(0).toUpperCase() : '🛡️';
+  if (!avatar) return fallback;
+  const str = String(avatar).trim();
+  if (str.startsWith('<svg') && str.endsWith('</svg>')) {
+    return (
+      <span
+        dangerouslySetInnerHTML={{ __html: str }}
+        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}
+      />
+    );
+  }
+  if (str.startsWith('http://') || str.startsWith('https://') || str.startsWith('/') || str.startsWith('data:image/')) {
+    return <img src={str} alt={name || 'Team'} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />;
+  }
+  if (str.length <= 4) return str;
+  return fallback;
+}
+
 const DEFAULT_BANNERS = [
   [['valorant'], '8764f3a5ce7a0eb0275743600c60fb0c727893c8.png'],
   [['counter-strike', 'cs2', 'cs:go', 'csgo'], 'c4f97eccde97e10ac89b61ec5fb36fdce0ab2477.png'],
@@ -315,7 +334,7 @@ export default function CompetitionDetail() {
                     const canManage = comp.role === 'organizer' && t.status === 'pending';
                     return (
                       <div className="team-row" key={t.id || t.name}>
-                        <div className="team-avatar" style={{ cursor: 'pointer' }} onClick={() => navigate(`/pages/team/team-roster.html?compId=${comp.id}&teamId=${t.id}`)}>{t.avatar || '🛡️'}</div>
+                        <div className="team-avatar" style={{ cursor: 'pointer' }} onClick={() => navigate(`/pages/team/team-roster.html?compId=${comp.id}&teamId=${t.id}`)}>{renderTeamAvatar(t.avatar, t.name)}</div>
                         <div className="team-info" style={{ cursor: 'pointer' }} onClick={() => navigate(`/pages/team/team-roster.html?compId=${comp.id}&teamId=${t.id}`)}>
                           <span className="team-name">{t.name}</span>
                           <span className="team-players">{t.players || 0} Players</span>

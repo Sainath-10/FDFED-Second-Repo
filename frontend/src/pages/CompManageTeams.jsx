@@ -16,6 +16,25 @@ const PAGE_SIZE = 10;
 const STATUS_CLS = { approved: 'status-approved', pending: 'status-pending', rejected: 'status-rejected' };
 const STATUS_LBL = { approved: 'APPROVED', pending: 'PENDING', rejected: 'REJECTED' };
 
+function renderTeamAvatar(avatar, name) {
+  const fallback = name ? String(name).charAt(0).toUpperCase() : 'T';
+  if (!avatar) return fallback;
+  const str = String(avatar).trim();
+  if (str.startsWith('<svg') && str.endsWith('</svg>')) {
+    return (
+      <span
+        dangerouslySetInnerHTML={{ __html: str }}
+        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}
+      />
+    );
+  }
+  if (str.startsWith('http://') || str.startsWith('https://') || str.startsWith('/') || str.startsWith('data:image/')) {
+    return <img src={str} alt={name || 'Team'} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />;
+  }
+  if (str.length <= 4) return str;
+  return fallback;
+}
+
 export default function CompManageTeams() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -166,7 +185,7 @@ export default function CompManageTeams() {
                     <span className="checkmark"></span>
                   </label>
                   <div className="col-team" style={{ cursor: 'pointer' }} onClick={() => navigate(`/pages/team/team-roster.html?compId=${comp.id}&teamId=${t.id}`)}>
-                    <div className="team-avatar-sm">{t.avatar || t.name[0]}</div>
+                    <div className="team-avatar-sm">{renderTeamAvatar(t.avatar, t.name)}</div>
                     <span>{t.name}</span>
                   </div>
                   <span className="col-captain">{t.captain || '—'}</span>

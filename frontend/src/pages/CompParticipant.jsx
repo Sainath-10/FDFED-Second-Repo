@@ -130,9 +130,33 @@ export default function CompParticipant() {
   } else if (dTargetType === 'organizer') {
     targetLabel = 'Tournament Organizer *';
     routingHint = '📢 Dispute against Organizer is routed directly to Platform Admin.';
-    targetOptions = normalize(participants.organizer) === userKey
-      ? [{ value: '', label: 'You cannot dispute yourself as organizer' }]
-      : [{ value: participants.organizer, label: `${participants.organizer} (Organizer)` }];
+    const rawOrgs = (Array.isArray(participants.organizers) && participants.organizers.length > 0)
+      ? participants.organizers
+      : (NexusData && typeof NexusData.getCompetitionOrganizers === 'function' && comp
+        ? NexusData.getCompetitionOrganizers(comp)
+        : [participants.organizer || (comp && (comp.createdBy || comp.organizerId)) || 'organizer'].filter(Boolean));
+
+    const cleanOrgs = Array.from(new Set(rawOrgs.map((o) => {
+      if (!o) return '';
+      if (typeof o === 'string') return o.trim().replace(/^@/, '');
+      return String(o.username || o.email || o.name || o.id || '').trim().replace(/^@/, '');
+    }).filter(Boolean)));
+
+    const creatorKey = normalize((comp && (comp.createdBy || comp.organizerId)) || (Array.isArray(comp && comp.organizers) && comp.organizers[0]) || cleanOrgs[0] || '');
+    const availableOrgs = cleanOrgs.filter((org) => normalize(org) !== userKey);
+
+    if (availableOrgs.length === 0) {
+      targetOptions = [{ value: '', label: 'You cannot dispute yourself as organizer' }];
+    } else {
+      targetOptions = [
+        { value: '', label: '— Select an Organizer —' },
+        ...availableOrgs.map((org) => {
+          const isMain = normalize(org) === creatorKey || normalize(org) === normalize(comp && comp.createdBy) || normalize(org) === normalize(comp && comp.organizerId);
+          const roleTag = isMain ? 'Organizer' : 'Co-Organizer';
+          return { value: org, label: `${org} (${roleTag})` };
+        }),
+      ];
+    }
   }
 
   function openDispute() {

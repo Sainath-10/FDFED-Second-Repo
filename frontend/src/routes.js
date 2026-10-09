@@ -107,7 +107,7 @@ export const PROTECTED_ROUTES = [
   route('/pages/admin/view-standings.html', 'View standings', 'admin', ADMIN_ROLES),
   route('/pages/admin/edit-competition.html', 'Edit competition', 'admin', ADMIN_ROLES),
   route('/pages/admin/competition-detail.html', 'Competition detail', 'admin', ADMIN_ROLES),
-  route('/pages/admin/admin-activity.html', 'Admin activity', 'admin', ADMIN_ROLES),
+  route('/pages/admin/admin-activity.html', 'Admin activity', 'admin', [...ADMIN_ROLES, ...SUPER_ADMIN_ROLES]),
   route('/pages/admin/admin-profile.html', 'Admin profile', 'admin', ADMIN_ROLES),
   route('/pages/admin/revenue-config.html', 'Revenue config', 'admin', ADMIN_ROLES),
   route('/pages/admin/revenue-transactions.html', 'Revenue transactions', 'admin', ADMIN_ROLES),

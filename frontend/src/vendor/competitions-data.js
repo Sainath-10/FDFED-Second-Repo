@@ -605,7 +605,14 @@ function setCompetitionApproval(compId, decision, adminUsername) {
     logAdminActivity(adminUser, 'COMPETITION_APPROVAL', `${actionLabel} competition "${comp.name || 'Tournament'}"`, {
       compId: comp.id,
       competitionName: comp.name,
-      decision: next
+      decision: next,
+      game: comp.game,
+      prizePool: comp.prizePool,
+      location: comp.location,
+      format: comp.format,
+      type: comp.type,
+      dates: comp.dates,
+      createdBy: comp.createdBy || comp.organizerId
     });
   } catch (e) {
     console.error('Error logging approval activity:', e);
@@ -1049,9 +1056,33 @@ function updateDisputeStatus(id, updates) {
   return true;
 }
 
+function getCompetitionOrganizers(comp) {
+  if (!comp) return ['organizer'];
+  const orgSet = new Set();
+  const add = (v) => {
+    if (!v) return;
+    if (typeof v === 'string') {
+      const s = v.trim().replace(/^@/, '');
+      if (s) orgSet.add(s);
+    } else if (typeof v === 'object') {
+      const s = String(v.username || v.email || v.name || v.id || '').trim().replace(/^@/, '');
+      if (s) orgSet.add(s);
+    }
+  };
+
+  if (comp.createdBy) add(comp.createdBy);
+  if (comp.organizerId) add(comp.organizerId);
+  if (Array.isArray(comp.organizers)) comp.organizers.forEach(add);
+  if (Array.isArray(comp.pendingCoOrganizers)) comp.pendingCoOrganizers.forEach(add);
+  if (Array.isArray(comp.coOrganizers)) comp.coOrganizers.forEach(add);
+
+  const list = Array.from(orgSet).filter(Boolean);
+  return list.length > 0 ? list : ['organizer'];
+}
+
 function getCompetitionParticipants(compId) {
   const comp = getCompetitionById(compId);
-  if (!comp) return { teams: [], players: [], organizer: 'organizer' };
+  if (!comp) return { teams: [], players: [], organizer: 'organizer', organizers: ['organizer'] };
 
   const teams = (comp.teams || []).map(t => ({ id: t.id, name: t.name, status: t.status }));
   const playerSet = new Set();
@@ -1066,11 +1097,19 @@ function getCompetitionParticipants(compId) {
     }
   });
 
-  const organizer = (Array.isArray(comp.organizers) && comp.organizers[0]) || comp.organizerId || comp.createdBy || 'organizer';
+  const allOrganizers = getCompetitionOrganizers(comp);
+  const primaryOrganizer = (Array.isArray(comp.organizers) && comp.organizers[0]) || comp.organizerId || comp.createdBy || allOrganizers[0] || 'organizer';
+  const organizer = typeof primaryOrganizer === 'string' ? primaryOrganizer : (primaryOrganizer?.username || 'organizer');
+
+  if (!Array.isArray(comp.organizers) || allOrganizers.length > comp.organizers.length) {
+    comp.organizers = allOrganizers;
+  }
+
   return {
     teams,
     players: Array.from(playerSet).filter(Boolean),
     organizer,
+    organizers: allOrganizers,
   };
 }
 
@@ -1342,7 +1381,7 @@ window.NexusData = {
  // Disputes
   addDispute, loadDisputes, saveDisputes,
   getDisputesByStatus, getDisputesByCompetition, updateDisputeStatus,
-  getCompetitionParticipants, issueOrganizerWarning, issueAdminWarning, banUserPlatformWide,
+  getCompetitionParticipants, getCompetitionOrganizers, issueOrganizerWarning, issueAdminWarning, banUserPlatformWide,
 };
 
 // -- Ended-competition helpers ---------------------------------

@@ -7,7 +7,7 @@
  * the audit timeline + stat counters.
  */
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import NexusData from '../services/data.js';
 import NexusAPI from '../services/api.js';
@@ -24,6 +24,111 @@ function activityMeta(item) {
   return { badge: 'ADMIN ACTION', bg: 'rgba(255,255,255,0.1)', color: '#ffffff', icon: '⚡' };
 }
 
+const formatPrizePool = (prize) => {
+  if (!prize || prize === '—' || prize === '-' || prize === '₹0' || String(prize).toLowerCase().includes('no prize')) return 'No Prize Pool';
+  const str = String(prize).trim();
+  return str.toLowerCase().includes('prize pool') ? str : `${str} Prize Pool`;
+};
+
+const prizeAmount = (c) => c?.prize || (c?.prizePool ? parseInt(String(c.prizePool).replace(/[^0-9]/g, ''), 10) || 0 : 0);
+
+const feeFor = (c) => {
+  if (!c) return 0;
+  if (typeof c.platformFee === 'number') return c.platformFee;
+  if (NexusData && typeof NexusData.calculatePlatformFee === 'function') {
+    return NexusData.calculatePlatformFee(prizeAmount(c));
+  }
+  return Math.round(prizeAmount(c) * 0.1);
+};
+
+function getCompStatusBadge(comp) {
+  const app = String((comp && comp.approvalStatus) || 'approved').toLowerCase();
+  if (app === 'pending') {
+    return (
+      <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: 'rgba(251,146,60,0.15)', color: '#fb923c', border: '1px solid rgba(251,146,60,0.3)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        ⏳ Pending Approval
+      </span>
+    );
+  }
+  if (app === 'rejected') {
+    return (
+      <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        ✖ Rejected
+      </span>
+    );
+  }
+  return (
+    <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: 'rgba(198,255,51,0.15)', color: '#c6ff33', border: '1px solid rgba(198,255,51,0.3)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+      ✔ Active &amp; Live
+    </span>
+  );
+}
+
+function isCompetitionActivity(item) {
+  if (!item) return false;
+  const actionType = String(item.actionType || '').toUpperCase();
+  if (actionType.includes('COMPETITION') || actionType.includes('TOURNAMENT')) return true;
+  const md = item.metadata || {};
+  if (md.compId || md.competitionId || md.competitionName) return true;
+  if (/competition|tournament/i.test(item.details || '')) return true;
+  return false;
+}
+
+function findCompetitionForLog(item) {
+  if (!item) return null;
+  const md = item.metadata || {};
+  let comp = null;
+  const compId = md.compId || md.competitionId || md.id;
+
+  if (compId && NexusData && typeof NexusData.getCompetitionById === 'function') {
+    comp = NexusData.getCompetitionById(compId);
+  }
+
+  let allComps = [];
+  if (NexusData && typeof NexusData.loadCompetitions === 'function') {
+    allComps = NexusData.loadCompetitions() || [];
+  } else {
+    try {
+      allComps = JSON.parse(localStorage.getItem('nexus_competitions') || '[]');
+    } catch (e) { allComps = []; }
+  }
+
+  if (!comp && compId) {
+    comp = allComps.find((c) => c && c.id === compId);
+  }
+
+  const nameMatch = md.competitionName || (() => {
+    const match = String(item.details || '').match(/competition\s+["']([^"']+)["']/i);
+    return match ? match[1] : null;
+  })();
+
+  if (!comp && nameMatch) {
+    const norm = nameMatch.trim().toLowerCase();
+    comp = allComps.find((c) => c && c.name && c.name.trim().toLowerCase() === norm);
+  }
+
+  if (!comp && isCompetitionActivity(item)) {
+    const fallbackName = nameMatch || 'Tournament';
+    comp = {
+      id: compId || 'comp-fallback',
+      name: fallbackName,
+      game: md.game || 'Competitive Esports',
+      prizePool: md.prizePool || 50000,
+      approvalStatus: md.decision || 'approved',
+      status: 'active',
+      location: md.location || 'Online',
+      dates: md.dates || 'Ongoing / Scheduled',
+      format: md.format || 'Tournament',
+      type: md.type || 'Single Elimination',
+      createdBy: md.createdBy || item.adminUsername || 'Organizer',
+      organizers: [md.createdBy || item.adminUsername || 'Organizer'],
+      description: md.description || `Competition "${fallbackName}" reviewed and approved by administrator.`
+    };
+  }
+
+  return comp;
+}
+
 export default function AdminActivity() {
   const [params] = useSearchParams();
   const { session } = useAuth();
@@ -31,6 +136,16 @@ export default function AdminActivity() {
 
   const [role, setRole] = useState({ label: 'Administrator', isSuper: false });
   const [logs, setLogs] = useState([]);
+  const [expandedLogIds, setExpandedLogIds] = useState(new Set());
+
+  const toggleExpand = (logId) => {
+    setExpandedLogIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(logId)) next.delete(logId);
+      else next.add(logId);
+      return next;
+    });
+  };
 
   const username = (params.get('admin') || loggedInUser).trim();
 
@@ -100,6 +215,23 @@ export default function AdminActivity() {
     <main className="admin-main">
       <header className="admin-header" style={{ marginBottom: 24 }}>
         <div>
+          {session && (session.role === 'super-admin' || session.role === 'super_admin') && (
+            <Link
+              to="/pages/super-admin/admins.html"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                color: 'var(--accent, #c6ff33)',
+                textDecoration: 'none',
+                fontSize: 13,
+                fontWeight: 700,
+                marginBottom: 14,
+              }}
+            >
+              ← Back to Administrator Directory
+            </Link>
+          )}
           <h1 className="admin-title">Admin <span style={{ color: 'var(--accent,#c6ff33)' }}>Activity Logs</span></h1>
           <p className="admin-desc">Detailed audit timeline of administrative actions including revenue configuration changes, dispute resolutions, and tournament approvals.</p>
         </div>
@@ -145,9 +277,14 @@ export default function AdminActivity() {
           {logs.map((item, i) => {
             const m = activityMeta(item);
             const md = item.metadata || {};
-            const hasMeta = Object.keys(md).length > 0;
+            const isComp = isCompetitionActivity(item);
+            const comp = isComp ? findCompetitionForLog(item) : null;
+            const logKey = item.id || `log-${i}`;
+            const isExpanded = expandedLogIds.has(logKey);
+            const hasAuditFields = md.prevPercentage !== undefined || md.prevMinCost !== undefined || md.target || md.disputeId;
+
             return (
-              <div key={item.id || i} style={{ background: '#141414', border: '1px solid #262626', borderRadius: 12, padding: 20, display: 'flex', flexDirection: 'column', gap: 12, position: 'relative' }}>
+              <div key={logKey} style={{ background: '#141414', border: '1px solid #262626', borderRadius: 12, padding: 20, display: 'flex', flexDirection: 'column', gap: 12, position: 'relative' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <span style={{ fontSize: 20 }}>{m.icon}</span>
@@ -156,7 +293,161 @@ export default function AdminActivity() {
                   <span style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>🕒 {item.timestamp ? new Date(item.timestamp).toLocaleString() : 'Recently'}</span>
                 </div>
                 <div style={{ color: '#ffffff', fontSize: 14, fontWeight: 600, lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: escapeHtml(item.details) }} />
-                {hasMeta && (
+
+                {/* Competition Details button & inline expandable card */}
+                {isComp && comp && (
+                  <div style={{ marginTop: 2 }}>
+                    <button
+                      id={`btn-details-${logKey}`}
+                      className="btn-table-secondary"
+                      onClick={() => toggleExpand(logKey)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '6px 14px',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        borderRadius: 6,
+                        border: isExpanded ? '1px solid rgba(198,255,51,0.5)' : '1px solid rgba(255,255,255,0.15)',
+                        color: isExpanded ? '#c6ff33' : '#e5e5e5',
+                        background: isExpanded ? 'rgba(198,255,51,0.08)' : 'rgba(255,255,255,0.04)',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      <span style={{ fontSize: 11 }}>{isExpanded ? '▲' : '▼'}</span>
+                      <span>{isExpanded ? 'Hide Details' : 'Details'}</span>
+                    </button>
+
+                    {isExpanded && (
+                      <div
+                        id={`comp-card-${logKey}`}
+                        className="activity-comp-card"
+                        style={{
+                          marginTop: 12,
+                          background: '#0d0f14',
+                          border: '1px solid rgba(198,255,51,0.25)',
+                          boxShadow: '0 8px 24px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05)',
+                          borderRadius: 12,
+                          padding: '18px 20px',
+                          animation: 'fadeIn 0.2s ease-in-out',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ fontSize: 22 }}>🏆</span>
+                            <div>
+                              <h4 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#ffffff', letterSpacing: '-0.3px' }}>
+                                {comp.name || 'Tournament'}
+                              </h4>
+                              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                                Game: <strong style={{ color: '#fff' }}>{comp.game || 'Esports'}</strong>
+                              </span>
+                            </div>
+                          </div>
+                          <div>
+                            {getCompStatusBadge(comp)}
+                          </div>
+                        </div>
+
+                        <div
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                            gap: '12px 18px',
+                            background: '#07080a',
+                            border: '1px solid #1f242d',
+                            borderRadius: 8,
+                            padding: '14px 16px',
+                            fontSize: 12,
+                            color: 'var(--text-muted)',
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontSize: 11, textTransform: 'uppercase', color: '#64748b', fontWeight: 700, marginBottom: 2 }}>Prize Pool</div>
+                            <div style={{ color: '#fb923c', fontSize: 15, fontWeight: 800 }}>{formatPrizePool(comp.prizePool)}</div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 11, textTransform: 'uppercase', color: '#64748b', fontWeight: 700, marginBottom: 2 }}>Platform Fee (Revenue)</div>
+                            <div style={{ color: '#c6ff33', fontSize: 15, fontWeight: 800 }}>₹{feeFor(comp).toLocaleString('en-IN')}</div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 11, textTransform: 'uppercase', color: '#64748b', fontWeight: 700, marginBottom: 2 }}>Organizer / Creator</div>
+                            <div style={{ color: '#ffffff', fontWeight: 600 }}>{comp.createdBy || comp.organizerId || 'System'}</div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 11, textTransform: 'uppercase', color: '#64748b', fontWeight: 700, marginBottom: 2 }}>Format &amp; Type</div>
+                            <div style={{ color: '#ffffff', fontWeight: 600 }}>{comp.format || 'Tournament'}{comp.type ? ` • ${comp.type}` : ''}</div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 11, textTransform: 'uppercase', color: '#64748b', fontWeight: 700, marginBottom: 2 }}>Tournament Dates</div>
+                            <div style={{ color: '#ffffff', fontWeight: 600 }}>📅 {comp.dates || 'TBD'}</div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 11, textTransform: 'uppercase', color: '#64748b', fontWeight: 700, marginBottom: 2 }}>Location</div>
+                            <div style={{ color: '#ffffff', fontWeight: 600 }}>📍 {comp.location || 'Online'}</div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 11, textTransform: 'uppercase', color: '#64748b', fontWeight: 700, marginBottom: 2 }}>Teams &amp; Entry</div>
+                            <div style={{ color: '#ffffff', fontWeight: 600 }}>
+                              🛡️ {comp.teams ? comp.teams.length : 0} {comp.maxTeams ? `/ ${comp.maxTeams}` : ''} teams • {comp.entryFee || 'Free'}
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 11, textTransform: 'uppercase', color: '#64748b', fontWeight: 700, marginBottom: 2 }}>Registration Window</div>
+                            <div style={{ color: '#ffffff', fontWeight: 600 }}>
+                              {(comp.registrationDates && comp.registrationDates.open) ? `${comp.registrationDates.open} – ${comp.registrationDates.close || 'Closing'}` : 'Open'}
+                            </div>
+                          </div>
+                        </div>
+
+                        {comp.description && (
+                          <div style={{ marginTop: 12, padding: '10px 14px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                            <strong style={{ color: '#ffffff', display: 'block', marginBottom: 2 }}>Description:</strong>
+                            {comp.description}
+                          </div>
+                        )}
+
+                        <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 12 }}>
+                          {comp.id && comp.id !== 'comp-fallback' ? (
+                            <Link
+                              to={`/pages/admin/competition-detail.html?id=${comp.id}`}
+                              className="btn-table-primary"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 6,
+                                padding: '7px 16px',
+                                fontSize: 12,
+                                fontWeight: 800,
+                                borderRadius: 6,
+                                background: '#c6ff33',
+                                color: '#000',
+                                textDecoration: 'none',
+                                boxShadow: '0 0 10px rgba(198,255,51,0.25)',
+                              }}
+                            >
+                              <span>Manage / Overview</span> ↗
+                            </Link>
+                          ) : (
+                            <span style={{ fontSize: 11, color: '#64748b' }}>Archived snapshot</span>
+                          )}
+                          <button
+                            onClick={() => toggleExpand(logKey)}
+                            className="btn-table-secondary"
+                            style={{ padding: '6px 14px', fontSize: 12 }}
+                          >
+                            Close ✕
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Audit meta for non-competition logs (only rendered if fields actually exist) */}
+                {!isComp && hasAuditFields && (
                   <div style={{ background: '#0a0a0a', border: '1px solid #262626', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: 'var(--text-muted)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
                     {md.prevPercentage !== undefined && <div>Prize Fee: <strong style={{ color: '#ffffff' }}>{md.prevPercentage}% → {md.newPercentage}%</strong></div>}
                     {md.prevMinCost !== undefined && <div>Min Cost: <strong style={{ color: '#ffffff' }}>₹{md.prevMinCost} → ₹{md.newMinCost}</strong></div>}

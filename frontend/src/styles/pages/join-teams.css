@@ -80,6 +80,14 @@
   justify-content: center;
   font-size: 20px;
   flex-shrink: 0;
+  overflow: hidden;
+}
+.team-icon svg {
+  width: 24px !important;
+  height: 24px !important;
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
 }
 
 .request-card .team-name {

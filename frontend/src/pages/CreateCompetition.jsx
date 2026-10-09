@@ -229,7 +229,7 @@ export default function CreateCompetition() {
       disputes: [],
       organizerId: session.username,
       createdBy: session.username,
-      organizers: [session.username],
+      organizers: Array.from(new Set([session.username, ...cleanCoOrgs].filter(Boolean))),
       pendingCoOrganizers: Array.from(new Set(cleanCoOrgs)),
       approvalStatus: isHighStakes ? 'pending' : 'approved',
       badge: isHighStakes ? 'Pending' : 'New',

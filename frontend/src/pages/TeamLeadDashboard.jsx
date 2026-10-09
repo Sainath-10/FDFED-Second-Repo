@@ -258,9 +258,21 @@ export default function TeamLeadDashboard() {
     const p = NexusData && NexusData.getCompetitionParticipants ? NexusData.getCompetitionParticipants(compId) : { teams: [], players: [], organizer: 'organizer' };
     const session = getSession();
     const user = normalize(session && session.username);
-    if (dispute.targetType === 'team') return (p.teams || []).map((t) => t.name).filter((n) => normalize(n) !== '');
-    if (dispute.targetType === 'player') return (p.players || []).filter((u) => normalize(u) !== user).map((u) => `@${u}`);
-    return [p.organizer || 'organizer'];
+    if (dispute.targetType === 'team') return (p.teams || []).map((t) => ({ value: t.name, label: `${t.name} (${t.status || 'registered'})` })).filter((n) => normalize(n.value) !== '');
+    if (dispute.targetType === 'player') return (p.players || []).filter((u) => normalize(u) !== user).map((u) => ({ value: u, label: `@${u}` }));
+    if (dispute.targetType === 'organizer') {
+      const orgs = (Array.isArray(p.organizers) && p.organizers.length > 0) ? p.organizers : [p.organizer || 'organizer'];
+      const comp = NexusData && NexusData.getCompetitionById ? NexusData.getCompetitionById(compId) : null;
+      const creatorKey = normalize((comp && (comp.createdBy || comp.organizerId)) || orgs[0] || '');
+      return orgs
+        .filter((u) => normalize(u) !== user)
+        .map((org) => {
+          const isMain = normalize(org) === creatorKey || normalize(org) === normalize(comp && comp.createdBy) || normalize(org) === normalize(comp && comp.organizerId);
+          const roleTag = isMain ? 'Organizer' : 'Co-Organizer';
+          return { value: org, label: `${org} (${roleTag})` };
+        });
+    }
+    return [{ value: p.organizer || 'organizer', label: `${p.organizer || 'organizer'} (Organizer)` }];
   }
 
   function submitDispute(e) {
@@ -639,7 +651,11 @@ export default function TeamLeadDashboard() {
                 <select id="dispute-target-user" required value={dispute.target} onChange={(e) => setDispute((d) => ({ ...d, target: e.target.value }))} style={{ width: '100%', background: '#1e293b', border: '1px solid #334155', color: '#f1f5f9', padding: '10px 12px', borderRadius: 8, fontSize: 14 }}>
                   {!dispute.targetType && <option value="">— Select Category First —</option>}
                   {dispute.targetType && <option value="">— Select —</option>}
-                  {targetOptions().map((o) => <option key={o} value={o}>{o}</option>)}
+                  {targetOptions().map((o) => {
+                    const val = typeof o === 'object' ? o.value : o;
+                    const lbl = typeof o === 'object' ? o.label : o;
+                    return <option key={val || lbl} value={val}>{lbl}</option>;
+                  })}
                 </select>
               </div>
 

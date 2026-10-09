@@ -12,14 +12,12 @@ import '../styles/pages/super-admin/users.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const ACCOUNTS_KEY = 'nexus.auth.accounts';
-const DEFAULT_PASSWORD = 'nexus';
 const normalize = (v) => String(v || '').trim().toLowerCase();
 
 export default function AddAdmin() {
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [adminType, setAdminType] = useState('comp_admin');
-  const [password, setPassword] = useState(DEFAULT_PASSWORD);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -32,7 +30,6 @@ export default function AddAdmin() {
       showToast('Please enter a username or email', 'error');
       return;
     }
-    const pass = password.trim() || DEFAULT_PASSWORD;
     const email = uname.includes('@') ? uname : `${uname}@nexus.gg`;
 
     setSubmitting(true);
@@ -40,7 +37,7 @@ export default function AddAdmin() {
       const res = await fetch(`${API_URL}/auth/add-admin`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: uname, email, password: pass, adminType }),
+        body: JSON.stringify({ username: uname, email, adminType }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -54,13 +51,13 @@ export default function AddAdmin() {
       try {
         const stored = JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '[]');
         const idx = stored.findIndex((a) => normalize(a.username) === normalize(uname));
-        const item = { username: uname, email, password: pass, role: adminType, adminType };
+        const item = { username: uname, email, role: adminType, adminType };
         if (idx >= 0) stored[idx] = Object.assign(stored[idx], item);
         else stored.push(item);
         localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(stored));
       } catch (err) { /* cache sync is best-effort */ }
 
-      showToast(`${uname} now has ${adminType} access (password: ${pass}).`, 'success');
+      showToast(`${uname} now has ${adminType} access.`, 'success');
       setTimeout(() => navigate('/pages/super-admin/admins.html'), 600);
     } catch (err) {
       const msg = `Cannot reach the backend at ${API_URL}.`;
@@ -106,12 +103,6 @@ export default function AddAdmin() {
             </select>
           </div>
 
-          <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#cbd5e1', marginBottom: 8 }}>Password</label>
-            <input type="text" id="page-admin-password" className="form-input" placeholder="nexus" value={password} onChange={(e) => setPassword(e.target.value)} style={{ width: '100%', padding: '12px 16px', background: '#0f172a', border: '1px solid #334155', borderRadius: 10, color: '#fff', fontSize: 14 }} />
-            <p style={{ margin: '6px 0 0', fontSize: 12, color: '#64748b' }}>Defaults to <strong style={{ color: '#c6ff33' }}>nexus</strong>. Only applied when the account is created.</p>
-          </div>
-
           <div style={{ display: 'flex', gap: 14, marginTop: 12 }}>
             <Link to="/pages/super-admin/admins.html" style={{ flex: 1, padding: 12, textAlign: 'center', background: 'none', border: '1px solid #334155', color: '#94a3b8', borderRadius: 10, textDecoration: 'none', fontWeight: 600, fontSize: 14 }}>Cancel</Link>
             <button type="submit" id="add-admin-submit-btn" disabled={submitting} style={{ flex: 2, padding: 12, background: '#c6ff33', border: 'none', color: '#000', borderRadius: 10, cursor: 'pointer', fontWeight: 800, fontSize: 14, boxShadow: '0 0 16px rgba(198,255,51,0.25)' }}>Save &amp; Grant Admin Access</button>
@@ -121,5 +112,3 @@ export default function AddAdmin() {
     </main>
   );
 }
-
-
