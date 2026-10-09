@@ -5,6 +5,7 @@
  * picker), join-policy selector, save-changes validation and the disband flow.
  */
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTeamContext } from '../../hooks/useTeamContext.js';
 import NexusTeamWorkflow from '../../services/teamWorkflow.js';
 import NexusData from '../../services/data.js';
@@ -24,6 +25,7 @@ const LOGOS = [
 const UPLOAD_SVG = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>';
 
 export default function TeamSettings() {
+  const navigate = useNavigate();
   const { ctx, refresh } = useTeamContext();
   const [name, setName] = useState(() => (ctx && ctx.team ? ctx.team.name || '' : ''));
   const [tag, setTag] = useState(() => (ctx && ctx.team ? ctx.team.tag || '' : ''));
@@ -60,7 +62,7 @@ export default function TeamSettings() {
     }
     try { localStorage.removeItem('nexus.team.context'); } catch (e) { /* ignore */ }
     showToast('Team disbanded successfully.', 'error');
-    setTimeout(() => { window.location.href = '/pages/competitions.html'; }, 1200);
+    setTimeout(() => { navigate('/pages/competitions.html'); }, 1200);
   }
 
   return (

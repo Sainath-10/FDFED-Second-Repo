@@ -6,7 +6,7 @@
  * deep link to each admin's activity log.
  */
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import '../styles/pages/super-admin/super-dashboard.css';
 import '../styles/pages/super-admin/users.css';
 
@@ -26,6 +26,7 @@ function formatAdminType(role, adminType) {
 }
 
 export default function Admins() {
+  const navigate = useNavigate();
   const [roster, setRoster] = useState([]);
   const [query, setQuery] = useState('');
 
@@ -116,7 +117,7 @@ export default function Admins() {
                 const isBanned = !!account.banned;
                 const activityHref = `/pages/admin/admin-activity.html?admin=${encodeURIComponent(username)}`;
                 return (
-                  <tr key={username} style={{ cursor: 'pointer' }} onClick={() => { window.location.href = activityHref; }}>
+                  <tr key={username} style={{ cursor: 'pointer' }} onClick={() => { navigate(activityHref); }}>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <div style={{ width: 32, height: 32, borderRadius: '50%', background: typeInfo.bg, border: `1px solid ${typeInfo.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: typeInfo.color, fontSize: 13 }}>{String(username).charAt(0).toUpperCase()}</div>

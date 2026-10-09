@@ -7,7 +7,7 @@
  * The page carried its own inline <style>; it is rendered via a <style> tag.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import NexusData from '../services/data.js';
 import { showToast } from '../lib/toast.js';
@@ -129,6 +129,7 @@ const DEFAULTS = {
 
 export default function AdminManageCompetition() {
   const { session } = useAuth();
+  const navigate = useNavigate();
   const [tab, setTab] = useState('basic');
   const [d, setD] = useState(DEFAULTS);
   const [coOrgs, setCoOrgs] = useState([]);
@@ -215,7 +216,7 @@ export default function AdminManageCompetition() {
     }
     setSpill({ cls: 'sp-active', label: 'Published' });
     showToast('🚀 Competition created and submitted for review!');
-    setTimeout(() => { window.location.href = '/pages/admin/dashboard.html'; }, 2000);
+    setTimeout(() => { navigate('/pages/admin/dashboard.html'); }, 2000);
   }
 
   function loadEdit(id) {

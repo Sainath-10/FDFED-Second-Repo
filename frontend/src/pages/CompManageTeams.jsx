@@ -6,7 +6,7 @@
  * and the ended-competition lock.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import NexusData from '../services/data.js';
 import { showToast } from '../lib/toast.js';
@@ -18,6 +18,7 @@ const STATUS_LBL = { approved: 'APPROVED', pending: 'PENDING', rejected: 'REJECT
 
 export default function CompManageTeams() {
   const [params] = useSearchParams();
+  const navigate = useNavigate();
   const { session } = useAuth();
   const id = params.get('id') || '';
 
@@ -164,7 +165,7 @@ export default function CompManageTeams() {
                     />
                     <span className="checkmark"></span>
                   </label>
-                  <div className="col-team" style={{ cursor: 'pointer' }} onClick={() => window.location.assign(`/pages/team/team-roster.html?compId=${comp.id}&teamId=${t.id}`)}>
+                  <div className="col-team" style={{ cursor: 'pointer' }} onClick={() => navigate(`/pages/team/team-roster.html?compId=${comp.id}&teamId=${t.id}`)}>
                     <div className="team-avatar-sm">{t.avatar || t.name[0]}</div>
                     <span>{t.name}</span>
                   </div>
