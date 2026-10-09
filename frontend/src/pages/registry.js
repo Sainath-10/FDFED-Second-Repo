@@ -40,12 +40,6 @@ import EditCompetition from './EditCompetition.jsx';
 import Disputes from './Disputes.jsx';
 import SubmitReport from './SubmitReport.jsx';
 import DisputeEscalation from './DisputeEscalation.jsx';
-import AdminCompetitionDetail2 from './AdminCompetitionDetail2.jsx';
-import AdminManageMatches2 from './AdminManageMatches2.jsx';
-import AdminManageTeams2 from './AdminManageTeams2.jsx';
-import AdminMatchResults2 from './AdminMatchResults2.jsx';
-import AdminDisputeReview2 from './AdminDisputeReview2.jsx';
-import AdminEditCompetition2 from './AdminEditCompetition2.jsx';
 import AdminDisputeReview from './AdminDisputeReview.jsx';
 import AdminMatchResults from './AdminMatchResults.jsx';
 import AdminViewStandings from './AdminViewStandings.jsx';
@@ -101,12 +95,6 @@ export const PAGE_COMPONENTS = {
   '/pages/admin/dispute-review.html': AdminDisputeReview,
   '/pages/admin/match-results.html': AdminMatchResults,
   '/pages/admin/view-standings.html': AdminViewStandings,
-  '/pages/admin/competition-detail2.html': AdminCompetitionDetail2,
-  '/pages/admin/manage-matches2.html': AdminManageMatches2,
-  '/pages/admin/manage-teams2.html': AdminManageTeams2,
-  '/pages/admin/match-results2.html': AdminMatchResults2,
-  '/pages/admin/dispute-review2.html': AdminDisputeReview2,
-  '/pages/admin/edit-competition2.html': AdminEditCompetition2,
   '/pages/create-competition.html': CreateCompetition,
   '/pages/edit-competition.html': EditCompetition,
   '/pages/disputes.html': Disputes,
