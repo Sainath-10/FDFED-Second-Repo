@@ -1,4 +1,4 @@
-/**
+﻿/**
  * NEXUS ESPORTS — Super Admin · Policy Management
  *
  * the
@@ -9,9 +9,9 @@
  */
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { showToast } from '../lib/toast.js';
-import '../styles/pages/super-admin/super-dashboard.css';
-import '../styles/pages/super-admin/policy-management.css';
+import { showToast } from '../../lib/toast.js';
+import '../../styles/pages/super-admin/super-dashboard.css';
+import '../../styles/pages/super-admin/policy-management.css';
 
 const POLICY_STORE_KEY = 'nexus_policies';
 

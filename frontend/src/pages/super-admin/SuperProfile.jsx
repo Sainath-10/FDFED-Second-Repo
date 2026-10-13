@@ -1,4 +1,4 @@
-/**
+﻿/**
  * NEXUS ESPORTS — Super Admin · Profile
  *
  * session-driven hero card,
@@ -11,11 +11,11 @@
  */
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
-import { showToast } from '../lib/toast.js';
-import { assetUrl } from '../lib/assets.js';
-import '../styles/pages/super-admin/super-dashboard.css';
-import '../styles/pages/super-admin/super-profile.css';
+import { useAuth } from '../../context/AuthContext.jsx';
+import { showToast } from '../../lib/toast.js';
+import { assetUrl } from '../../lib/assets.js';
+import '../../styles/pages/super-admin/super-dashboard.css';
+import '../../styles/pages/super-admin/super-profile.css';
 
 const STORAGE_EMAIL = 'nexus.profile.email';
 const STORAGE_LANG = 'nexus.profile.language';

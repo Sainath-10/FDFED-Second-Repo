@@ -1,4 +1,4 @@
-/**
+﻿/**
  * NEXUS ESPORTS — Admin View Standings
  *
  * resolves the current
@@ -6,8 +6,8 @@
  */
 import { useEffect, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import NexusData from '../services/data.js';
-import '../styles/pages/admin/view-standings.css';
+import NexusData from '../../services/data.js';
+import '../../styles/pages/admin/view-standings.css';
 
 function resolveComp(id) {
   const all = NexusData ? NexusData.loadCompetitions() : [];

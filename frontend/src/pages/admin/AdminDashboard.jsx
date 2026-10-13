@@ -1,4 +1,4 @@
-/**
+﻿/**
  * NEXUS ESPORTS — Admin Dashboard
  *
  * stats, the tournament
@@ -7,10 +7,10 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
-import NexusData from '../services/data.js';
-import { showToast } from '../lib/toast.js';
-import '../styles/pages/admin/dashboard.css';
+import { useAuth } from '../../context/AuthContext.jsx';
+import NexusData from '../../services/data.js';
+import { showToast } from '../../lib/toast.js';
+import '../../styles/pages/admin/dashboard.css';
 
 const normalize = (v) => String(v || '').trim().toLowerCase();
 

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * NEXUS ESPORTS — Admin Edit Competition
  *
  * loads the comp by
@@ -6,10 +6,10 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import NexusData from '../services/data.js';
-import { showToast } from '../lib/toast.js';
-import { assetUrl } from '../lib/assets.js';
-import '../styles/pages/admin/edit-competition.css';
+import NexusData from '../../services/data.js';
+import { showToast } from '../../lib/toast.js';
+import { assetUrl } from '../../lib/assets.js';
+import '../../styles/pages/admin/edit-competition.css';
 
 const GAMES = ['League of Legends', 'Counter-Strike 2', 'Dota 2', 'Valorant', 'Fortnite', 'Rocket League'];
 const FORMATS = ['Single Elimination', 'Double Elimination', 'Round Robin', 'Group Stage + Playoffs'];

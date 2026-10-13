@@ -1,4 +1,4 @@
-/**
+﻿/**
  * NEXUS ESPORTS — Admin Add / Manage Competition
  *
  * the
@@ -8,9 +8,9 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
-import NexusData from '../services/data.js';
-import { showToast } from '../lib/toast.js';
+import { useAuth } from '../../context/AuthContext.jsx';
+import NexusData from '../../services/data.js';
+import { showToast } from '../../lib/toast.js';
 
 const CSS = `
 :root { --bg:#0a0a0a; --bg-card:#111; --bg-inset:#181818; --bg-hover:#1e1e1e; --border:#262626; --accent:#c6ff33; --accent-dim:rgba(198,255,51,0.12); --accent-mid:rgba(198,255,51,0.25); --tw:#f5f5f5; --tm:#737373; --td:#a3a3a3; --red:#ef4444; --orange:#fb923c; --font:'Inter',sans-serif; --r:12px; --rs:8px; }

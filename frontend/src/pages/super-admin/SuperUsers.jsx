@@ -1,50 +1,41 @@
-/**
- * NEXUS ESPORTS — Admin Users
+﻿/**
+ * NEXUS ESPORTS — Super Admin · Users Roster
  *
  * merges the demo seed accounts with
- * locally-stored accounts, then overlays users fetched from the backend
- * (`/auth/users`), renders the roster with role badges, and supports search.
- * Super-admin-style, full-bleed layout (`.sa-main-v2`).
+ * the backend `/auth/users` feed (overlaying stored ban status), renders the roster
+ * with super-admin role pills, and supports search.
  */
 import { useEffect, useState } from 'react';
-import '../vendor/auth-accounts.js';
-import '../styles/pages/super-admin/super-dashboard.css';
-import '../styles/pages/super-admin/users.css';
-import '../styles/pages/admin/users.css';
+import '../../vendor/auth-accounts.js';
+import '../../styles/pages/super-admin/super-dashboard.css';
+import '../../styles/pages/super-admin/users.css';
 
 const ACCOUNTS_KEY = 'nexus.auth.accounts';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
 const normalize = (v) => String(v || '').trim().toLowerCase();
 
-function readStoredAccounts() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '[]');
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (err) { return []; }
-}
-
+const readStoredAccounts = () => { try { const p = JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '[]'); return Array.isArray(p) ? p : []; } catch (e) { return []; } };
 const getSeedAccounts = () => (Array.isArray(window.NEXUS_DEMO_ACCOUNTS) ? window.NEXUS_DEMO_ACCOUNTS : []);
 
-function mergeAccounts() {
-  const seed = getSeedAccounts().concat(readStoredAccounts());
+function mergeAccountsWithBanStatus() {
+  const seed = getSeedAccounts();
+  const stored = readStoredAccounts();
+  const storedMap = {};
+  stored.forEach((a) => { if (a && a.username) storedMap[normalize(a.username)] = a; });
   const seen = new Set();
-  return seed.filter((account) => {
+  return seed.concat(stored).filter((account) => {
     const key = normalize(account && account.username);
     if (!key || seen.has(key)) return false;
     seen.add(key);
     return true;
+  }).map((account) => {
+    const storedEntry = storedMap[normalize(account.username)];
+    return storedEntry ? Object.assign({}, account, storedEntry) : account;
   });
 }
 
-function mergeAccountsWithBanStatus() {
-  return mergeAccounts();
-}
-
-function roleBadge(account) {
-  if (account.banned || account.isBanned) {
-    return <span className="sa-role-pill" style={{ background: 'rgba(231,0,11,0.15)', color: '#e7000b', border: '1px solid rgba(231,0,11,0.3)' }}>BANNED</span>;
-  }
+function rolePill(account) {
+  if (account.banned || account.isBanned) return <span className="sa-role-pill" style={{ background: 'rgba(231,0,11,0.15)', color: '#e7000b', border: '1px solid rgba(231,0,11,0.3)' }}>BANNED</span>;
   const t = String(account.adminType || account.role || '').toLowerCase();
   const pill = (text, color, bg) => <span className="sa-role-pill" style={{ background: bg, color, border: `1px solid ${color}` }}>{text}</span>;
   if (t.includes('super')) return pill('SUPER ADMIN', '#e7000b', 'rgba(231,0,11,0.15)');
@@ -55,7 +46,7 @@ function roleBadge(account) {
   return pill('USER', '#94a3b8', 'rgba(255,255,255,0.06)');
 }
 
-export default function AdminUsers() {
+export default function SuperUsers() {
   const [roster, setRoster] = useState([]);
   const [query, setQuery] = useState('');
 
@@ -132,7 +123,7 @@ export default function AdminUsers() {
                 return (
                   <tr key={username} style={isBanned ? { opacity: 0.5 } : undefined}>
                     <td>{username}{isBanned ? <span style={{ fontSize: 10, color: '#e7000b' }}> (banned)</span> : null}</td>
-                    <td>{roleBadge(account)}</td>
+                    <td>{rolePill(account)}</td>
                     <td className="sa-email">{email}</td>
                   </tr>
                 );

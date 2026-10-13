@@ -1,4 +1,4 @@
-/**
+﻿/**
  * NEXUS ESPORTS — Admin Manage Teams
  *
  * dynamic teams table with
@@ -6,9 +6,9 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import NexusData from '../services/data.js';
-import { showToast } from '../lib/toast.js';
-import '../styles/pages/admin/manage-teams.css';
+import NexusData from '../../services/data.js';
+import { showToast } from '../../lib/toast.js';
+import '../../styles/pages/admin/manage-teams.css';
 
 export default function AdminManageTeams() {
   const [params] = useSearchParams();

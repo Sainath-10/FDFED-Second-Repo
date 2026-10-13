@@ -1,4 +1,4 @@
-/**
+﻿/**
  * NEXUS ESPORTS — Admin Revenue Configuration
  *
  * the platform fee % and
@@ -7,11 +7,11 @@
  */
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
-import NexusData from '../services/data.js';
-import { showToast } from '../lib/toast.js';
-import '../styles/pages/create-competition.css';
-import '../styles/pages/admin/dashboard.css';
+import { useAuth } from '../../context/AuthContext.jsx';
+import NexusData from '../../services/data.js';
+import { showToast } from '../../lib/toast.js';
+import '../../styles/pages/create-competition.css';
+import '../../styles/pages/admin/dashboard.css';
 
 export default function AdminRevenueConfig() {
   const navigate = useNavigate();

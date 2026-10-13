@@ -1,4 +1,4 @@
-/**
+﻿/**
  * NEXUS ESPORTS — Admin Match Results
  *
  * resolves the current
@@ -7,8 +7,8 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import NexusData from '../services/data.js';
-import '../styles/pages/admin/match-results.css';
+import NexusData from '../../services/data.js';
+import '../../styles/pages/admin/match-results.css';
 
 function resolveComp(id) {
   const all = NexusData ? NexusData.loadCompetitions() : [];

@@ -1,12 +1,12 @@
-/**
+﻿/**
  * NEXUS ESPORTS — Admin Dispute Review
  *
  *
  */
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { showToast } from '../lib/toast.js';
-import '../styles/pages/admin/dispute-review.css';
+import { showToast } from '../../lib/toast.js';
+import '../../styles/pages/admin/dispute-review.css';
 
 export default function AdminDisputeReview() {
   const navigate = useNavigate();

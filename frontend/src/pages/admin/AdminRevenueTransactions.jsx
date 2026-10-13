@@ -1,4 +1,4 @@
-/**
+﻿/**
  * NEXUS ESPORTS — Admin Revenue Transactions
  *
  * derives platform-fee
@@ -7,9 +7,9 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
-import NexusData from '../services/data.js';
-import '../styles/pages/admin/dashboard.css';
+import { useAuth } from '../../context/AuthContext.jsx';
+import NexusData from '../../services/data.js';
+import '../../styles/pages/admin/dashboard.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const PAGE_SIZE = 10;

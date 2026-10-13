@@ -1,12 +1,12 @@
-/**
+﻿/**
  * NEXUS ESPORTS — Admin Competition Overview
  *
  *
  */
 import { useEffect, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import NexusData from '../services/data.js';
-import '../styles/pages/admin/competition-detail.css';
+import NexusData from '../../services/data.js';
+import '../../styles/pages/admin/competition-detail.css';
 
 const formatPrizePool = (prize) => {
   if (!prize || prize === '—' || prize === '-' || prize === '₹0' || String(prize).toLowerCase().includes('no prize')) return 'No Prize Pool';

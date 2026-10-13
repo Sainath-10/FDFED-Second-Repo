@@ -1,4 +1,4 @@
-/**
+﻿/**
  * NEXUS ESPORTS — Admin Manage Matches
  *
  * dynamic matches list
@@ -6,8 +6,8 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import NexusData from '../services/data.js';
-import '../styles/pages/admin/manage-matches.css';
+import NexusData from '../../services/data.js';
+import '../../styles/pages/admin/manage-matches.css';
 
 function generateDefaultMatchesForComp(comp) {
   const teams = (comp.teams || []).filter((t) => !t.status || t.status === 'approved');

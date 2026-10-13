@@ -1,4 +1,4 @@
-/**
+﻿/**
  * NEXUS ESPORTS — Super Admin · Add Administrator
  *
  * Creates a new administrator (or elevates an existing account) through
@@ -6,9 +6,9 @@
  */
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { showToast } from '../lib/toast.js';
-import '../styles/pages/super-admin/super-dashboard.css';
-import '../styles/pages/super-admin/users.css';
+import { showToast } from '../../lib/toast.js';
+import '../../styles/pages/super-admin/super-dashboard.css';
+import '../../styles/pages/super-admin/users.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const ACCOUNTS_KEY = 'nexus.auth.accounts';
