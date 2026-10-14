@@ -61,7 +61,7 @@ export default function OrganizerRevenue() {
   return (
     <main className="rev-page">
       <style>{INLINE_CSS}</style>
-      <Link to="/pages/admin/manage-competition.html" className="btn-table-secondary" style={{ marginBottom: 24 }}>Back</Link>
+      <Link to={comp ? `/pages/competition-detail.html?id=${comp.id}` : '/pages/competitions.html'} className="btn-table-secondary" style={{ marginBottom: 24 }}>Back to Competition</Link>
       <div className="rev-header">
         <h1 className="rev-title" id="rev-title">{comp ? `${comp.name} Revenue` : 'Revenue'}</h1>
         <p className="rev-sub" id="rev-sub">Teams and players who paid entry fees.</p>

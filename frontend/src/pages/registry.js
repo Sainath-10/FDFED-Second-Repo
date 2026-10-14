@@ -41,20 +41,14 @@ import Disputes from './Disputes.jsx';
 import SubmitReport from './SubmitReport.jsx';
 import DisputeEscalation from './DisputeEscalation.jsx';
 import AdminDisputeReview from './admin/AdminDisputeReview.jsx';
-import AdminMatchResults from './admin/AdminMatchResults.jsx';
-import AdminViewStandings from './admin/AdminViewStandings.jsx';
 import AdminUsers from './admin/AdminUsers.jsx';
 import AdminDashboard from './admin/AdminDashboard.jsx';
 import AdminActivity from './admin/AdminActivity.jsx';
 import AdminCompetitionDetail from './admin/AdminCompetitionDetail.jsx';
-import AdminManageTeams from './admin/AdminManageTeams.jsx';
-import AdminManageMatches from './admin/AdminManageMatches.jsx';
-import AdminEditCompetition from './admin/AdminEditCompetition.jsx';
 import AdminProfile from './admin/AdminProfile.jsx';
 import AdminRevenueConfig from './admin/AdminRevenueConfig.jsx';
 import AdminDisputes from './admin/AdminDisputes.jsx';
 import AdminRevenueTransactions from './admin/AdminRevenueTransactions.jsx';
-import AdminManageCompetition from './admin/AdminManageCompetition.jsx';
 import Admins from './super-admin/Admins.jsx';
 import AddAdmin from './super-admin/AddAdmin.jsx';
 import RevokeAdmin from './super-admin/RevokeAdmin.jsx';
@@ -81,20 +75,14 @@ export const PAGE_COMPONENTS = {
   '/pages/super-admin/admins.html': Admins,
   '/pages/super-admin/add-admin.html': AddAdmin,
   '/pages/super-admin/revoke-admin.html': RevokeAdmin,
-  '/pages/admin/manage-competition.html': AdminManageCompetition,
   '/pages/admin/revenue-transactions.html': AdminRevenueTransactions,
   '/pages/admin/disputes.html': AdminDisputes,
   '/pages/admin/revenue-config.html': AdminRevenueConfig,
   '/pages/admin/competition-detail.html': AdminCompetitionDetail,
-  '/pages/admin/manage-teams.html': AdminManageTeams,
-  '/pages/admin/manage-matches.html': AdminManageMatches,
-  '/pages/admin/edit-competition.html': AdminEditCompetition,
   '/pages/admin/dashboard.html': AdminDashboard,
   '/pages/admin/admin-activity.html': AdminActivity,
   '/pages/admin/users.html': AdminUsers,
   '/pages/admin/dispute-review.html': AdminDisputeReview,
-  '/pages/admin/match-results.html': AdminMatchResults,
-  '/pages/admin/view-standings.html': AdminViewStandings,
   '/pages/create-competition.html': CreateCompetition,
   '/pages/edit-competition.html': EditCompetition,
   '/pages/disputes.html': Disputes,

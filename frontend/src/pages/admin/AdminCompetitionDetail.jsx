@@ -1,4 +1,4 @@
-﻿/**
+/**
  * NEXUS ESPORTS — Admin Competition Overview
  *
  *
@@ -82,14 +82,6 @@ export default function AdminCompetitionDetail() {
           </div>
         </div>
 
-        <div className="admin-comp-tabs">
-          <Link id="tab-overview" to={`/pages/admin/competition-detail.html${suffix}`} className="admin-tab active">Overview</Link>
-          <Link id="tab-teams" to={`/pages/admin/manage-teams.html${suffix}`} className="admin-tab">Teams</Link>
-          <Link id="tab-matches" to={`/pages/admin/manage-matches.html${suffix}`} className="admin-tab">Matches</Link>
-          <Link id="tab-results" to={`/pages/admin/match-results.html${suffix}`} className="admin-tab">Results</Link>
-          <Link id="tab-standings" to={`/pages/admin/view-standings.html${suffix}`} className="admin-tab">Standings</Link>
-        </div>
-
         <div className="cd-layout-wrapper">
           <div className="cd-main-stack">
             <div className="comp-info-block">
@@ -114,6 +106,34 @@ export default function AdminCompetitionDetail() {
                 <div className="info-row"><span className="key">Entry Fee</span><span className="val" id="overview-entry-fee">{comp.entryFee || 'Free'}</span></div>
                 <div className="info-row"><span className="key">Location</span><span className="val" id="overview-location">{comp.location || 'Online'}</span></div>
               </div>
+            </div>
+
+            <div className="comp-info-block">
+              <h2>Registered Teams ({approvedTeams.length} / {comp.maxTeams || 32})</h2>
+              {teamList.length === 0 ? (
+                <p style={{ color: 'var(--text-muted, #9aa4b2)', margin: 0, fontSize: 14 }}>No teams registered yet for this tournament.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {teamList.map((team, idx) => {
+                    const teamName = team.name || `Team ${idx + 1}`;
+                    const players = team.players ? `${team.players} players` : (team.members ? `${team.members.length} players` : '5 players');
+                    const region = team.region || team.location || 'Global';
+                    const status = team.status || 'approved';
+                    return (
+                      <div key={team.id || idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8 }}>
+                        <div>
+                          <strong style={{ color: '#fff', fontSize: 14 }}>{teamName}</strong>
+                          <span style={{ marginLeft: 10, fontSize: 12, color: 'var(--text-muted, #9aa4b2)' }}>{region}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <span style={{ fontSize: 12, color: 'var(--text-muted, #9aa4b2)' }}>{players}</span>
+                          <span className={`status-pill ${status}`} style={{ fontSize: 11, padding: '3px 10px' }}>{status.toUpperCase()}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 

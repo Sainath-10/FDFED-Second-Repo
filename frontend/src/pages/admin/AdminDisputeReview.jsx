@@ -1,31 +1,20 @@
-﻿/**
+/**
  * NEXUS ESPORTS — Admin Dispute Review
  *
  *
  */
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { showToast } from '../../lib/toast.js';
 import '../../styles/pages/admin/dispute-review.css';
 
 export default function AdminDisputeReview() {
-  const navigate = useNavigate();
   const [notes, setNotes] = useState('');
   return (
     <main className="main-content">
-      <Link to="/pages/admin/dashboard.html" className="back-btn-alt">← Summer Championship 2026</Link>
+      <Link to="/pages/admin/disputes.html" className="back-btn-alt">← Back to Platform Disputes</Link>
       <h1 className="admin-title-lg">Dispute Review</h1>
-      <p className="admin-subtitle-accent">Review and resolve match disputes</p>
-
-      <div className="admin-comp-tabs">
-        <Link to="/pages/admin/competition-detail.html" className="admin-tab">Overview</Link>
-        <Link to="/pages/admin/manage-teams.html" className="admin-tab">Manage Teams</Link>
-        <Link to="/pages/admin/manage-matches.html" className="admin-tab">Manage Matches</Link>
-        <Link to="/pages/admin/match-results.html" className="admin-tab">Match Results</Link>
-        <Link to="/pages/admin/view-standings.html" className="admin-tab">Standings</Link>
-        <Link to="/pages/admin/dispute-review.html" className="admin-tab active">Disputes</Link>
-        <Link to="/pages/admin/edit-competition.html" className="admin-tab">Edit</Link>
-      </div>
+      <p className="admin-subtitle-accent">Review and resolve escalated disputes</p>
 
       <div className="layout-wrapper">
         <div>
@@ -49,9 +38,8 @@ export default function AdminDisputeReview() {
             </div>
 
             <div className="dispute-actions dispute-actions-stack">
-              <button className="btn-table-primary" onClick={() => showToast('Dispute approved. Match result updated.')}>Approve Dispute</button>
+              <button className="btn-table-primary" onClick={() => showToast('Dispute approved. Notification sent.')}>Approve Dispute</button>
               <button className="btn-table-danger" onClick={() => { if (window.confirm('Reject this dispute?')) showToast('Dispute rejected. Original result stands.', 'error'); }}>Reject Dispute</button>
-              <button className="btn-table-secondary" onClick={() => navigate('/pages/admin/match-results.html')}>Update Match Result</button>
               <button className="btn-table-secondary" onClick={() => showToast('Request sent to both teams for more information.')}>Request More Info</button>
             </div>
           </div>
