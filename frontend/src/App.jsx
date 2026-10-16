@@ -28,7 +28,6 @@ import { ROUTES } from './routes.js';
 const FULL_WIDTH_PATHS = new Set(['/']);
 /** Full-bleed pages that keep a plain `#footer-mount` (super-admin-style layout). */
 const BARE_PATHS = new Set([
-  '/pages/team-lead-dashboard.html',
   '/pages/admin/users.html',
   '/pages/super-admin/super-dashboard.html',
   '/pages/super-admin/users.html',

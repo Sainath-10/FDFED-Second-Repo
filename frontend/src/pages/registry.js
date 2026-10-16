@@ -65,11 +65,10 @@ import CreatePolicy from './CreatePolicy.jsx';
 import EditPolicy from './EditPolicy.jsx';
 import ViewPolicy from './ViewPolicy.jsx';
 import SuperProfile from './SuperProfile.jsx';
-import TeamLeadDashboard from './TeamLeadDashboard.jsx';
+
 
 export const PAGE_COMPONENTS = {
   '/': Index,
-  '/pages/team-lead-dashboard.html': TeamLeadDashboard,
   '/pages/admin/admin-profile.html': AdminProfile,
   '/pages/super-admin/profile.html': SuperProfile,
   '/pages/super-admin/create-policy.html': CreatePolicy,

@@ -27,8 +27,8 @@ export const FALLBACK_PATH = '/';
 export const ROLE_ROUTES = {
   regular: '/pages/profile.html',
   participant: '/pages/profile.html',
-  team_lead: '/pages/team-lead-dashboard.html',
-  teamlead: '/pages/team-lead-dashboard.html',
+  team_lead: '/pages/team/team-roster.html',
+  teamlead: '/pages/team/team-roster.html',
   admin: '/pages/admin/dashboard.html',
   comp_admin: '/pages/admin/dashboard.html',
   dispute_admin: '/pages/admin/disputes.html',
@@ -73,8 +73,6 @@ export const PROTECTED_ROUTES = [
   route('/pages/team/join-requests.html', 'Join requests', 'participant'),
   route('/pages/team/team-settings.html', 'Team settings', 'participant'),
 
- // Team lead
-  route('/pages/team-lead-dashboard.html', 'Team lead dashboard', 'team-lead', TEAM_LEAD_ROLES),
 
  // Organizer
   route('/pages/create-competition.html', 'Create competition', 'organizer'),
