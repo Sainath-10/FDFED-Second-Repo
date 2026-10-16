@@ -1,4 +1,4 @@
-﻿/**
+/**
  * NEXUS ESPORTS — Admin Users
  *
  * merges the demo seed accounts with
@@ -7,10 +7,10 @@
  * Super-admin-style, full-bleed layout (`.sa-main-v2`).
  */
 import { useEffect, useState } from 'react';
-import '../vendor/auth-accounts.js';
-import '../styles/pages/super-admin/super-dashboard.css';
-import '../styles/pages/super-admin/users.css';
-import '../styles/pages/admin/users.css';
+import '../../vendor/auth-accounts.js';
+import '../../styles/pages/super-admin/super-dashboard.css';
+import '../../styles/pages/super-admin/users.css';
+import '../../styles/pages/admin/users.css';
 
 const ACCOUNTS_KEY = 'nexus.auth.accounts';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
