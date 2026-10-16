@@ -13,8 +13,11 @@ async function bootstrap() {
   // Global Exception / Error Handling Filter
   app.useGlobalFilters(new GlobalExceptionFilter(fileLogger));
 
-  // Enable CORS
-  app.enableCors();
+  // Enable CORS — restrict to known frontend origin
+  app.enableCors({
+    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    credentials: true,
+  });
 
   // Global validation pipe
   app.useGlobalPipes(
@@ -33,21 +36,27 @@ async function bootstrap() {
       '**Available Roles:**\n' +
       '- `participant`: Basic user role for participants\n' +
       '- `team_lead`: Can manage teams and competitions\n' +
+      '- `comp_admin`: Competition administrator\n' +
+      '- `dispute_admin`: Dispute administrator\n' +
+      '- `revenue_admin`: Revenue administrator\n' +
       '- `admin`: Administrative access to most features\n' +
-      '- `super_admin`: Full access including deletion rights\n\n' +
-      '**Authorization:** Include `x-user-role` header with one of the above roles.',
+      '- `super_admin`: Full system access including user management\n\n' +
+      '**Authorization:** Provide a valid JWT token in the `Authorization: Bearer <token>` header.',
     )
     .setVersion('1.0.0')
-    .addApiKey(
-      { type: 'apiKey', in: 'header', name: 'x-user-role', description: 'User role: participant | admin | super_admin | team_lead' },
-      'x-user-role',
-    )
+    .addBearerAuth()
     .addTag('Auth', 'Authentication endpoints')
     .addTag('Competitions', 'Competition management endpoints')
     .addTag('Teams', 'Team management endpoints')
     .addTag('Disputes', 'Dispute and escalation endpoints')
     .addTag('Upload', 'File upload and retrieval endpoints')
+    .addTag('Revenue', 'Revenue management endpoints')
+    .addTag('Admin', 'Super admin endpoints')
+    .addTag('Policies', 'Platform policies endpoints')
+    .addTag('Matches', 'Match management endpoints')
+    .addTag('Notifications', 'User notification endpoints')
     .build();
+
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);

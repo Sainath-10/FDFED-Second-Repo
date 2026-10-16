@@ -1,6 +1,10 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Query } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, Request } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 import { PoliciesService } from './policies.service';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/decorators/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { UserRole } from '../../common/interfaces';
 
 @Controller('policies')
 @ApiTags('Policies')
@@ -21,29 +25,44 @@ export class PoliciesController {
   }
 
   @Post()
-  @ApiOperation({ summary: 'Create a new policy (Super Admin only)' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create a new policy (Super Admin / Admin only)' })
   async create(
-    @Body() body: { title: string; content: string; category?: string; version?: string; createdBy: string; compliance?: number },
+    @Request() req: any,
+    @Body() body: { title: string; content: string; category?: string; version?: string; createdBy?: string; compliance?: number },
   ) {
-    return this.service.create(body);
+    const createdBy = req.user?.username || body.createdBy || 'superadmin';
+    return this.service.create({ ...body, createdBy });
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Update a policy (Super Admin only)' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update a policy (Super Admin / Admin only)' })
   async update(@Param('id') id: string, @Body() body: any) {
     return this.service.update(id, body);
   }
 
   @Patch(':id/archive')
-  @ApiOperation({ summary: 'Archive a policy' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Archive a policy (Super Admin / Admin only)' })
   async archive(@Param('id') id: string) {
     return this.service.archive(id);
   }
 
   @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a policy (Super Admin only)' })
   async delete(@Param('id') id: string) {
     await this.service.delete(id);
     return { message: 'Policy deleted' };
   }
 }
+

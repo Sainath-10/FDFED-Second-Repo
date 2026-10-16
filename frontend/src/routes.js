@@ -55,7 +55,6 @@ export const PUBLIC_ROUTES = [
   route('/pages/competitions.html', 'Competitions', 'public'),
   route('/pages/competition-detail.html', 'Competition detail', 'public'),
   route('/pages/comp-info.html', 'Competition info', 'public'),
-  route('/pages/view-team.html', 'View team', 'public'),
   route('/pages/watch-live.html', 'Watch live', 'public'),
 ];
 

@@ -9,7 +9,7 @@ import {
   HttpCode,
   Query,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiSecurity } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { DisputesService } from './disputes.service';
 import {
   CreateDisputeDto,
@@ -17,7 +17,7 @@ import {
   AdminResolveDisputeDto,
   DisputeResponseDto,
 } from './dto/dispute.dto';
-import { HeaderAuthGuard } from '../../common/decorators/header-auth.guard';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/decorators/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -25,13 +25,13 @@ import { UserRole, DisputeStatus } from '../../common/interfaces';
 
 @Controller('disputes')
 @ApiTags('Disputes')
-@ApiSecurity('x-user-role')
+@ApiBearerAuth()
 export class DisputesController {
   constructor(private disputesService: DisputesService) {}
 
   // ─── Player: Create a Dispute ─────────────────────────────────────────────────
   @Post()
-  @UseGuards(HeaderAuthGuard)
+  @UseGuards(JwtAuthGuard)
   @HttpCode(201)
   @ApiOperation({
     summary: 'Raise a dispute',
@@ -50,8 +50,8 @@ export class DisputesController {
 
   // ─── Organizer: Review Dispute (resolve or escalate to admin) ─────────────────
   @Post(':id/organizer-review')
-  @UseGuards(HeaderAuthGuard, RolesGuard)
-  @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN, UserRole.DISPUTE_ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({
     summary: 'Organizer reviews a dispute',
     description:
@@ -71,8 +71,8 @@ export class DisputesController {
 
   // ─── Admin: Resolve Dispute (optionally ban player) ───────────────────────────
   @Post(':id/admin-resolve')
-  @UseGuards(HeaderAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.DISPUTE_ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({
     summary: 'Admin resolves a dispute',
     description:
@@ -92,8 +92,8 @@ export class DisputesController {
 
   // ─── Organizer Queue ──────────────────────────────────────────────────────────
   @Get('organizer-queue')
-  @UseGuards(HeaderAuthGuard, RolesGuard)
-  @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN, UserRole.DISPUTE_ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({
     summary: 'Get organizer dispute queue',
     description: 'Returns all disputes in the open_organizer and under_review states.',
@@ -105,8 +105,8 @@ export class DisputesController {
 
   // ─── Admin Queue ──────────────────────────────────────────────────────────────
   @Get('admin-queue')
-  @UseGuards(HeaderAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.DISPUTE_ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({
     summary: 'Get admin dispute queue',
     description: 'Returns all disputes in open_admin and escalated_to_admin states.',
@@ -118,7 +118,8 @@ export class DisputesController {
 
   // ─── All Disputes (admin view) ────────────────────────────────────────────────
   @Get()
-  @UseGuards(HeaderAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.DISPUTE_ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Get all disputes', description: 'Filter by status via query param' })
   @ApiResponse({ status: 200, type: [DisputeResponseDto] })
   async getAllDisputes(
@@ -130,7 +131,7 @@ export class DisputesController {
 
   // ─── By Competition ───────────────────────────────────────────────────────────
   @Get('competition/:competitionId')
-  @UseGuards(HeaderAuthGuard)
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get disputes by competition' })
   @ApiResponse({ status: 200, type: [DisputeResponseDto] })
   async getByCompetition(@Param('competitionId') cid: string): Promise<DisputeResponseDto[]> {
@@ -139,7 +140,7 @@ export class DisputesController {
 
   // ─── Single Dispute ───────────────────────────────────────────────────────────
   @Get(':id')
-  @UseGuards(HeaderAuthGuard)
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get dispute by ID' })
   @ApiResponse({ status: 200, type: DisputeResponseDto })
   @ApiResponse({ status: 404, description: 'Dispute not found' })
@@ -149,8 +150,8 @@ export class DisputesController {
 
   // ─── Delete (admin only) ──────────────────────────────────────────────────────
   @Delete(':id')
-  @UseGuards(HeaderAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.DISPUTE_ADMIN, UserRole.SUPER_ADMIN)
   @HttpCode(204)
   @ApiOperation({ summary: 'Delete a dispute (Admin only)' })
   @ApiResponse({ status: 204, description: 'Dispute deleted' })
@@ -158,3 +159,4 @@ export class DisputesController {
     await this.disputesService.deleteDispute(id);
   }
 }
+

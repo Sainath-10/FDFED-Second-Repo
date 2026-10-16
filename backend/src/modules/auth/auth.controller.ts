@@ -13,6 +13,9 @@ import { ApiTags, ApiResponse, ApiOperation, ApiBearerAuth } from '@nestjs/swagg
 import { AuthService } from './auth.service';
 import { RegisterDto, LoginDto, AuthResponseDto, LoginResponseDto } from './dto/auth.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/decorators/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { UserRole } from '../../common/interfaces';
 
 @Controller('auth')
 @ApiTags('Auth')
@@ -47,13 +50,25 @@ export class AuthController {
   }
 
   @Get('users')
-  @ApiOperation({ summary: 'Get all users' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.SUPER_ADMIN,
+    UserRole.COMP_ADMIN,
+    UserRole.DISPUTE_ADMIN,
+    UserRole.REVENUE_ADMIN,
+  )
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get all users (Admin only)' })
   async getAllUsers() {
     return this.authService.getAllUsers();
   }
 
   @Post('add-admin')
-  @ApiOperation({ summary: 'Add or elevate an administrator with specified adminType' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Add or elevate an administrator with specified adminType (Super Admin only)' })
   async addAdmin(
     @Body() body: { username: string; email?: string; password?: string; adminType: string },
   ) {
@@ -61,7 +76,10 @@ export class AuthController {
   }
 
   @Post('revoke-admin')
-  @ApiOperation({ summary: 'Revoke administrator status from a user with reason' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Revoke administrator status from a user with reason (Super Admin only)' })
   async revokeAdmin(
     @Body() body: { username: string; reason?: string },
   ) {
@@ -69,7 +87,8 @@ export class AuthController {
   }
 
   @Patch('users/:id/ban')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.DISPUTE_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Ban a user by ID or username/email (Admin only)' })
   async banUser(@Param('id') id: string) {
@@ -77,12 +96,14 @@ export class AuthController {
   }
 
   @Patch('users/:id/warn')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.DISPUTE_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Issue a warning to a user (Admin only)' })
   async warnUser(@Param('id') id: string) {
     return this.authService.warnUser(id);
   }
+
 
   @Patch('profile')
   @UseGuards(JwtAuthGuard)

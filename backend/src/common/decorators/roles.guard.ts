@@ -28,7 +28,18 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('User not found');
     }
 
-    if (!requiredRoles.includes(user.role)) {
+    // Super Admin has universal access
+    if (user.role === UserRole.SUPER_ADMIN || user.adminType === UserRole.SUPER_ADMIN) {
+      return true;
+    }
+
+    const userRole = user.role;
+    const adminType = user.adminType;
+    const hasRole =
+      requiredRoles.includes(userRole) ||
+      (adminType && requiredRoles.includes(adminType));
+
+    if (!hasRole) {
       throw new ForbiddenException(
         `This action requires one of the following roles: ${requiredRoles.join(', ')}`,
       );
@@ -37,3 +48,4 @@ export class RolesGuard implements CanActivate {
     return true;
   }
 }
+

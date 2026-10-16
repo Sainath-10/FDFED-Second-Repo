@@ -7,10 +7,11 @@
  */
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { getToken } from '../services/api.js';
 import '../styles/pages/super-admin/super-dashboard.css';
 import '../styles/pages/super-admin/users.css';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const ACCOUNTS_KEY = 'nexus.auth.accounts';
 const ADMIN_TYPES = ['comp_admin', 'dispute_admin', 'revenue_admin', 'super_admin', 'super-admin', 'admin'];
 const normalize = (v) => String(v || '').trim().toLowerCase();
@@ -34,7 +35,11 @@ export default function Admins() {
     let alive = true;
     (async () => {
       try {
-        const res = await fetch(`${API_URL}/auth/users`);
+        const token = getToken();
+        const res = await fetch(`${API_URL}/auth/users`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+
         if (res.ok) {
           const dbUsers = await res.json();
           if (Array.isArray(dbUsers)) {

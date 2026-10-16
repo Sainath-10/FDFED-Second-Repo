@@ -26,34 +26,39 @@ export class RateLimiterMiddleware implements NestMiddleware {
 
   use(req: Request, res: Response, next: NextFunction): void {
     const ip = req.ip || req.socket.remoteAddress || '127.0.0.1';
+    const isAuthRoute = req.originalUrl?.includes('/auth/login') || req.originalUrl?.includes('/auth/register');
+    const limit = isAuthRoute ? 15 : this.maxRequests;
+    const clientKey = isAuthRoute ? `${ip}:auth` : ip;
     const now = Date.now();
 
-    let client = this.clients.get(ip);
+    let client = this.clients.get(clientKey);
 
     if (!client || now > client.resetTime) {
       client = {
         count: 1,
         resetTime: now + this.windowMs,
       };
-      this.clients.set(ip, client);
+      this.clients.set(clientKey, client);
     } else {
       client.count++;
     }
 
-    const remaining = Math.max(0, this.maxRequests - client.count);
+    const remaining = Math.max(0, limit - client.count);
     const resetSeconds = Math.ceil((client.resetTime - now) / 1000);
 
-    res.setHeader('X-RateLimit-Limit', this.maxRequests.toString());
+    res.setHeader('X-RateLimit-Limit', limit.toString());
     res.setHeader('X-RateLimit-Remaining', remaining.toString());
     res.setHeader('X-RateLimit-Reset', resetSeconds.toString());
 
-    if (client.count > this.maxRequests) {
+    if (client.count > limit) {
       res.setHeader('Retry-After', resetSeconds.toString());
       throw new HttpException(
         {
           statusCode: HttpStatus.TOO_MANY_REQUESTS,
           error: 'Too Many Requests',
-          message: `Rate limit exceeded. Try again in ${resetSeconds} seconds.`,
+          message: isAuthRoute
+            ? `Too many authentication attempts. Please wait ${resetSeconds} seconds.`
+            : `Rate limit exceeded. Try again in ${resetSeconds} seconds.`,
           retryAfter: resetSeconds,
         },
         HttpStatus.TOO_MANY_REQUESTS,
@@ -61,5 +66,6 @@ export class RateLimiterMiddleware implements NestMiddleware {
     }
 
     next();
+
   }
 }

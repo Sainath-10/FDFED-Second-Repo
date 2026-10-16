@@ -58,7 +58,7 @@ export default function CompetitionsParticipated() {
               <div className="stat-group"><div className="label">W / L</div><div className="value">2 / 0</div></div>
               <div className="stat-group"><div className="label">Next Match</div><div className="value">Aug 5, 18:00</div></div>
               <div className="card-actions">
-                <button className="btn-table-secondary" onClick={() => navigate('/pages/view-team.html')}>View My Team</button>
+                <button className="btn-table-secondary" onClick={() => navigate('/pages/comp-participant.html?id=world-championship-2026')}>View My Team</button>
                 <button className="btn-table-secondary" onClick={() => showToast('Viewing standings...')}>View Standings</button>
                 <button className="btn-table-primary" onClick={() => navigate('/pages/submit-report.html')}>Submit Report</button>
               </div>

@@ -9,10 +9,10 @@ import {
   UseGuards,
   HttpCode,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiSecurity } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { TeamsService } from './teams.service';
 import { CreateTeamDto, UpdateTeamDto, AddTeamMemberDto, TeamResponseDto } from './dto/team.dto';
-import { HeaderAuthGuard } from '../../common/decorators/header-auth.guard';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/decorators/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -20,13 +20,13 @@ import { UserRole } from '../../common/interfaces';
 
 @Controller('teams')
 @ApiTags('Teams')
-@ApiSecurity('x-user-role')
 export class TeamsController {
   constructor(private teamsService: TeamsService) {}
 
   @Post()
-  @UseGuards(HeaderAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.TEAM_LEAD)
+  @ApiBearerAuth()
   @HttpCode(201)
   @ApiOperation({
     summary: 'Create a new team',
@@ -39,7 +39,7 @@ export class TeamsController {
   })
   @ApiResponse({
     status: 401,
-    description: 'Unauthorized - Missing or invalid x-user-role header',
+    description: 'Unauthorized - Missing or invalid token',
   })
   @ApiResponse({
     status: 403,
@@ -54,7 +54,6 @@ export class TeamsController {
   }
 
   @Get()
-  @UseGuards(HeaderAuthGuard)
   @ApiOperation({
     summary: 'Get all teams',
     description: 'Retrieve a list of all teams',
@@ -69,7 +68,6 @@ export class TeamsController {
   }
 
   @Get('competition/:competitionId')
-  @UseGuards(HeaderAuthGuard)
   @ApiOperation({
     summary: 'Get teams by competition',
     description: 'Retrieve all teams participating in a specific competition',
@@ -86,7 +84,6 @@ export class TeamsController {
   }
 
   @Get(':id')
-  @UseGuards(HeaderAuthGuard)
   @ApiOperation({
     summary: 'Get team by ID',
     description: 'Retrieve a specific team by its ID',
@@ -105,8 +102,9 @@ export class TeamsController {
   }
 
   @Patch(':id')
-  @UseGuards(HeaderAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Update team details',
     description: 'Update team name or members (Team Lead, Admin, or Super Admin)',
@@ -128,8 +126,9 @@ export class TeamsController {
   }
 
   @Post(':id/members')
-  @UseGuards(HeaderAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
   @HttpCode(200)
   @ApiOperation({
     summary: 'Add member to team',
@@ -152,8 +151,9 @@ export class TeamsController {
   }
 
   @Delete(':id/members/:memberId')
-  @UseGuards(HeaderAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
   @HttpCode(200)
   @ApiOperation({
     summary: 'Remove member from team',
@@ -176,8 +176,9 @@ export class TeamsController {
   }
 
   @Patch(':id/status')
-  @UseGuards(HeaderAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Update team registration status (Approve / Reject)' })
   async setStatus(
     @Param('id') id: string,
@@ -189,8 +190,9 @@ export class TeamsController {
   }
 
   @Post(':id/warnings')
-  @UseGuards(HeaderAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Issue warning to team' })
   async addWarning(@Param('id') id: string, @CurrentUser() user?: any) {
     const issuer = user?.username || user?.id || 'organizer';
@@ -198,8 +200,9 @@ export class TeamsController {
   }
 
   @Patch(':id/ban')
-  @UseGuards(HeaderAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Ban a team from tournament' })
   async banTeam(@Param('id') id: string, @CurrentUser() user?: any) {
     const issuer = user?.username || user?.id || 'organizer';
@@ -207,6 +210,8 @@ export class TeamsController {
   }
 
   @Post(':id/join-requests')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Player requests to join a team' })
   async createJoinRequest(
     @Param('id') teamId: string,
@@ -216,12 +221,16 @@ export class TeamsController {
   }
 
   @Get(':id/join-requests')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Get join requests for a team' })
   async getJoinRequests(@Param('id') teamId: string) {
     return this.teamsService.getJoinRequestsByTeam(teamId);
   }
 
   @Patch('join-requests/:reqId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Accept or reject join request' })
   async updateJoinRequest(
     @Param('reqId') reqId: string,
@@ -231,6 +240,8 @@ export class TeamsController {
   }
 
   @Post(':id/invites')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Invite player to team' })
   async createInvite(
     @Param('id') teamId: string,
@@ -240,12 +251,16 @@ export class TeamsController {
   }
 
   @Get('invites/:username')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Get invites for a user' })
   async getInvites(@Param('username') username: string) {
     return this.teamsService.getInvitesByUser(username);
   }
 
   @Patch('invites/:inviteId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Accept or decline team invite' })
   async updateInvite(
     @Param('inviteId') inviteId: string,
@@ -255,8 +270,9 @@ export class TeamsController {
   }
 
   @Delete(':id')
-  @UseGuards(HeaderAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
   @HttpCode(204)
   @ApiOperation({
     summary: 'Delete a team',
@@ -270,3 +286,4 @@ export class TeamsController {
     await this.teamsService.deleteTeam(id);
   }
 }
+

@@ -10,10 +10,10 @@ import {
   HttpCode,
   NotFoundException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiSecurity } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { CompetitionsService } from './competitions.service';
 import { CreateCompetitionDto, UpdateCompetitionDto, CompetitionResponseDto, AddCoOrganizerDto } from './dto/competition.dto';
-import { HeaderAuthGuard } from '../../common/decorators/header-auth.guard';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/decorators/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -21,13 +21,13 @@ import { UserRole } from '../../common/interfaces';
 
 @Controller('competitions')
 @ApiTags('Competitions')
-@ApiSecurity('x-user-role')
 export class CompetitionsController {
   constructor(private competitionsService: CompetitionsService) {}
 
   @Post()
-  @UseGuards(HeaderAuthGuard, RolesGuard)
-  @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.TEAM_LEAD, UserRole.COMP_ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
   @HttpCode(201)
   @ApiOperation({
     summary: 'Create and auto-approve a new competition',
@@ -40,7 +40,7 @@ export class CompetitionsController {
   })
   @ApiResponse({
     status: 401,
-    description: 'Unauthorized - Missing or invalid x-user-role header',
+    description: 'Unauthorized - Missing or invalid token',
   })
   @ApiResponse({
     status: 403,
@@ -55,8 +55,9 @@ export class CompetitionsController {
   }
 
   @Post(':id/organizers')
-  @UseGuards(HeaderAuthGuard, RolesGuard)
-  @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.TEAM_LEAD, UserRole.COMP_ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Add a co-organizer to the competition',
     description: 'Allows an organizer to add other users as co-organizers to manage the tournament and its disputes',
@@ -74,8 +75,9 @@ export class CompetitionsController {
   }
 
   @Delete(':id/organizers/:organizerId')
-  @UseGuards(HeaderAuthGuard, RolesGuard)
-  @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.TEAM_LEAD, UserRole.COMP_ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Remove a co-organizer from the competition',
     description: 'Removes a co-organizer from managing the competition',
@@ -93,7 +95,6 @@ export class CompetitionsController {
   }
 
   @Get('organizer/:organizerId')
-  @UseGuards(HeaderAuthGuard)
   @ApiOperation({
     summary: 'Get competitions by organizer or co-organizer',
     description: 'Retrieve all competitions where user is primary organizer or co-organizer',
@@ -110,7 +111,6 @@ export class CompetitionsController {
   }
 
   @Get()
-  @UseGuards(HeaderAuthGuard)
   @ApiOperation({
     summary: 'Get all competitions',
     description: 'Retrieve a list of all competitions',
@@ -125,7 +125,6 @@ export class CompetitionsController {
   }
 
   @Get('active')
-  @UseGuards(HeaderAuthGuard)
   @ApiOperation({
     summary: 'Get active competitions',
     description: 'Retrieve only active competitions',
@@ -140,7 +139,6 @@ export class CompetitionsController {
   }
 
   @Get(':id')
-  @UseGuards(HeaderAuthGuard)
   @ApiOperation({
     summary: 'Get competition by ID',
     description: 'Retrieve a specific competition by its ID',
@@ -163,11 +161,12 @@ export class CompetitionsController {
   }
 
   @Patch(':id')
-  @UseGuards(HeaderAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.TEAM_LEAD, UserRole.COMP_ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Update a competition',
-    description: 'Update competition details (Admin only)',
+    description: 'Update competition details (Organizer or Admin only)',
   })
   @ApiResponse({
     status: 200,
@@ -186,8 +185,9 @@ export class CompetitionsController {
   }
 
   @Patch(':id/approval')
-  @UseGuards(HeaderAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.COMP_ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Approve or reject a competition',
     description: 'Update competition approval status (Admin only)',
@@ -202,8 +202,9 @@ export class CompetitionsController {
   }
 
   @Delete(':id')
-  @UseGuards(HeaderAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
   @HttpCode(204)
   @ApiOperation({
     summary: 'Delete a competition',
@@ -221,3 +222,4 @@ export class CompetitionsController {
     await this.competitionsService.deleteCompetition(id);
   }
 }
+

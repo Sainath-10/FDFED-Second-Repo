@@ -39,6 +39,10 @@ export class NotificationsService {
     return this.repo.findOne({ where: { id } });
   }
 
+  async findById(id: string): Promise<NotificationEntity | null> {
+    return this.repo.findOne({ where: { id } });
+  }
+
   async markAllRead(username: string): Promise<void> {
     await this.repo.update({ toUsername: username, read: false }, { read: true });
   }

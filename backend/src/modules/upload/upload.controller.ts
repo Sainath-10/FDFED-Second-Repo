@@ -16,6 +16,9 @@ import * as path from 'path';
 import { Response } from 'express';
 import { UploadService } from './upload.service';
 import { UploadResponseDto } from './dto/upload-response.dto';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { UseGuards } from '@nestjs/common';
+import { ApiBearerAuth } from '@nestjs/swagger';
 
 const storage = diskStorage({
   destination: (req, file, cb) => {
@@ -56,7 +59,10 @@ export class UploadController {
   constructor(private readonly uploadService: UploadService) {}
 
   @Post('file')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @HttpCode(201)
+
   @ApiOperation({
     summary: 'Upload a file',
     description: 'Upload an image, document, or dispute evidence (Max: 5MB, Allowed: PNG, JPG, WEBP, GIF, PDF, TXT)',
@@ -97,13 +103,19 @@ export class UploadController {
   }
 
   @Get('file/:filename')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get uploaded file',
-    description: 'Retrieve or view a previously uploaded file by filename',
+    description: 'Retrieve or view a previously uploaded file by filename (authenticated users only)',
   })
   @ApiResponse({
     status: 200,
     description: 'File content stream',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - Missing or invalid token',
   })
   @ApiResponse({
     status: 404,

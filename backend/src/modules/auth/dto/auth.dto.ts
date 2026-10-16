@@ -25,16 +25,8 @@ export class RegisterDto {
   @IsString()
   @MinLength(6)
   password: string;
-
-  @ApiProperty({
-    description: 'User role',
-    enum: UserRole,
-    example: UserRole.PARTICIPANT,
-  })
-  @IsEnum(UserRole)
-  @IsOptional()
-  role?: UserRole;
 }
+
 
 export class LoginDto {
   @ApiProperty({
@@ -84,8 +76,8 @@ export class AuthResponseDto {
   };
 
   @ApiProperty({
-    description: 'Instructions for subsequent requests',
-    example: "Use 'x-user-role: <role>' header for API requests",
+    description: 'Status message',
+    example: 'Registration successful. You can now log in.',
   })
   message: string;
 }

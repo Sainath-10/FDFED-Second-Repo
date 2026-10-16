@@ -19,7 +19,7 @@ export class AuthService {
   ) {}
 
   async register(registerDto: RegisterDto): Promise<AuthResponseDto> {
-    const { email, username, password, role } = registerDto;
+    const { email, username, password } = registerDto;
 
     if (await this.userRepository.emailExists(email)) {
       throw new ConflictException('Email already registered');
@@ -32,7 +32,7 @@ export class AuthService {
       email,
       username,
       password,
-      role || UserRole.PARTICIPANT,
+      UserRole.PARTICIPANT,
     );
 
     return {

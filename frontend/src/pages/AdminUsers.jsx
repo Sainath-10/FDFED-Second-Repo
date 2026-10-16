@@ -7,13 +7,15 @@
  * Super-admin-style, full-bleed layout (`.sa-main-v2`).
  */
 import { useEffect, useState } from 'react';
+import { getToken } from '../services/api.js';
 import '../vendor/auth-accounts.js';
 import '../styles/pages/super-admin/super-dashboard.css';
 import '../styles/pages/super-admin/users.css';
 import '../styles/pages/admin/users.css';
 
 const ACCOUNTS_KEY = 'nexus.auth.accounts';
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
 
 const normalize = (v) => String(v || '').trim().toLowerCase();
 

@@ -1,42 +1,17 @@
 import {
   Injectable,
-  CanActivate,
   ExecutionContext,
-  UnauthorizedException,
 } from '@nestjs/common';
-import { UserRole } from '../interfaces';
+import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 
 /**
- * Header Auth Guard — reads x-user-role from request headers.
- * Sets request.user = { role } for @CurrentUser() and RolesGuard.
+ * HeaderAuthGuard (Deprecated / Secure Compatibility):
+ * Enforces JWT authentication to prevent header spoofing.
  */
 @Injectable()
-export class HeaderAuthGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
-    const request = context.switchToHttp().getRequest();
-
-    const role = request.headers['x-user-role'] as UserRole;
-
-    if (!role) {
-      throw new UnauthorizedException(
-        'Missing required header: x-user-role',
-      );
-    }
-
-    const validRoles = Object.values(UserRole);
-    if (!validRoles.includes(role)) {
-      throw new UnauthorizedException(
-        `Invalid role "${role}". Must be one of: ${validRoles.join(', ')}`,
-      );
-    }
-
-    const username = request.headers['x-user-name'] || request.headers['x-username'];
-    const userId = request.headers['x-user-id'];
-    request.user = {
-      role,
-      username: Array.isArray(username) ? username[0] : username,
-      id: Array.isArray(userId) ? userId[0] : userId,
-    };
-    return true;
+export class HeaderAuthGuard extends JwtAuthGuard {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    return (await super.canActivate(context)) as boolean;
   }
 }
+

@@ -9,7 +9,7 @@ import Login from './auth/Login.jsx';
 import Signup from './auth/Signup.jsx';
 import Competitions from './Competitions.jsx';
 import CompetitionsParticipated from './CompetitionsParticipated.jsx';
-import ViewTeam from './ViewTeam.jsx';
+
 import WatchLive from './WatchLive.jsx';
 import About from './About.jsx';
 import Index from './Index.jsx';
@@ -126,7 +126,7 @@ export const PAGE_COMPONENTS = {
   '/pages/signup.html': Signup,
   '/pages/competitions.html': Competitions,
   '/pages/competitions-participated.html': CompetitionsParticipated,
-  '/pages/view-team.html': ViewTeam,
+
   '/pages/watch-live.html': WatchLive,
   '/pages/about.html': About,
 };

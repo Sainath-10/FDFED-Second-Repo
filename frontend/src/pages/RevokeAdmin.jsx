@@ -7,10 +7,11 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { showToast } from '../lib/toast.js';
+import { getToken } from '../services/api.js';
 import '../styles/pages/super-admin/super-dashboard.css';
 import '../styles/pages/super-admin/users.css';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const ACCOUNTS_KEY = 'nexus.auth.accounts';
 const normalize = (v) => String(v || '').trim().toLowerCase();
 
@@ -34,11 +35,16 @@ export default function RevokeAdmin() {
 
     setSubmitting(true);
     try {
+      const token = getToken();
       const res = await fetch(`${API_URL}/auth/revoke-admin`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ username: uname, reason: why }),
       });
+
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         const msg = data.message || 'Failed to revoke admin in database';
