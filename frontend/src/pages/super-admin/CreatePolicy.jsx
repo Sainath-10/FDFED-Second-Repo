@@ -1,4 +1,4 @@
-/**
+﻿/**
  * NEXUS ESPORTS — Super Admin · Create Policy
  *
  * the policy form
@@ -7,11 +7,11 @@
  */
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { showToast } from '../lib/toast.js';
-import PolicyEditor from '../components/PolicyEditor.jsx';
-import { readPolicies, savePolicies, validatePolicyForm, todayISO, addDays, todayLabel, normalizePolicyStatus } from '../lib/policies.js';
-import '../styles/pages/super-admin/super-dashboard.css';
-import '../styles/pages/super-admin/create-policy.css';
+import { showToast } from '../../lib/toast.js';
+import PolicyEditor from '../../components/PolicyEditor.jsx';
+import { readPolicies, savePolicies, validatePolicyForm, todayISO, addDays, todayLabel, normalizePolicyStatus } from '../../lib/policies.js';
+import '../../styles/pages/super-admin/super-dashboard.css';
+import '../../styles/pages/super-admin/create-policy.css';
 
 const CATEGORIES = ['Conduct', 'Registration', 'Disputes', 'Finance', 'Operations', 'Technical', 'Other'];
 const SCOPES = ['All Competitions', 'Team Competitions', 'Solo Competitions', 'Admins Only', 'Platform-wide'];

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * NEXUS ESPORTS — Admin Activity Logs
  *
  * resolves the target
@@ -8,10 +8,10 @@
  */
 import { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
-import NexusData from '../services/data.js';
-import NexusAPI from '../services/api.js';
-import '../styles/pages/admin/dashboard.css';
+import { useAuth } from '../../context/AuthContext.jsx';
+import NexusData from '../../services/data.js';
+import NexusAPI from '../../services/api.js';
+import '../../styles/pages/admin/dashboard.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 

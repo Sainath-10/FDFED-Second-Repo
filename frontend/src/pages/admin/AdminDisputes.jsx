@@ -1,4 +1,4 @@
-/**
+﻿/**
  * NEXUS ESPORTS — Admin Dispute Console
  *
  *
@@ -7,10 +7,10 @@
  * stats, filter tabs and the notification helpers.
  */
 import { useMemo, useState } from 'react';
-import { useAuth } from '../context/AuthContext.jsx';
-import NexusData from '../services/data.js';
-import { showToast } from '../lib/toast.js';
-import '../styles/pages/admin/disputes.css';
+import { useAuth } from '../../context/AuthContext.jsx';
+import NexusData from '../../services/data.js';
+import { showToast } from '../../lib/toast.js';
+import '../../styles/pages/admin/disputes.css';
 
 const isTeamDispute = (d) => d && (d.targetType === 'team' || d.targetType === 'opponent_team');
 

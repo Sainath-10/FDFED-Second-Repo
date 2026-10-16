@@ -65,7 +65,7 @@ import CreatePolicy from './CreatePolicy.jsx';
 import EditPolicy from './EditPolicy.jsx';
 import ViewPolicy from './ViewPolicy.jsx';
 import SuperProfile from './SuperProfile.jsx';
-
+import TeamLeadDashboard from './TeamLeadDashboard.jsx';
 
 export const PAGE_COMPONENTS = {
   '/': Index,
@@ -80,20 +80,14 @@ export const PAGE_COMPONENTS = {
   '/pages/super-admin/admins.html': Admins,
   '/pages/super-admin/add-admin.html': AddAdmin,
   '/pages/super-admin/revoke-admin.html': RevokeAdmin,
-  '/pages/admin/manage-competition.html': AdminManageCompetition,
   '/pages/admin/revenue-transactions.html': AdminRevenueTransactions,
   '/pages/admin/disputes.html': AdminDisputes,
   '/pages/admin/revenue-config.html': AdminRevenueConfig,
   '/pages/admin/competition-detail.html': AdminCompetitionDetail,
-  '/pages/admin/manage-teams.html': AdminManageTeams,
-  '/pages/admin/manage-matches.html': AdminManageMatches,
-  '/pages/admin/edit-competition.html': AdminEditCompetition,
   '/pages/admin/dashboard.html': AdminDashboard,
   '/pages/admin/admin-activity.html': AdminActivity,
   '/pages/admin/users.html': AdminUsers,
   '/pages/admin/dispute-review.html': AdminDisputeReview,
-  '/pages/admin/match-results.html': AdminMatchResults,
-  '/pages/admin/view-standings.html': AdminViewStandings,
   '/pages/create-competition.html': CreateCompetition,
   '/pages/edit-competition.html': EditCompetition,
   '/pages/disputes.html': Disputes,

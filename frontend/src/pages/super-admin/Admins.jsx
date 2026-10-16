@@ -1,4 +1,4 @@
-/**
+﻿/**
  * NEXUS ESPORTS — Super Admin · Admins Roster
  *
  * lists administrators from the
@@ -7,9 +7,8 @@
  */
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { getToken } from '../services/api.js';
-import '../styles/pages/super-admin/super-dashboard.css';
-import '../styles/pages/super-admin/users.css';
+import '../../styles/pages/super-admin/super-dashboard.css';
+import '../../styles/pages/super-admin/users.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const ACCOUNTS_KEY = 'nexus.auth.accounts';

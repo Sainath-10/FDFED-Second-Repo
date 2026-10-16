@@ -1,4 +1,4 @@
-/**
+﻿/**
  * NEXUS ESPORTS — Super Admin · View Policy
  *
  * hero, summary, clauses,
@@ -7,10 +7,10 @@
  */
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { showToast } from '../lib/toast.js';
-import { readPolicies, savePolicies, normalizePolicyStatus } from '../lib/policies.js';
-import '../styles/pages/super-admin/super-dashboard.css';
-import '../styles/pages/super-admin/view-policy.css';
+import { showToast } from '../../lib/toast.js';
+import { readPolicies, savePolicies, normalizePolicyStatus } from '../../lib/policies.js';
+import '../../styles/pages/super-admin/super-dashboard.css';
+import '../../styles/pages/super-admin/view-policy.css';
 
 const PRINT_CSS = `@media print {
   .page-with-sidebar, .sidebar, #sidebar-mount, #footer-mount, .back-link,

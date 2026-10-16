@@ -1,4 +1,4 @@
-/**
+﻿/**
  * NEXUS ESPORTS — Admin Profile
  *
  * session-driven profile,
@@ -7,9 +7,9 @@
  */
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
-import { showToast } from '../lib/toast.js';
-import '../styles/pages/admin/admin-profile.css';
+import { useAuth } from '../../context/AuthContext.jsx';
+import { showToast } from '../../lib/toast.js';
+import '../../styles/pages/admin/admin-profile.css';
 
 const ADMIN_ACTIVITY_KEY = 'nexus.admin.activity';
 

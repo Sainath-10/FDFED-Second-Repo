@@ -1,4 +1,4 @@
-/**
+﻿/**
  * NEXUS ESPORTS — Super Admin Dashboard
  *
  * system
@@ -10,10 +10,10 @@
  * classic sidebar (AppLayout) is used, matching every other super-admin page.
  */
 import { useEffect, useState } from 'react';
-import { useAuth } from '../context/AuthContext.jsx';
-import { showToast } from '../lib/toast.js';
-import { assetUrl } from '../lib/assets.js';
-import '../styles/pages/super-admin/super-dashboard.css';
+import { useAuth } from '../../context/AuthContext.jsx';
+import { showToast } from '../../lib/toast.js';
+import { assetUrl } from '../../lib/assets.js';
+import '../../styles/pages/super-admin/super-dashboard.css';
 
 const DASHBOARD_STATE_KEY = 'nexus.superadmin.dashboard.state';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
