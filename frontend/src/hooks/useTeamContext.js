@@ -17,7 +17,21 @@ export function useTeamContext() {
 
   const refresh = useCallback(() => setVersion((v) => v + 1), []);
 
-  return { ctx, refresh };
+  const canManage = useMemo(() => {
+    if (!ctx || !ctx.team || !ctx.session) return false;
+    const sessionUser = (ctx.session.username || '').toLowerCase();
+    const createdBy = (ctx.team.createdBy || '').toLowerCase();
+    const leader = (ctx.team.leaderId || ctx.team.leaderUsername || ctx.team.leader || '').toLowerCase();
+    const role = (ctx.session.role || '').toLowerCase();
+    return sessionUser === createdBy || sessionUser === leader || role === 'admin' || role === 'super_admin';
+  }, [ctx]);
+
+  const isEnded = useMemo(() => {
+    if (!ctx || !ctx.comp) return false;
+    return !!(ctx.comp.ended || ctx.comp.status === 'completed');
+  }, [ctx]);
+
+  return { ctx, refresh, canManage, isEnded };
 }
 
 export default useTeamContext;

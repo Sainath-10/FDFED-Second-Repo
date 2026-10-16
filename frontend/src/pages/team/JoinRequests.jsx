@@ -4,6 +4,7 @@
  * pending join requests
  * with accept/decline, a tab badge count, and the empty state.
  */
+import { Navigate } from 'react-router-dom';
 import { useTeamContext } from '../../hooks/useTeamContext.js';
 import NexusTeamWorkflow from '../../services/teamWorkflow.js';
 import TeamTabs from '../../components/TeamTabs.jsx';
@@ -11,16 +12,21 @@ import { showToast } from '../../lib/toast.js';
 import '../../styles/pages/team/join-requests.css';
 
 export default function JoinRequests() {
-  const { ctx, refresh } = useTeamContext();
+  const { ctx, refresh, canManage: hookCanManage, isEnded: hookIsEnded } = useTeamContext();
 
   if (!ctx || !ctx.comp || !ctx.team) {
     return <main className="main-content"><h1 className="page-title">Team</h1></main>;
   }
 
   const { comp, team, session, context } = ctx;
+  const canManage = hookCanManage ?? !!(session && (session.username || '').toLowerCase() === (team.createdBy || '').toLowerCase());
+  const isEnded = hookIsEnded ?? !!(comp.ended || comp.status === 'completed');
+
+  if (!canManage) {
+    return <Navigate to={`/pages/team/team-roster.html?compId=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(team.id)}`} replace />;
+  }
+
   const pending = (NexusTeamWorkflow.getJoinRequests(comp.id, team.id) || []).filter((r) => r.status === 'pending');
-  const canManage = !!(session && (session.username || '').toLowerCase() === (team.createdBy || '').toLowerCase());
-  const isEnded = !!(comp.ended || comp.status === 'completed');
 
   function handleRequest(requestId, username, action) {
     const result = NexusTeamWorkflow.decideJoinRequest({ compId: comp.id, teamId: team.id, requestId, action });

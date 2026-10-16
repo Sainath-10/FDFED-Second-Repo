@@ -30,13 +30,12 @@ export default function TeamTabs({ active, context, canManage = true, isEnded = 
   return (
     <div className="team-tabs-nav">
       {TABS.map((t) => {
-        const hidden = hideAdmin && t.id !== 'roster';
+        if (hideAdmin && t.id !== 'roster') return null;
         return (
           <Link
             key={t.id}
             to={withTeamContext(`/pages/team/${t.file}`, context)}
             className={`team-tab${active === t.id ? ' active' : ''}`}
-            style={hidden ? { display: 'none' } : undefined}
           >
             {t.label}
             {t.badge && joinRequestCount ? <span className="notif-badge-sm">{joinRequestCount}</span> : null}

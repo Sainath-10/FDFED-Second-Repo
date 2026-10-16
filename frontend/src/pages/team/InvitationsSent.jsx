@@ -4,7 +4,7 @@
  * the sent-invite
  * list with status pill + revoke, and the "Invite More Players" footer link.
  */
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { useTeamContext } from '../../hooks/useTeamContext.js';
 import NexusTeamWorkflow from '../../services/teamWorkflow.js';
 import TeamTabs from '../../components/TeamTabs.jsx';
@@ -19,18 +19,23 @@ function formatSentTime(value) {
 }
 
 export default function InvitationsSent() {
-  const { ctx, refresh } = useTeamContext();
+  const { ctx, refresh, canManage: hookCanManage, isEnded: hookIsEnded } = useTeamContext();
 
   if (!ctx || !ctx.comp || !ctx.team) {
     return <main className="main-content"><h1 className="page-title">Team</h1></main>;
   }
 
   const { comp, team, session, context } = ctx;
+  const canManage = hookCanManage ?? !!(session && (session.username || '').toLowerCase() === (team.createdBy || '').toLowerCase());
+  const isEnded = hookIsEnded ?? !!(comp.ended || comp.status === 'completed');
+
+  if (!canManage) {
+    return <Navigate to={`/pages/team/team-roster.html?compId=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(team.id)}`} replace />;
+  }
+
   const invites = NexusTeamWorkflow.getInvites(comp.id, team.id) || [];
   const requests = NexusTeamWorkflow.getJoinRequests(comp.id, team.id) || [];
   const pendingRequests = requests.filter((r) => r.status === 'pending').length;
-  const canManage = !!(session && (session.username || '').toLowerCase() === (team.createdBy || '').toLowerCase());
-  const isEnded = !!(comp.ended || comp.status === 'completed');
   const inviteMoreHref = `/pages/team/add-players.html?compId=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(team.id)}`;
 
   function revoke(inviteId, username) {

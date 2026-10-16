@@ -5,7 +5,7 @@
  * picker), join-policy selector, save-changes validation and the disband flow.
  */
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
 import { useTeamContext } from '../../hooks/useTeamContext.js';
 import NexusTeamWorkflow from '../../services/teamWorkflow.js';
 import NexusData from '../../services/data.js';
@@ -26,7 +26,7 @@ const UPLOAD_SVG = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" 
 
 export default function TeamSettings() {
   const navigate = useNavigate();
-  const { ctx, refresh } = useTeamContext();
+  const { ctx, refresh, canManage: hookCanManage, isEnded: hookIsEnded } = useTeamContext();
   const [name, setName] = useState(() => (ctx && ctx.team ? ctx.team.name || '' : ''));
   const [tag, setTag] = useState(() => (ctx && ctx.team ? ctx.team.tag || '' : ''));
   const [logo, setLogo] = useState('shield');
@@ -37,10 +37,15 @@ export default function TeamSettings() {
   }
 
   const { comp, team, session, context } = ctx;
+  const canManage = hookCanManage ?? !!(session && (session.username || '').toLowerCase() === (team.createdBy || '').toLowerCase());
+  const isEnded = hookIsEnded ?? !!(comp.ended || comp.status === 'completed');
+
+  if (!canManage) {
+    return <Navigate to={`/pages/team/team-roster.html?compId=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(team.id)}`} replace />;
+  }
+
   const requests = NexusTeamWorkflow.getJoinRequests(comp.id, team.id) || [];
   const pendingRequests = requests.filter((r) => r.status === 'pending').length;
-  const canManage = !!(session && (session.username || '').toLowerCase() === (team.createdBy || '').toLowerCase());
-  const isEnded = !!(comp.ended || comp.status === 'completed');
 
   function setJoinPolicy(next) {
     setPolicy(next);

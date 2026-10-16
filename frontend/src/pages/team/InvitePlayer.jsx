@@ -5,7 +5,7 @@
  * message form, send invite, then redirect to the roster.
  */
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, Navigate } from 'react-router-dom';
 import { useTeamContext } from '../../hooks/useTeamContext.js';
 import NexusTeamWorkflow from '../../services/teamWorkflow.js';
 import { withTeamContext } from '../../components/TeamTabs.jsx';
@@ -15,11 +15,15 @@ import '../../styles/pages/team/invite-player.css';
 const ROLES = ['IGL', 'AWPer', 'Entry Fragger', 'Support', 'Rifler'];
 
 export default function InvitePlayer() {
-  const { ctx } = useTeamContext();
+  const { ctx, canManage, isEnded } = useTeamContext();
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [role, setRole] = useState('');
   const [message, setMessage] = useState('');
+
+  if (ctx && ctx.comp && ctx.team && (!canManage || isEnded)) {
+    return <Navigate to={`/pages/team/team-roster.html?compId=${encodeURIComponent(ctx.comp.id)}&teamId=${encodeURIComponent(ctx.team.id)}`} replace />;
+  }
 
   const backHref = withTeamContext('/pages/team/add-players.html', ctx && ctx.context);
 

@@ -121,7 +121,9 @@ export class TeamsController {
   async updateTeam(
     @Param('id') id: string,
     @Body() updateTeamDto: UpdateTeamDto,
+    @CurrentUser() user?: any,
   ): Promise<TeamResponseDto> {
+    await this.teamsService.verifyTeamOwnership(id, user);
     return this.teamsService.updateTeam(id, updateTeamDto);
   }
 
@@ -146,7 +148,9 @@ export class TeamsController {
   async addMember(
     @Param('id') id: string,
     @Body() addTeamMemberDto: AddTeamMemberDto,
+    @CurrentUser() user?: any,
   ): Promise<TeamResponseDto> {
+    await this.teamsService.verifyTeamOwnership(id, user);
     return this.teamsService.addMember(id, addTeamMemberDto);
   }
 
@@ -171,7 +175,9 @@ export class TeamsController {
   async removeMember(
     @Param('id') id: string,
     @Param('memberId') memberId: string,
+    @CurrentUser() user?: any,
   ): Promise<TeamResponseDto> {
+    await this.teamsService.verifyTeamOwnership(id, user);
     return this.teamsService.removeMember(id, memberId);
   }
 
@@ -224,7 +230,8 @@ export class TeamsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get join requests for a team' })
-  async getJoinRequests(@Param('id') teamId: string) {
+  async getJoinRequests(@Param('id') teamId: string, @CurrentUser() user?: any) {
+    await this.teamsService.verifyTeamOwnership(teamId, user);
     return this.teamsService.getJoinRequestsByTeam(teamId);
   }
 
@@ -234,9 +241,10 @@ export class TeamsController {
   @ApiOperation({ summary: 'Accept or reject join request' })
   async updateJoinRequest(
     @Param('reqId') reqId: string,
-    @Body() body: { status: string; reviewedBy: string },
+    @Body() body: { status: string; reviewedBy?: string },
+    @CurrentUser() user?: any,
   ) {
-    return this.teamsService.updateJoinRequest(reqId, body.status, body.reviewedBy);
+    return this.teamsService.updateJoinRequest(reqId, body.status, user);
   }
 
   @Post(':id/invites')
@@ -246,7 +254,9 @@ export class TeamsController {
   async createInvite(
     @Param('id') teamId: string,
     @Body() body: { competitionId: string; toUsername: string; fromUsername: string },
+    @CurrentUser() user?: any,
   ) {
+    await this.teamsService.verifyTeamOwnership(teamId, user);
     return this.teamsService.createInvite(teamId, body.competitionId, body.toUsername, body.fromUsername);
   }
 

@@ -138,6 +138,10 @@ export class TeamRepository {
     return this.joinRepo.find({ where: { teamId }, order: { createdAt: 'DESC' } });
   }
 
+  async findJoinRequestById(id: string): Promise<TeamJoinRequestEntity | null> {
+    return this.joinRepo.findOne({ where: { id } });
+  }
+
   async updateJoinRequest(id: string, status: string, reviewedBy: string): Promise<TeamJoinRequestEntity> {
     await this.joinRepo.update(id, { status, reviewedBy });
     return this.joinRepo.findOne({ where: { id } });

@@ -6,7 +6,7 @@
  * lock (banner + all controls disabled).
  */
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { useTeamContext } from '../../hooks/useTeamContext.js';
 import NexusTeamWorkflow from '../../services/teamWorkflow.js';
 import TeamTabs from '../../components/TeamTabs.jsx';
@@ -14,7 +14,7 @@ import { showToast } from '../../lib/toast.js';
 import '../../styles/pages/team/add-players.css';
 
 export default function AddPlayers() {
-  const { ctx, refresh } = useTeamContext();
+  const { ctx, refresh, canManage: hookCanManage, isEnded: hookIsEnded } = useTeamContext();
   const [query, setQuery] = useState('');
   const [direct, setDirect] = useState('');
 
@@ -30,13 +30,18 @@ export default function AddPlayers() {
   }
 
   const { comp, team, session, context } = ctx;
-  const isEnded = !!(comp.ended || comp.status === 'completed');
+  const canManage = hookCanManage ?? !!(session && (session.username || '').toLowerCase() === (team.createdBy || '').toLowerCase());
+  const isEnded = hookIsEnded ?? !!(comp.ended || comp.status === 'completed');
+
+  if (!canManage || isEnded) {
+    return <Navigate to={`/pages/team/team-roster.html?compId=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(team.id)}`} replace />;
+  }
+
   const players = NexusTeamWorkflow.getAvailablePlayers(comp.id, team.id) || [];
   const members = NexusTeamWorkflow.getTeamRoster(comp.id, team.id) || [];
   const invites = NexusTeamWorkflow.getInvites(comp.id, team.id) || [];
   const requests = NexusTeamWorkflow.getJoinRequests(comp.id, team.id) || [];
   const maxPlayers = comp.maxPlayersPerTeam || 5;
-  const canManage = !!(session && (session.username || '').toLowerCase() === (team.createdBy || '').toLowerCase());
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
