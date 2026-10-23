@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, ServiceUnavailableException } from '@nestjs/common';
 import { UserRepository } from '../auth/repositories/user.repository';
 import { AuditLogService } from '../../common/audit/audit.service';
 
@@ -27,6 +27,26 @@ export class VerificationService {
     return `XXXX XXXX ${digits.slice(-4)}`;
   }
 
+  /**
+   * Explicit test/mock boundary. Mock mode is the default outside production;
+   * production must configure a real provider (or an explicitly named test
+   * environment) instead of silently accepting arbitrary Aadhaar/OTP values.
+   */
+  private mockModeEnabled(): boolean {
+    const configured = String(process.env.VERIFICATION_MODE || '').toLowerCase();
+    if (configured === 'mock') return true;
+    if (configured === 'provider') return false;
+    return process.env.NODE_ENV !== 'production';
+  }
+
+  private assertVerificationMode(): void {
+    if (!this.mockModeEnabled()) {
+      throw new ServiceUnavailableException(
+        'Identity verification is not configured. Contact the platform administrator.',
+      );
+    }
+  }
+
   async getStatus(userId: string, username: string) {
     const user = await this.userRepository.findById(userId);
     if (!user) userNotFound();
@@ -36,11 +56,12 @@ export class VerificationService {
       organizerVerificationStatus: user.organizerVerificationStatus || user.verificationStatus,
       verifiedAt: user.verifiedAt,
       aadhaarMasked: user.aadhaarMasked,
-      simulated: true,
+      simulated: this.mockModeEnabled(),
     };
   }
 
   async requestOtp(userId: string, aadhaarNumber: string) {
+    this.assertVerificationMode();
     const clean = String(aadhaarNumber || '').replace(/\D/g, '');
     if (clean.length !== 12) {
       throw new BadRequestException('Please enter a valid 12-digit Aadhaar number.');
@@ -67,12 +88,10 @@ export class VerificationService {
   }
 
   async verify(userId: string, otp: string) {
+    this.assertVerificationMode();
     const clean = String(otp || '').trim();
     if (!clean) {
       throw new BadRequestException('Please enter the OTP to complete verification.');
-    }
-    if (clean.length > 10) {
-      throw new BadRequestException('OTP format is invalid.');
     }
 
     const user = await this.userRepository.findById(userId);

@@ -3,20 +3,21 @@
  * Uses the existing design system vars — no separate design system.
  */
 
-.verify-simulated-banner {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  background: rgba(198, 255, 51, 0.08);
-  border: 1px solid var(--accent-border, rgba(198, 255, 51, 0.35));
-  border-radius: 12px;
-  padding: 12px 14px;
-  margin-bottom: 18px;
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--text-secondary, #9aa4b2);
+/*
+ * The shared modal system has two `.modal-overlay` definitions and the later
+ * one uses z-index 200. The verification dialog must always sit above checkout
+ * overlays (z-index 99999) when it is intentionally shown.
+ */
+.modal-overlay.open.verification-modal-overlay {
+  z-index: 100050;
 }
-.verify-simulated-banner strong { color: var(--accent, #c6ff33); }
+
+.verify-intro {
+  color: var(--text-secondary, #9aa4b2);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 4px 0 0;
+}
 
 .verify-step-count {
   font-size: 11px;
@@ -53,12 +54,6 @@
 .verify-error {
   color: #ff6b6b;
   font-size: 12.5px;
-  margin-top: 8px;
-}
-
-.verify-help {
-  color: var(--text-muted, #64748b);
-  font-size: 12px;
   margin-top: 8px;
 }
 

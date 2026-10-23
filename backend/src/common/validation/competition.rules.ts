@@ -77,6 +77,65 @@ export function isCompetitionStarted(
   return validDate(comp.startDate) ? now.getTime() >= comp.startDate.getTime() : false;
 }
 
+/**
+ * Parses a persisted/display prize amount: numbers, "₹1,00,000", "100000",
+ * and "No Prize Pool" are supported. Returns NaN for malformed values.
+ */
+export function parsePrizeAmount(value: unknown): number {
+  if (value === undefined || value === null || value === '') return 0;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : NaN;
+  const text = String(value).trim();
+  if (!text) return 0;
+  if (/^no\s+prize/i.test(text)) return 0;
+  const cleaned = text.replace(/[₹,\s]/g, '');
+  if (!/^\d*\.?\d+$/.test(cleaned)) return NaN;
+  const amount = Number(cleaned);
+  return Number.isFinite(amount) ? amount : NaN;
+}
+
+/** Sums a `prizes: [{ place, amount }]` distribution list. */
+export function prizeDistributionTotal(prizes: unknown): number {
+  if (!Array.isArray(prizes)) return 0;
+  return prizes.reduce((sum, entry) => {
+    const raw = entry && typeof entry === 'object' ? (entry as any).amount : entry;
+    const amount = parsePrizeAmount(raw);
+    return sum + (Number.isFinite(amount) ? amount : 0);
+  }, 0);
+}
+
+/** Validates the full prize distribution list, including the ₹10 lakh total cap. */
+export function validatePrizeDistribution(prizes: unknown): string | null {
+  if (prizes === undefined || prizes === null) return null;
+  if (!Array.isArray(prizes)) return 'Prize distribution must be a list of amounts.';
+  for (const entry of prizes) {
+    const raw = entry && typeof entry === 'object' ? (entry as any).amount : entry;
+    const amount = parsePrizeAmount(raw);
+    if (Number.isNaN(amount)) return 'Each prize distribution amount must be a valid number.';
+    if (amount < 0) return 'Prize distribution amounts cannot be negative.';
+  }
+  const total = prizeDistributionTotal(prizes);
+  if (total > MAX_PRIZE_POOL) {
+    return `Total prize pool cannot exceed ₹${MAX_PRIZE_POOL.toLocaleString('en-IN')} (₹10 lakh).`;
+  }
+  return null;
+}
+
+/**
+ * Resolves the effective prize total from `prize`, `prizePool` and the
+ * distribution list. Taking the maximum prevents a client from sending a
+ * small `prize` while hiding a larger distribution in another field.
+ */
+export function resolvePrizeTotal(input: { prize?: unknown; prizePool?: unknown; prizes?: unknown }): number {
+  const candidates: number[] = [];
+  for (const value of [input.prize, input.prizePool]) {
+    const parsed = parsePrizeAmount(value);
+    if (Number.isFinite(parsed)) candidates.push(parsed);
+  }
+  const distributed = prizeDistributionTotal(input.prizes);
+  if (Number.isFinite(distributed)) candidates.push(distributed);
+  return candidates.length ? Math.max(...candidates) : 0;
+}
+
 /** Validates the prize pool on create. Returns null when valid. */
 export function validatePrizePool(prize: unknown): string | null {
   if (prize === undefined || prize === null || prize === '') return null; // no prize pool allowed

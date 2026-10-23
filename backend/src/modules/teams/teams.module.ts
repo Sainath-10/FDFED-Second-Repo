@@ -11,11 +11,17 @@ import { RefundRequestEntity } from '../../entities/refund-request.entity';
 import { RevenueTransactionEntity } from '../../entities/revenue-transaction.entity';
 import { TeamValidationMiddleware } from '../../common/middleware';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { CompetitionsModule } from '../competitions/competitions.module';
+import { AuthModule } from '../auth/auth.module';
+import { AuditModule } from '../../common/audit/audit.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([TeamEntity, TeamJoinRequestEntity, TeamInviteEntity, CompetitionEntity, RefundRequestEntity, RevenueTransactionEntity]),
     NotificationsModule,
+    CompetitionsModule, // exports CompetitionRepository
+    AuthModule,         // exports UserRepository
+    AuditModule,
   ],
   controllers: [TeamsController],
   providers: [TeamsService, TeamRepository],

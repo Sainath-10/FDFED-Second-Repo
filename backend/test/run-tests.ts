@@ -9,12 +9,19 @@
  */
 import 'reflect-metadata';
 import assert = require('node:assert/strict');
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, ServiceUnavailableException } from '@nestjs/common';
+
+// The mock verification provider must be explicitly configured in tests too.
+process.env.VERIFICATION_MODE = 'mock';
 
 import {
   MAX_PRIZE_POOL,
   MIN_ENTRY_FEE,
   validatePrizePool,
+  parsePrizeAmount,
+  prizeDistributionTotal,
+  validatePrizeDistribution,
+  resolvePrizeTotal,
   validateEntryFee,
   validateDateWindow,
   isRegistrationClosed,
@@ -33,6 +40,8 @@ import {
 } from '../src/common/tournament/tournament.utils';
 import { VerificationService } from '../src/modules/verification/verification.service';
 import { CompetitionsService } from '../src/modules/competitions/competitions.service';
+import { CompetitionsController } from '../src/modules/competitions/competitions.controller';
+import { ROLES_KEY } from '../src/common/decorators/roles.decorator';
 import { TeamsService } from '../src/modules/teams/teams.service';
 import { MatchesService } from '../src/modules/matches/matches.service';
 
@@ -79,6 +88,25 @@ async function competitionRuleTests() {
     assert.match(String(validatePrizePool(1_000_001)), /cannot exceed/i);
     assert.match(String(validatePrizePool(-1)), /negative/i);
     assert.match(String(validatePrizePool('abc')), /valid number/i);
+  });
+
+  await test('prize distribution totals are parsed, summed and capped', () => {
+    assert.equal(parsePrizeAmount('₹1,00,000'), 100_000);
+    assert.equal(parsePrizeAmount('1,00,000'), 100_000);
+    assert.equal(parsePrizeAmount('No Prize Pool'), 0);
+    assert.equal(Number.isNaN(parsePrizeAmount('abc')), true);
+
+    const distribution = [{ amount: '₹5,00,000' }, { amount: '₹3,00,000' }, { amount: '₹2,00,000' }];
+    assert.equal(prizeDistributionTotal(distribution), 1_000_000);
+    assert.equal(validatePrizeDistribution(distribution), null);
+
+    const tooLarge = [...distribution, { amount: 1 }];
+    assert.match(String(validatePrizeDistribution(tooLarge)), /cannot exceed/i);
+    assert.match(String(validatePrizeDistribution([{ amount: 'abc' }])), /valid number/i);
+    assert.match(String(validatePrizeDistribution([{ amount: -1 }])), /negative/i);
+
+    // The largest interpretation wins, so a small `prize` cannot hide a large distribution.
+    assert.equal(resolvePrizeTotal({ prize: 100, prizes: [{ amount: '₹9,00,000' }] }), 900_000);
   });
 
   await test('entry fee minimum is ₹10 where a fee applies', () => {
@@ -289,6 +317,17 @@ async function verificationTests() {
     const result = await service.verify('u1', 'anything');
     assert.equal(result.alreadyVerified, true);
   });
+
+  await test('provider mode refuses to pretend mock verification succeeded', async () => {
+    const { service } = makeService();
+    process.env.VERIFICATION_MODE = 'provider';
+    await expectThrow(
+      () => service.requestOtp('u1', '123456789012'),
+      ServiceUnavailableException,
+      'not configured',
+    );
+    process.env.VERIFICATION_MODE = 'mock';
+  });
 }
 
 // ─── CompetitionsService (§2, §3, §12.4) ─────────────────────────────────────
@@ -355,6 +394,37 @@ async function competitionServiceTests() {
     const service = makeService(null);
     await expectThrow(() => service.createCompetition({ ...validDto, prize: 1_000_001 }, 'alice', 'u1'), BadRequestException, 'cannot exceed');
     await expectThrow(() => service.createCompetition({ ...validDto, prize: -50 }, 'alice', 'u1'), BadRequestException, 'negative');
+  });
+
+  await test('backend rejects a distribution above the cap even when prize is small', async () => {
+    const service = makeService(null);
+    await expectThrow(
+      () => service.createCompetition({
+        ...validDto,
+        prize: 1_000,
+        prizes: [{ place: '1st Place', amount: '₹9,00,000' }, { place: '2nd Place', amount: '₹2,00,000' }],
+      }, 'alice', 'u1'),
+      BadRequestException,
+      'cannot exceed',
+    );
+  });
+
+  await test('backend accepts a distribution totalling exactly ₹10,00,000', async () => {
+    const service = makeService(null);
+    const comp: any = await service.createCompetition({
+      ...validDto,
+      prizes: [{ place: '1st Place', amount: '₹5,00,000' }, { place: '2nd Place', amount: '₹5,00,000' }],
+    }, 'alice', 'u1');
+    assert.equal(comp.prize, 1_000_000);
+  });
+
+  await test('backend rejects malformed prize distribution entries', async () => {
+    const service = makeService(null);
+    await expectThrow(
+      () => service.createCompetition({ ...validDto, prizes: [{ amount: 'not-a-number' }] }, 'alice', 'u1'),
+      BadRequestException,
+      'valid number',
+    );
   });
 
   await test('prize pool above ₹50,000 is auto-approved without admin approval', async () => {
@@ -437,6 +507,27 @@ async function competitionServiceTests() {
       BadRequestException,
       'End Date must be strictly after',
     );
+  });
+
+  await test('competition creation and owner-management endpoints have no role restriction', () => {
+    const ownerEndpoints = [
+      'createCompetition',
+      'updateCompetition',
+      'addCoOrganizer',
+      'removeCoOrganizer',
+      'getJoinCode',
+      'getParticipants',
+    ];
+    for (const endpoint of ownerEndpoints) {
+      const roles = Reflect.getMetadata(ROLES_KEY, CompetitionsController.prototype[endpoint]);
+      assert.equal(roles, undefined, `${endpoint} must not require a privileged role`);
+    }
+
+    // Administrative operations remain role-protected.
+    const approvalRoles = Reflect.getMetadata(ROLES_KEY, CompetitionsController.prototype.setApproval);
+    assert.ok(Array.isArray(approvalRoles) && approvalRoles.includes('admin'));
+    const deleteRoles = Reflect.getMetadata(ROLES_KEY, CompetitionsController.prototype.deleteCompetition);
+    assert.deepEqual(deleteRoles, ['super_admin']);
   });
 
   await test('participant contacts expose real emails only through the organizer path', async () => {

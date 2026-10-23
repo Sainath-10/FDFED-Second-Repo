@@ -44,52 +44,73 @@ export default function VerificationModal({ open, onClose, onVerified, purpose }
     onClose && onClose(cancelled);
   }
 
+  function describeFailure(res) {
+    const status = Number(res && res.status) || 0;
+    if (status === 401) return 'Your session has expired. Please log in again.';
+    if (status === 403) return 'You are not authorized to verify this account.';
+    if (status === 400) return (res && res.error) || 'The details could not be validated. Please check and try again.';
+    if (status >= 500) return 'The verification service is temporarily unavailable. Please try again.';
+    if (!status) return 'Cannot reach the server. Check your connection and make sure the backend is running.';
+    return (res && res.error) || 'Verification could not be completed. Please try again.';
+  }
+
   async function submitAadhaar(e) {
     e.preventDefault();
+    if (busy) return;
     setError('');
     if (!isValidAadhaarFormat(aadhaar)) {
-      setError('Please enter exactly 12 digits (0–9). A 12-digit format check does not verify authenticity — this is a simulated flow.');
+      setError('Please enter a valid 12-digit Aadhaar number.');
       return;
     }
     setBusy(true);
-    const res = await VerificationAPI.requestOtp(aadhaar.replace(/\D/g, ''));
-    setBusy(false);
-    if (!res.ok) {
-      setError(res.error || 'Format validation failed. Please try again.');
-      return;
+    try {
+      const res = await VerificationAPI.requestOtp(aadhaar.replace(/\D/g, ''));
+      if (!res.ok) {
+        setError(describeFailure(res));
+        return;
+      }
+      setAadhaar(formatAadhaarInput(aadhaar));
+      setStep(2);
+      setTimeout(() => firstFieldRef.current && firstFieldRef.current.focus(), 50);
+    } catch (err) {
+      setError(describeFailure(null));
+    } finally {
+      setBusy(false);
     }
-    setAadhaar(formatAadhaarInput(aadhaar));
-    setStep(2);
-    setTimeout(() => firstFieldRef.current && firstFieldRef.current.focus(), 50);
   }
 
   async function submitOtp(e) {
     e.preventDefault();
+    if (busy) return;
     setError('');
     if (!String(otp).trim()) {
-      setError('Please enter the OTP to complete verification (any non-empty value — simulated flow).');
+      setError('Please enter the OTP to continue.');
       return;
     }
     setBusy(true);
-    const res = await VerificationAPI.verify(otp);
-    if (!res.ok) {
+    try {
+      const res = await VerificationAPI.verify(otp);
+      if (!res.ok) {
+        setError(describeFailure(res));
+        return;
+      }
+      setDone(true);
+      setTimeout(() => {
+        onVerified && onVerified(true);
+        onClose && onClose(true);
+      }, 700);
+    } catch (err) {
+      setError(describeFailure(null));
+    } finally {
       setBusy(false);
-      setError(res.error || 'Verification failed. Please try again.');
-      return;
     }
-    setBusy(false);
-    setDone(true);
-    setTimeout(() => {
-      onVerified && onVerified(true);
-      onClose && onClose(true);
-    }, 700);
   }
 
-  const purposeLine = purpose ? `Required before you can ${purpose}.` : '';
+  const purposeLine = purpose && purpose !== 'continue' ? `Required before you can ${purpose}.` : '';
 
   return (
     <div
-      className="modal-overlay open"
+      className="modal-overlay open verification-modal-overlay"
       role="dialog"
       aria-modal="true"
       aria-label="Simulated Aadhaar verification"
@@ -106,25 +127,18 @@ export default function VerificationModal({ open, onClose, onVerified, purpose }
           }}
         >✕</button>
 
-        <h2 style={{ marginBottom: 4 }}> Aadhaar Verification</h2>
+        <h2 style={{ marginBottom: 4 }}>Aadhaar Verification</h2>
         <p style={{ color: '#9aa4b2', marginBottom: 14, fontSize: 13.5 }}>{purposeLine}</p>
-
-        <div className="verify-simulated-banner" role="note">
-          <span aria-hidden="true">⚠️</span>
-          <span>
-            <strong>SIMULATED verification — not real UIDAI/KYC.</strong> A 12-digit format check does not prove
-            identity, and no OTP is sent. This is an application workflow flag, not a security boundary.
-          </span>
-        </div>
 
         {done ? (
           <div className="verify-loading" id="verification-success">
             <span aria-hidden="true" style={{ fontSize: 22 }}>✅</span>
-            Verification complete (simulated). Updating your profile…
+            Verification complete. Updating your profile…
           </div>
         ) : step === 1 ? (
           <form id="verification-step-1" onSubmit={submitAadhaar} noValidate>
             <div className="verify-step-count">Step 1 of 2 — Aadhaar Number</div>
+            <p className="verify-intro">Enter your 12-digit Aadhaar number to continue.</p>
             <label className="verify-field-label" htmlFor="verification-aadhaar-input">Aadhaar number</label>
             <input
               ref={firstFieldRef}
@@ -144,11 +158,11 @@ export default function VerificationModal({ open, onClose, onVerified, purpose }
                 {busy ? 'Validating…' : 'Request OTP'}
               </button>
             </div>
-            <p className="verify-help">No OTP is actually sent — the next step is part of the simulated flow.</p>
           </form>
         ) : (
           <form id="verification-step-2" onSubmit={submitOtp} noValidate>
             <div className="verify-step-count">Step 2 of 2 — OTP</div>
+            <p className="verify-intro">Enter the OTP to verify your account.</p>
             <label className="verify-field-label" htmlFor="verification-otp-input">Enter OTP</label>
             <input
               ref={firstFieldRef}
@@ -168,7 +182,6 @@ export default function VerificationModal({ open, onClose, onVerified, purpose }
                 {busy ? 'Verifying…' : 'Verify'}
               </button>
             </div>
-            <p className="verify-help">Simulated flow: any non-empty OTP is accepted. The OTP is never stored.</p>
           </form>
         )}
       </div>

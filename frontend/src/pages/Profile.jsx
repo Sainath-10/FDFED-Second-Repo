@@ -322,7 +322,7 @@ export default function Profile() {
                     <div id="profile-verification-section" className="settings-item-row">
                       <div className="settings-label-info">
                         <h3>Account Verification</h3>
-                        <p>Simulated Aadhaar verification (workflow flag — not real UIDAI/KYC identity proof). Required before creating or joining competitions.</p>
+                        <p>Verify your Aadhaar to create or join competitions. Your verification status is saved to your account.</p>
                         <p style={{ fontSize: 12, color: '#94a3b8' }}>
                           Organizer eligibility: <strong style={{ color: organizerVerified ? '#C6FF33' : '#f87171' }}>{organizerVerified ? 'Verified' : 'Unverified'}</strong>
                         </p>
@@ -459,8 +459,8 @@ export default function Profile() {
         open={verifyOpen}
         onClose={() => setVerifyOpen(false)}
         onVerified={() => {
-          setVerificationStatus({ verificationStatus: 'verified', simulated: true });
-          showToast('Verification complete (simulated).');
+          setVerificationStatus({ verificationStatus: 'verified' });
+          showToast('Verification complete.');
         }}
         purpose="continue"
       />

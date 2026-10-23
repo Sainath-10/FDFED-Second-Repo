@@ -132,9 +132,14 @@ export async function makeRequest(endpoint, options = {}) {
       data: data,
     };
   } catch (err) {
+    const raw = String(err && err.message || '');
+    const networkFailure = /failed to fetch|load failed|networkerror|network request failed/i.test(raw);
     return {
       ok: false,
-      error: err.message || 'Network error — is the backend running?',
+      status: 0,
+      error: networkFailure
+        ? 'Unable to reach the server. Check your connection and make sure the backend is running.'
+        : (raw || 'Network error — is the backend running?'),
       data: null,
     };
   }
@@ -169,6 +174,11 @@ export const AuthAPI = {
 
   async getAllUsers() {
     return makeRequest('/auth/users', { method: 'GET' });
+  },
+
+  /** Authenticated username check (does not expose the full user list). */
+  async userExists(username) {
+    return makeRequest(`/auth/users/exists?username=${encodeURIComponent(username)}`, { method: 'GET' });
   },
 
   async banUser(idOrUsername) {

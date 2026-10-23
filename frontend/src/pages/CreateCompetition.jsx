@@ -8,7 +8,7 @@
  * join code, the theme-coloured platform-fee checkout modal, and the
  * simulated-verification gate (§12.4) enforced before publishing.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import NexusData from '../services/data.js';
@@ -91,6 +91,9 @@ export default function CreateCompetition() {
   const [errors, setErrors] = useState({});
   const [checkout, setCheckout] = useState(null);
   const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState('');
+  const publishingRef = useRef(false);
+  const confirmingRef = useRef(false);
   const [visibility, setVisibility] = useState('public'); // §2.4 public | private
   const [published, setPublished] = useState(null); // { comp, joinCode }
   const gate = useVerificationGate('create or publish a competition');
@@ -117,6 +120,27 @@ export default function CreateCompetition() {
   const totalPrize = n1 + n2 + n3;
   const platformFee = (NexusData && NexusData.calculatePlatformFee) ? NexusData.calculatePlatformFee(totalPrize)
     : (totalPrize <= 0 ? 0 : (totalPrize <= 700 ? 50 : Math.round(totalPrize * 0.07)));
+
+  // §2.2 — prize validation is live: messages update as the organizer types.
+  useEffect(() => {
+    setErrors((prev) => {
+      const next = { ...prev };
+      const setOrClear = (key, message) => {
+        if (message) next[key] = message;
+        else delete next[key];
+      };
+      setOrClear('prize-1', n1 < 0 ? 'Prize cannot be negative.' : '');
+      setOrClear('prize-2', n2 < 0 ? 'Prize cannot be negative.' : (n2 > 0 && n2 > n1 ? '1st place prize must be ≥ 2nd place prize.' : ''));
+      setOrClear('prize-3', n3 < 0 ? 'Prize cannot be negative.' : (n3 > 0 && n3 > n2 && n2 > 0 ? '2nd place prize must be ≥ 3rd place prize.' : ''));
+      setOrClear(
+        'prize-total',
+        totalPrize > MAX_PRIZE_POOL
+          ? `Total prize pool cannot exceed ₹${MAX_PRIZE_POOL.toLocaleString('en-IN')} (₹10 lakh).`
+          : '',
+      );
+      return next;
+    });
+  }, [n1, n2, n3, totalPrize]);
 
   const effectiveBanner = bannerSrc || getDefaultBanner(game);
 
@@ -178,7 +202,7 @@ export default function CreateCompetition() {
     if (n2 > 0 && n2 > n1) next['prize-2'] = '1st place prize must be ≥ 2nd place prize.';
     if (n3 > 0 && n3 > n2 && n2 > 0) next['prize-3'] = '2nd place prize must be ≥ 3rd place prize.';
     // §2.2 — total prize pool is capped at ₹10,00,000 (no admin approval checks)
-    if (totalPrize > MAX_PRIZE_POOL) next['prize-1'] = `Total prize pool cannot exceed ₹${MAX_PRIZE_POOL.toLocaleString('en-IN')} (₹10 lakh).`;
+    if (totalPrize > MAX_PRIZE_POOL) next['prize-total'] = `Total prize pool cannot exceed ₹${MAX_PRIZE_POOL.toLocaleString('en-IN')} (₹10 lakh).`;
 
  // Co-organizers — self/duplicate checks synchronously; existence is validated
  // against registered accounts via the backend below (§2.1).
@@ -198,12 +222,23 @@ export default function CreateCompetition() {
       }
     });
     if (!coOrgError && cleanCoOrgs.length) {
-      // Validate against ACTUAL registered accounts before publishing.
-      const usersRes = await NexusAPI.Auth.getAllUsers();
-      const known = new Set((usersRes.ok && Array.isArray(usersRes.data) ? usersRes.data : [])
-        .map((u) => String(u.username || '').toLowerCase()));
-      const unknown = cleanCoOrgs.filter((v) => !known.has(v.toLowerCase()));
-      if (unknown.length) {
+      // Validate against ACTUAL registered accounts before publishing. The
+      // single-username endpoint is available to any authenticated user; the
+      // full user list remains admin-only.
+      let validationUnavailable = false;
+      const checks = await Promise.all(cleanCoOrgs.map(async (username) => {
+        const res = await NexusAPI.Auth.userExists(username);
+        if (!res.ok) {
+          if (res.status === 0) validationUnavailable = true;
+          return { username, exists: false };
+        }
+        return { username, exists: !!res.data?.exists };
+      }));
+      const unknown = checks.filter((c) => !c.exists).map((c) => c.username);
+      if (validationUnavailable) {
+        next['co-organizers'] = 'Unable to validate co-organizers right now. Please try again.';
+        coOrgError = true;
+      } else if (unknown.length) {
         next['co-organizers'] = `This username does not exist. (@${unknown.join(', @')})`;
         coOrgError = true;
       }
@@ -246,7 +281,10 @@ export default function CreateCompetition() {
       feeType,
       entryFeeAmount,
       entryFee: formattedEntryFee,
-      organizerPaid: true,
+      // No payment provider is connected in this build: never claim the fee
+      // was collected before a backend/provider confirmation exists.
+      organizerPaid: false,
+      platformFeeStatus: 'pending',
       prizes: [
         { place: '1st Place', amount: `₹${n1.toLocaleString('en-IN')}` },
         { place: '2nd Place', amount: `₹${n2.toLocaleString('en-IN')}` },
@@ -274,21 +312,45 @@ export default function CreateCompetition() {
       matchesCompleted: 0,
     };
 
+    setPublishError('');
     setCheckout({ comp: newComp, prizePool: totalPrize, platformFee });
   }
 
-  function confirmCheckout() {
-    // §12.4 — verification gate resumes this exact closure after verification.
-    gate.run(() => publishCompetition(checkout));
+  async function confirmCheckout() {
+    if (confirmingRef.current || publishingRef.current || !checkout) return;
+    confirmingRef.current = true;
+    const checkoutData = checkout;
+    try {
+      setPublishError('');
+      // §12.4 — ask the authoritative server status first.
+      const verified = await gate.check();
+      if (!verified) {
+        // Close the fee dialog BEFORE opening the verification dialog so the
+        // two overlays can never be mounted at the same time. The pending
+        // action keeps the checkout data and resumes it after verification.
+        setCheckout(null);
+        gate.openGate(
+          () => publishCompetition(checkoutData),
+          () => setCheckout(checkoutData), // cancelled/failed — return to checkout
+        );
+        return;
+      }
+      await publishCompetition(checkoutData);
+    } finally {
+      confirmingRef.current = false;
+    }
   }
 
   async function publishCompetition(checkoutData) {
+    if (!checkoutData || publishingRef.current) return;
     const { comp } = checkoutData;
     const { pendingCoOrganizers } = comp;
 
     // Backend is the source of truth — create there first, merge the returned
     // id/joinCode; failure here must not leave a partially published competition.
+    publishingRef.current = true;
     setPublishing(true);
+    setPublishError('');
     const backendPayload = {
       name: comp.name,
       description: comp.description,
@@ -301,6 +363,7 @@ export default function CreateCompetition() {
       coOrganizers: pendingCoOrganizers,
       prize: comp.prize,
       prizePool: comp.prizePool,
+      prizes: comp.prizes,
       maxTeams: comp.maxTeams,
       maxPlayersPerTeam: comp.maxPlayersPerTeam,
       feeType: comp.feeType,
@@ -308,14 +371,22 @@ export default function CreateCompetition() {
       registrationOpenAt: comp.registrationDates?.open ? new Date(`${comp.registrationDates.open}T00:00:00`).toISOString() : undefined,
       registrationCloseAt: comp.registrationDates?.close ? new Date(`${comp.registrationDates.close}T00:00:00`).toISOString() : undefined,
     };
-    const res = await CompetitionsAPI.create(backendPayload);
+    let res;
+    try {
+      res = await CompetitionsAPI.create(backendPayload);
+    } catch (err) {
+      res = { ok: false, error: 'Unable to reach the backend. The competition was not published.' };
+    }
+    publishingRef.current = false;
     setPublishing(false);
 
     if (!res.ok) {
-      // Backend validation failed — nothing was created; surface the messages.
-      showToast(res.error || 'Publishing failed. Please fix the highlighted issues and try again.', 'error');
-      setErrors((prev) => ({ ...prev, 'co-organizers': 'Fix the co-organizer entries.' }));
-      setCheckout(null);
+      // Backend validation failed — nothing was created. Keep (or reopen) the
+      // checkout dialog so the organizer can read the error and retry.
+      const message = res.error || 'Publishing failed. Please fix the highlighted issues and try again.';
+      setPublishError(message);
+      setCheckout(checkoutData);
+      showToast(message, 'error');
       return;
     }
     const created = res.data || {};
@@ -515,12 +586,33 @@ export default function CreateCompetition() {
               <div className="form-section-title">Prize Pool Distribution (₹)</div>
 
               <div className="prize-tiers">
-                <div className="prize-tier"><div className="prize-rank">🥇</div><div className="prize-label">1st Place</div><input className="prize-input" type="number" id="prize-1" placeholder="0" min="0" value={p1} onChange={(e) => setP1(e.target.value)} {...fieldProps('prize-1')} /><FieldError id="prize-1" /></div>
-                <div className="prize-tier"><div className="prize-rank">🥈</div><div className="prize-label">2nd Place</div><input className="prize-input" type="number" id="prize-2" placeholder="0" min="0" value={p2} onChange={(e) => setP2(e.target.value)} {...fieldProps('prize-2')} /><FieldError id="prize-2" /></div>
-                <div className="prize-tier"><div className="prize-rank">🥉</div><div className="prize-label">3rd Place</div><input className="prize-input" type="number" id="prize-3" placeholder="0" min="0" value={p3} onChange={(e) => setP3(e.target.value)} {...fieldProps('prize-3')} /><FieldError id="prize-3" /></div>
+                <div className="prize-tier">
+                  <div className="prize-tier-main">
+                    <div className="prize-rank">🥇</div>
+                    <div className="prize-label">1st Place</div>
+                    <input className="prize-input" type="number" id="prize-1" placeholder="0" min="0" value={p1} onChange={(e) => setP1(e.target.value)} {...fieldProps('prize-1')} />
+                  </div>
+                  <FieldError id="prize-1" />
+                </div>
+                <div className="prize-tier">
+                  <div className="prize-tier-main">
+                    <div className="prize-rank">🥈</div>
+                    <div className="prize-label">2nd Place</div>
+                    <input className="prize-input" type="number" id="prize-2" placeholder="0" min="0" value={p2} onChange={(e) => setP2(e.target.value)} {...fieldProps('prize-2')} />
+                  </div>
+                  <FieldError id="prize-2" />
+                </div>
+                <div className="prize-tier">
+                  <div className="prize-tier-main">
+                    <div className="prize-rank">🥉</div>
+                    <div className="prize-label">3rd Place</div>
+                    <input className="prize-input" type="number" id="prize-3" placeholder="0" min="0" value={p3} onChange={(e) => setP3(e.target.value)} {...fieldProps('prize-3')} />
+                  </div>
+                  <FieldError id="prize-3" />
+                </div>
               </div>
 
-              <div id="prize-total-row" style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10, padding: 16, borderRadius: 10, background: 'rgba(198,255,51,0.06)', border: '1px solid rgba(198,255,51,0.2)' }}>
+              <div id="prize-total-row" style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10, padding: 16, borderRadius: 10, background: 'rgba(198,255,51,0.06)', border: errors['prize-total'] ? '1px solid rgba(239,68,68,0.6)' : '1px solid rgba(198,255,51,0.2)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.5px' }}>TOTAL PRIZE POOL</span>
                   <span id="prize-total-display" style={{ fontSize: 18, fontWeight: 800, color: '#c6ff33' }}>₹{totalPrize.toLocaleString('en-IN')}</span>
@@ -529,7 +621,8 @@ export default function CreateCompetition() {
                   <span style={{ fontSize: 13, color: 'var(--accent, #c6ff33)', fontWeight: 700, letterSpacing: '0.5px' }}>PLATFORM FEE DUE BY ORGANIZER</span>
                   <span id="total-due-display" style={{ fontSize: 20, fontWeight: 900, color: 'var(--accent, #c6ff33)' }}>₹{platformFee.toLocaleString('en-IN')}</span>
                 </div>
-                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>Payment status is synced with your revenue records after checkout.</p>
+                <FieldError id="prize-total" />
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>Platform fee status is recorded as pending. No external payment gateway is connected in this build.</p>
               </div>
 
               <div style={{ marginTop: 32 }}>
@@ -564,7 +657,7 @@ export default function CreateCompetition() {
           {/* §2.3 — theme-consistent dialog (was orange); focus lands on the confirm action */}
           <div role="dialog" aria-modal="true" aria-label="Publish competition confirmation" style={{ background: '#0f172a', border: '1px solid rgba(198,255,51,0.55)', borderRadius: 16, width: 'min(90vw,480px)', padding: 32, boxShadow: '0 20px 60px #000a', color: '#f1f5f9' }}>
             <h3 style={{ margin: '0 0 4px', fontSize: 20, color: '#f1f5f9' }}>💳 Organizer Platform Fee Checkout</h3>
-            <p style={{ margin: '0 0 20px', fontSize: 13, color: '#94a3b8' }}>Review platform fee payment for "{checkout.comp.name}".</p>
+            <p style={{ margin: '0 0 20px', fontSize: 13, color: '#94a3b8' }}>Review the platform fee due for "{checkout.comp.name}". Publishing continues only after this confirmation; the fee is recorded as pending because no external payment gateway is integrated.</p>
             <div style={{ background: '#1e293b', borderRadius: 12, padding: 16, marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#cbd5e1' }}><span>Tournament Prize Pool:</span><strong style={{ color: '#c6ff33' }}>₹{checkout.prizePool.toLocaleString('en-IN')}</strong></div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#94a3b8', borderTop: '1px solid #334155', paddingTop: 8 }}><span>Fee Calculation:</span><strong style={{ color: '#f1f5f9' }}>{(() => { const c = NexusData && NexusData.getRevenueConfig ? NexusData.getRevenueConfig() : { percentage: 7, minCost: 50 }; return `${c.percentage}% Prize Pool Fee (Min. ₹${c.minCost})`; })()}</strong></div>
@@ -572,8 +665,13 @@ export default function CreateCompetition() {
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#94a3b8', borderTop: '1px solid #334155', paddingTop: 8 }}><span>Participation Fee Model:</span><strong style={{ color: '#f1f5f9' }}>{checkout.comp.entryFee}</strong></div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, color: '#f1f5f9', borderTop: '2px dashed rgba(198,255,51,0.5)', paddingTop: 10, marginTop: 2 }}><strong>Platform Fee Due by Organizer:</strong><strong style={{ color: '#c6ff33', fontSize: 22 }}>₹{checkout.platformFee.toLocaleString('en-IN')}</strong></div>
             </div>
+            {publishError && (
+              <div role="alert" style={{ marginBottom: 16, padding: '10px 14px', borderRadius: 8, background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.45)', color: '#f87171', fontSize: 12.5, lineHeight: 1.5, overflowWrap: 'anywhere' }}>
+                {publishError}
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 12 }}>
-              <button onClick={() => setCheckout(null)} style={{ flex: 1, padding: 12, background: 'none', border: '1px solid #334155', color: '#94a3b8', borderRadius: 8, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
+              <button onClick={() => { setCheckout(null); setPublishError(''); }} disabled={publishing} style={{ flex: 1, padding: 12, background: 'none', border: '1px solid #334155', color: '#94a3b8', borderRadius: 8, cursor: publishing ? 'not-allowed' : 'pointer', fontSize: 14 }}>Cancel</button>
               <button onClick={confirmCheckout} disabled={publishing} style={{ flex: 2, padding: 12, background: publishing ? 'rgba(198,255,51,0.35)' : '#c6ff33', border: 'none', color: '#111', borderRadius: 8, cursor: publishing ? 'wait' : 'pointer', fontSize: 14, fontWeight: 700 }}>
                 {publishing ? 'Publishing…' : '✔ Pay Platform Fee & Publish (₹' + checkout.platformFee.toLocaleString('en-IN') + ')'}
               </button>

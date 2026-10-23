@@ -13,10 +13,26 @@ async function bootstrap() {
   // Global Exception / Error Handling Filter
   app.useGlobalFilters(new GlobalExceptionFilter(fileLogger));
 
-  // Enable CORS — restrict to known frontend origin
+  // Enable CORS — restrict to configured origins. Development defaults cover
+  // both localhost and 127.0.0.1 (different browser origins).
+  const configuredOrigins = String(process.env.FRONTEND_URL || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const developmentOrigins = ['http://localhost:5173', 'http://127.0.0.1:5173'];
+  const allowedOrigins = configuredOrigins.length
+    ? configuredOrigins
+    : (process.env.NODE_ENV === 'production' ? [] : developmentOrigins);
+
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    origin: (origin, callback) => {
+      // Same-origin/non-browser requests have no Origin header.
+      if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error('Origin not allowed by CORS'));
+    },
     credentials: true,
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-user-role', 'x-user-name', 'x-user-id'],
   });
 
   // Global validation pipe

@@ -41,6 +41,8 @@ export class AuthService {
         email: user.email,
         username: user.username,
         role: user.role,
+        verificationStatus: (user as any).verificationStatus || 'unverified',
+        organizerVerificationStatus: (user as any).organizerVerificationStatus || 'unverified',
       },
       message: 'Registration successful. You can now log in.',
     };
@@ -88,6 +90,9 @@ export class AuthService {
         role: user.role,
         adminType: user.adminType || user.role,
         revokedReason: revokedReason,
+        verificationStatus: user.verificationStatus || 'unverified',
+        organizerVerificationStatus: user.organizerVerificationStatus || 'unverified',
+        verifiedAt: user.verifiedAt || null,
       } as any,
       access_token: accessToken,
       message: 'Login successful',

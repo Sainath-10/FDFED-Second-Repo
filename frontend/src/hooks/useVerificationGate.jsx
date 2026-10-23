@@ -18,13 +18,28 @@ export default function useVerificationGate(purpose = 'continue') {
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState(null); // 'verified' | 'unverified' | null
   const pendingRef = useRef(null);
+  const cancelRef = useRef(null);
 
-  /** Returns true when verified; false when the gate modal was opened instead. */
+  /**
+   * Returns true when verified. Always asks the backend (force refresh) so a
+   * stale local flag can never override a persisted "unverified" response.
+   */
   const check = useCallback(async () => {
-    const res = await VerificationAPI.status();
+    const res = await VerificationAPI.status(true);
     const verified = isVerified(res?.data || res?.verificationStatus);
     setStatus(verified ? 'verified' : 'unverified');
     return verified;
+  }, []);
+
+  /**
+   * Opens the shared verification dialog and resumes `action` after success.
+   * `onCancel` (optional) lets the caller restore the UI it closed before
+   * opening this dialog; it is never called after a successful verification.
+   */
+  const openGate = useCallback((action, onCancel) => {
+    pendingRef.current = action;
+    cancelRef.current = onCancel || null;
+    setOpen(true);
   }, []);
 
   /**
@@ -38,28 +53,37 @@ export default function useVerificationGate(purpose = 'continue') {
       await action();
       return true;
     }
-    pendingRef.current = action;
-    setOpen(true);
+    openGate(action);
     return false;
-  }, [check]);
+  }, [check, openGate]);
 
   const modal = (
     <VerificationModal
       open={open}
       onClose={(completed) => {
         setOpen(false);
-        if (!completed) pendingRef.current = null; // cancelled or failed — no duplicate action
+        if (completed) {
+          // Resume the pending action only after the dialog has closed, so the
+          // verification and checkout/publish modals never overlap.
+          const pending = pendingRef.current;
+          pendingRef.current = null;
+          cancelRef.current = null;
+          if (pending) Promise.resolve(pending()).catch(() => { /* action reports its own errors */ });
+          return;
+        }
+        // Cancelled/failed — no pending action runs and the caller's UI is
+        // restored so the user never loses their entered data.
+        pendingRef.current = null;
+        const cancel = cancelRef.current;
+        cancelRef.current = null;
+        if (cancel) cancel();
       }}
       onVerified={() => {
-        // resume the original pending action after verification succeeds
-        const pending = pendingRef.current;
-        pendingRef.current = null;
-        if (pending) Promise.resolve(pending()).catch(() => { /* action reports its own errors */ });
         setStatus('verified');
       }}
       purpose={purpose}
     />
   );
 
-  return { check, run, gateModal: modal, status };
+  return { check, run, openGate, gateModal: modal, status };
 }

@@ -12,6 +12,9 @@ import {
   MAX_PRIZE_POOL,
   MIN_ENTRY_FEE,
   validatePrizePool,
+  parsePrizeAmount,
+  validatePrizeDistribution,
+  resolvePrizeTotal,
   validateEntryFee,
   validateDateWindow,
   isRegistrationClosed,
@@ -79,9 +82,27 @@ export class CompetitionsService {
       throw new BadRequestException(dateErrors.map((e) => e.message).join(' '));
     }
 
-    // §2.2 — prize pool cap ₹10,00,000; admin approval above ₹50,000 no longer required
+    // §2.2 — prize pool cap ₹10,00,000, computed from BOTH the declared prize
+    // and the full distribution list. Admin approval above ₹50,000 is removed.
     const prizeError = validatePrizePool(extras.prize ?? 0);
     if (prizeError) throw new BadRequestException(prizeError);
+
+    const distributionError = validatePrizeDistribution((extras as any).prizes);
+    if (distributionError) throw new BadRequestException(distributionError);
+
+    const poolAmount = parsePrizeAmount((extras as any).prizePool);
+    if (Number.isNaN(poolAmount)) throw new BadRequestException('Prize pool must be a valid number.');
+    if (poolAmount < 0) throw new BadRequestException('Prize pool cannot be negative.');
+
+    const resolvedPrize = resolvePrizeTotal({
+      prize: extras.prize,
+      prizePool: (extras as any).prizePool,
+      prizes: (extras as any).prizes,
+    });
+    const totalPrizeError = validatePrizePool(resolvedPrize);
+    if (totalPrizeError) throw new BadRequestException(totalPrizeError);
+
+    const { prizes: _prizeDistribution, ...competitionExtras } = extras as any;
 
     // §2.2 — minimum entry fee ₹10 where a fee applies
     const feeTypeError = validateEntryFee(extras.feeType, extras.entryFeeAmount);
@@ -118,7 +139,8 @@ export class CompetitionsService {
       createdBy,
       validCoOrganizers,
       {
-        ...(extras as any),
+        ...competitionExtras,
+        prize: resolvedPrize,
         visibility,
         joinCode,
         registrationOpenAt: regOpen,

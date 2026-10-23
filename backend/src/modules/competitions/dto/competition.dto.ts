@@ -1,5 +1,17 @@
-import { IsString, IsDateString, IsEnum, IsOptional, MinLength, IsArray, IsNumber, IsBoolean } from 'class-validator';
+import { IsString, IsDateString, IsEnum, IsOptional, MinLength, IsArray, IsNumber, IsBoolean, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
+
+export class PrizeDistributionDto {
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  place?: string;
+
+  @ApiProperty({ required: false, description: 'Amount, e.g. 500000 or "₹5,00,000"' })
+  @IsOptional()
+  amount?: string | number;
+}
 
 export class CreateCompetitionDto {
   @ApiProperty({
@@ -64,6 +76,14 @@ export class CreateCompetitionDto {
   @IsNumber()
   @IsOptional()
   prize?: number;
+
+  /** §2.2 — full prize distribution; the backend caps the total at ₹10,00,000. */
+  @ApiProperty({ required: false, type: [PrizeDistributionDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PrizeDistributionDto)
+  @IsOptional()
+  prizes?: PrizeDistributionDto[];
 
   @ApiProperty({ required: false })
   @IsString()

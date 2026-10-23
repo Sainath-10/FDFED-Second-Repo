@@ -13,20 +13,33 @@
  */
 import { makeRequest, getUser, setUser } from './api.js';
 
-/** Cached in-session status (refreshed from the backend). */
+/** Cached in-session status, scoped to the authenticated username. */
 let cachedStatus = null;
+let cachedForUser = null;
+
+function currentUserKey() {
+  const user = getUser();
+  return String(user && user.username || '').toLowerCase();
+}
 
 export const VerificationAPI = {
   async status(force = false) {
-    if (!force && cachedStatus) return cachedStatus;
+    const userKey = currentUserKey();
+    if (!force && cachedStatus && cachedForUser === userKey) return cachedStatus;
     const res = await makeRequest('/verification/status', { method: 'GET' });
     if (res.ok && res.data) {
+      // A successful server response is authoritative — even when it says
+      // "unverified" — so it always replaces any cached/local value.
       cachedStatus = res.data;
+      cachedForUser = userKey;
       // keep the authenticated session copy in sync (best-effort)
       const user = getUser();
       if (user && res.data.verificationStatus) {
         setUser({ ...user, verificationStatus: res.data.verificationStatus });
       }
+    } else if (cachedStatus && cachedForUser === userKey) {
+      // Offline/API failure: use the last known status for this same account.
+      return cachedStatus;
     }
     return res;
   },
@@ -45,6 +58,7 @@ export const VerificationAPI = {
     });
     if (res.ok) {
       cachedStatus = { ...(cachedStatus || {}), verificationStatus: 'verified', simulated: true };
+      cachedForUser = currentUserKey();
       const user = getUser();
       if (user) setUser({ ...user, verificationStatus: 'verified' });
     }
@@ -54,6 +68,7 @@ export const VerificationAPI = {
   /** Clears the in-session cache (e.g. on logout / user switch). */
   resetCache() {
     cachedStatus = null;
+    cachedForUser = null;
   },
 };
 

@@ -25,13 +25,12 @@ export class CompetitionsController {
   constructor(private competitionsService: CompetitionsService) {}
 
   @Post()
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.TEAM_LEAD, UserRole.COMP_ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @HttpCode(201)
   @ApiOperation({
     summary: 'Create and auto-approve a new competition',
-    description: 'Organizers (Team Leads) and Admins can create competitions. Tournaments are auto-approved upon creation.',
+    description: 'Any authenticated, verified user can create a competition. The authenticated user becomes the owner/organizer.',
   })
   @ApiResponse({
     status: 201,
@@ -55,8 +54,7 @@ export class CompetitionsController {
   }
 
   @Post(':id/organizers')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.TEAM_LEAD, UserRole.COMP_ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Add a co-organizer to the competition',
@@ -76,8 +74,7 @@ export class CompetitionsController {
   }
 
   @Delete(':id/organizers/:organizerId')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.TEAM_LEAD, UserRole.COMP_ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Remove a co-organizer from the competition',
@@ -156,8 +153,7 @@ export class CompetitionsController {
 
   /** §2.4 — organizer-only reveal of a private competition's join code. */
   @Get(':id/join-code')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.TEAM_LEAD, UserRole.COMP_ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get the join code of a private competition (organizer-only)',
@@ -171,8 +167,7 @@ export class CompetitionsController {
   /** §13.2/§13.4 — organizer-only participant contact list (emails come from the
    * actual user accounts; never exposed publicly or to unrelated users). */
   @Get(':id/participants')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.TEAM_LEAD, UserRole.COMP_ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Participant list with contact emails (authorized organizers/admins only)',
@@ -204,8 +199,7 @@ export class CompetitionsController {
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.TEAM_LEAD, UserRole.COMP_ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Update a competition',
