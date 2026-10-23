@@ -18,6 +18,7 @@ import {
   validateEntryFee,
   validateDateWindow,
   isRegistrationClosed,
+  isCompetitionStarted,
   validateCapacityEdit,
   resolveCoOrganizers,
   generateJoinCode,
@@ -442,6 +443,38 @@ export class CompetitionsService {
       }
     }
     return results;
+  }
+
+  /**
+   * Ends a competition only after its persisted start time, on the server
+   * clock. Registration closure is deliberately NOT treated as a start.
+   */
+  async endCompetition(id: string, requesterUsername: string, requesterRole: string): Promise<ICompetition> {
+    const comp = await this.competitionRepository.findById(id);
+    if (!comp) throw new NotFoundException(`Competition with ID ${id} not found`);
+
+    const isOrganizer = comp.createdBy === requesterUsername || (comp.organizers || []).includes(requesterUsername);
+    const isAdmin = ['admin', 'super_admin', 'comp_admin'].includes(requesterRole);
+    if (!isOrganizer && !isAdmin) {
+      throw new ForbiddenException('Only an organizer of this competition (or an admin) can end it.');
+    }
+
+    if (String(comp.status).toLowerCase() === 'completed') {
+      throw new BadRequestException('This competition has already ended.');
+    }
+    if (!isCompetitionStarted(comp as any)) {
+      throw new BadRequestException('You can end the competition only after the tournament has started.');
+    }
+
+    const updated = await this.competitionRepository.update(id, { status: 'completed' } as any);
+    await this.auditLog.record('COMPETITION_ENDED', {
+      actor: requesterUsername,
+      entityType: 'competition',
+      entityId: id,
+      details: `Competition "${comp.name}" ended by ${requesterUsername}.`,
+      metadata: { startDate: comp.startDate, previousStatus: comp.status },
+    });
+    return updated as any;
   }
 
   async deleteCompetition(id: string, requesterUsername: string, requesterRole: string): Promise<void> {

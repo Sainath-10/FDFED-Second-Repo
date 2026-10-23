@@ -292,6 +292,11 @@ export const CompetitionsAPI = {
     });
   },
 
+  /** Ends a competition. Backend rejects this before the persisted start time. */
+  async end(id) {
+    return makeRequest(`/competitions/${id}/end`, { method: 'PATCH' });
+  },
+
   async delete(id) {
     return makeRequest(`/competitions/${id}`, { method: 'DELETE' });
   },

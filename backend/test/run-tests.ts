@@ -633,6 +633,66 @@ async function competitionServiceTests() {
     assert.equal(comp.status, 'ongoing');
   });
 
+  await test('competition cannot be ended before its persisted start time', async () => {
+    const comp: any = editableComp({ startDate: future, status: 'upcoming' });
+    const spy = { updateCalls: 0 };
+    const service = makeService(comp, [], spy);
+    await expectThrow(
+      () => service.endCompetition('c1', 'alice', 'team_lead'),
+      BadRequestException,
+      'only after the tournament has started',
+    );
+    assert.equal(spy.updateCalls, 0);
+    assert.equal(comp.status, 'upcoming');
+  });
+
+  await test('competition with a missing or invalid start date cannot be ended', async () => {
+    for (const startDate of [null, 'not-a-date']) {
+      const comp: any = editableComp({ startDate, status: 'upcoming' });
+      const spy = { updateCalls: 0 };
+      const service = makeService(comp, [], spy);
+      await expectThrow(
+        () => service.endCompetition('c1', 'alice', 'team_lead'),
+        BadRequestException,
+        'only after the tournament has started',
+      );
+      assert.equal(spy.updateCalls, 0);
+    }
+  });
+
+  await test('a started competition can be ended by its organizer', async () => {
+    const comp: any = editableComp({ startDate: past, status: 'ongoing' });
+    const spy = { updateCalls: 0 };
+    const service = makeService(comp, [], spy);
+    const updated: any = await service.endCompetition('c1', 'alice', 'team_lead');
+    assert.equal(updated.status, 'completed');
+    assert.equal(spy.updateCalls, 1);
+  });
+
+  await test('an already ended competition cannot be ended repeatedly', async () => {
+    const comp: any = editableComp({ startDate: past, status: 'completed' });
+    const spy = { updateCalls: 0 };
+    const service = makeService(comp, [], spy);
+    await expectThrow(
+      () => service.endCompetition('c1', 'alice', 'team_lead'),
+      BadRequestException,
+      'already ended',
+    );
+    assert.equal(spy.updateCalls, 0);
+  });
+
+  await test('an unrelated user cannot end someone else\'s competition', async () => {
+    const comp: any = editableComp({ startDate: past, status: 'ongoing' });
+    const spy = { updateCalls: 0 };
+    const service = makeService(comp, [], spy);
+    await expectThrow(
+      () => service.endCompetition('c1', 'mallory', 'participant'),
+      ForbiddenException,
+      'Only an organizer',
+    );
+    assert.equal(spy.updateCalls, 0);
+  });
+
   await test('participant contacts expose real emails only through the organizer path', async () => {
     const comp: any = { id: 'c1', createdBy: 'alice', organizers: ['alice'], name: 'Cup' };
     const teams = [{ id: 't1', name: 'Alpha', status: 'approved', leaderUsername: 'bob', memberUsernames: ['bob'] }];

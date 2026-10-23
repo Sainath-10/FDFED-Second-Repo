@@ -198,6 +198,17 @@ export class CompetitionsController {
     return competition;
   }
 
+  @Patch(':id/end')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'End a competition',
+    description: 'Only the organizer (or an admin) may end a competition, and only after its persisted start time. Registration closure does not count as a start.',
+  })
+  async endCompetition(@Param('id') id: string, @CurrentUser() user?: any) {
+    return this.competitionsService.endCompetition(id, user?.username || '', user?.role || '');
+  }
+
   @Patch(':id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

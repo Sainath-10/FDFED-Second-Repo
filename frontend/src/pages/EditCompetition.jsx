@@ -77,6 +77,7 @@ export default function EditCompetition() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [endOpen, setEndOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [ending, setEnding] = useState(false);
   const savingRef = useRef(false);
 
   const ended = !!(comp && (comp.ended || comp.status === 'completed'));
@@ -92,6 +93,10 @@ export default function EditCompetition() {
   if (!comp) return <main className="edit-main"><h1 className="edit-page-title">Edit Competition</h1></main>;
 
   const s = STATUS_MAP[status] || STATUS_MAP.upcoming;
+  // Registration closure is intentionally not used here: only the persisted
+  // competition start time decides whether the tournament has started.
+  const startAt = toDate(comp.startDate);
+  const tournamentStarted = !!startAt && Date.now() >= startAt.getTime();
 
   async function validateClient() {
     if (!name.trim()) return 'Competition name is required.';
@@ -193,6 +198,9 @@ export default function EditCompetition() {
           });
         } catch (e) { /* local cache is best-effort only */ }
         showToast('Changes saved successfully!', 'success');
+        // Only a backend-confirmed save redirects. The destination id comes
+        // from the authoritative response, falling back to the current record.
+        navigate(`/pages/competition-detail.html?id=${encodeURIComponent(updated.id || comp.id || id)}`);
         return;
       }
 
@@ -256,12 +264,41 @@ export default function EditCompetition() {
     setTimeout(() => navigate('/pages/my-activity.html'), 1000);
   }
 
-  function confirmEnd() {
-    const next = { ...comp, status: 'completed', ended: true, endedAt: new Date().toISOString() };
-    NexusData.updateCompetition(next);
-    setEndOpen(false);
-    setLocked(true);
-    showToast('Competition ended. All actions are now locked.', 'success');
+  async function confirmEnd() {
+    if (ending) return;
+    if (!tournamentStarted) {
+      showToast('You can end the competition only after the tournament has started.', 'error');
+      return;
+    }
+    if (comp.ended || String(comp.status).toLowerCase() === 'completed') {
+      showToast('This competition has already ended.', 'error');
+      return;
+    }
+
+    setEnding(true);
+    try {
+      const res = await CompetitionsAPI.end(comp.id || id);
+      if (!res.ok) {
+        showToast(res.error || 'Unable to end the competition.', 'error');
+        return;
+      }
+      const updated = res.data || {};
+      NexusData.updateCompetition({
+        ...comp,
+        ...updated,
+        status: 'completed',
+        ended: true,
+        endedAt: new Date().toISOString(),
+      });
+      setStatus('completed');
+      setEndOpen(false);
+      setLocked(true);
+      showToast('Competition ended. All actions are now locked.', 'success');
+    } catch (err) {
+      showToast(err.message || 'Unable to end the competition.', 'error');
+    } finally {
+      setEnding(false);
+    }
   }
 
   function onBannerFile(event) {
@@ -433,11 +470,25 @@ export default function EditCompetition() {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fb923c" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="8" y1="12" x2="16" y2="12" /></svg>
                 End Competition
               </div>
-              <p className="edit-danger-desc" style={{ color: 'rgba(255,255,255,0.55)' }}>Ending this competition marks it as completed. All actions (matches, team approvals, disputes) will be locked. This cannot be undone.</p>
-              <button className="edit-btn-delete" id="btn-end-comp" disabled={isLocked} onClick={() => { if (comp.ended || comp.status === 'completed') { showToast('This competition has already been ended.', 'error'); return; } setEndOpen(true); }} style={{ background: 'rgba(251,146,60,0.15)', border: '1px solid rgba(251,146,60,0.4)', color: '#fb923c' }}>
+              <p className="edit-danger-desc" style={{ color: 'rgba(255,255,255,0.55)' }}>Ending this competition marks it as completed. This action becomes available only after the tournament&apos;s scheduled start time, and cannot be undone.</p>
+              <button
+                className="edit-btn-delete"
+                id="btn-end-comp"
+                disabled={isLocked || !tournamentStarted || ending}
+                title={!tournamentStarted ? 'Available only after the tournament has started.' : undefined}
+                onClick={() => {
+                  if (!tournamentStarted) { showToast('You can end the competition only after the tournament has started.', 'error'); return; }
+                  if (comp.ended || comp.status === 'completed') { showToast('This competition has already been ended.', 'error'); return; }
+                  setEndOpen(true);
+                }}
+                style={{ background: 'rgba(251,146,60,0.15)', border: '1px solid rgba(251,146,60,0.4)', color: '#fb923c', opacity: !tournamentStarted ? 0.55 : 1, cursor: !tournamentStarted ? 'not-allowed' : 'pointer' }}
+              >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="8" y1="12" x2="16" y2="12" /></svg>
-                END COMPETITION
+                {ending ? 'ENDING…' : 'END COMPETITION'}
               </button>
+              {!tournamentStarted && (
+                <p className="edit-hint" style={{ marginTop: 0 }}>You can end the competition only after the tournament has started.</p>
+              )}
             </div>
 
             <div className="edit-panel edit-panel-danger">
@@ -486,7 +537,7 @@ export default function EditCompetition() {
             <p style={{ color: '#9aa4b2', fontSize: 13, marginBottom: 24, lineHeight: 1.6 }}>Once ended, all actions will be locked — no new matches, team approvals, join requests, or disputes will be allowed. The competition will be marked as <strong style={{ color: '#fff' }}>Completed</strong>.</p>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
               <button className="btn-cancel" onClick={() => setEndOpen(false)}>Cancel</button>
-              <button className="btn-submit" id="btn-confirm-end" style={{ background: '#fb923c', color: '#000', fontWeight: 800 }} onClick={confirmEnd}>✓ Confirm End</button>
+              <button className="btn-submit" id="btn-confirm-end" disabled={ending} style={{ background: '#fb923c', color: '#000', fontWeight: 800, opacity: ending ? 0.7 : 1, cursor: ending ? 'wait' : 'pointer' }} onClick={confirmEnd}>{ending ? 'Ending…' : '✓ Confirm End'}</button>
             </div>
           </div>
         </div>
