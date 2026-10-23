@@ -7,20 +7,19 @@
  * - Registration closed (regDeadline/regClose past): name, game, type and
  *   description fields are disabled — and the backend enforces the same rule for
  *   any direct API request (competitions.service.updateCompetition).
- * - Prize pool: immutable — displayed read-only, never sent in the payload (§3.2).
- * - Capacity: max teams / max players per team may only stay or GROW, never
- *   shrink below current values, registered teams or roster sizes (§3.3).
- * - Dates: registration window, competition start and competition end are
- *   validated as SEPARATE concepts; reg deadline ending before the competition
- *   starts is legitimate (§3.4); end >= start enforced; timezone-safe compare
- *   via Date values, not string comparison.
- * - Format & Season are no longer editable fields (§3.5). The persisted format
- *   value is preserved untouched so match scheduling keeps working.
+ * - Removed from the edit UI: prize pool, start/end dates, max teams, max
+ *   players per team, and the registration deadline. They are omitted from the
+ *   update payload so the persisted values remain untouched.
+ * - Co-organizers are editable in full; every username is validated against
+ *   registered accounts on save, and the backend repeats the validation and
+ *   rejects the entire update if any username is invalid.
+ * - Format & Season are not editable fields. The persisted format value is
+ *   preserved untouched so match scheduling keeps working.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import NexusData from '../services/data.js';
-import { CompetitionsAPI, TeamsAPI, getUser } from '../services/api.js';
+import { AuthAPI, CompetitionsAPI, getUser } from '../services/api.js';
 import { showToast } from '../lib/toast.js';
 import '../styles/pages/edit-competition.css';
 
@@ -29,12 +28,6 @@ const STATUS_MAP = {
   upcoming: { label: 'Upcoming', dot: 'dot-upcoming', pct: 60 },
   ongoing: { label: 'Ongoing', dot: '', pct: 85 },
   completed: { label: 'Completed', dot: 'dot-completed', pct: 100 },
-};
-
-const parsePrize = (str) => {
-  const n = String(str || '').replace(/[₹,\s]/g, '');
-  const num = parseFloat(n);
-  return isNaN(num) ? 0 : num;
 };
 
 /** §3.4 — timezone-safe comparisons happen on Date values, not "YYYY-MM-DD" strings. */
@@ -61,18 +54,6 @@ export function isRegistrationClosed(comp, now = new Date()) {
   return !!end && now.getTime() >= end.getTime();
 }
 
-function formatDateDisplay(start, end) {
-  if (!start) return '';
-  const s = new Date(start);
-  const e = end ? new Date(end) : null;
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  if (!e) return `${months[s.getMonth()]} ${s.getDate()}, ${s.getFullYear()}`;
-  if (s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear()) {
-    return `${months[s.getMonth()]} ${s.getDate()}–${e.getDate()}, ${s.getFullYear()}`;
-  }
-  return `${months[s.getMonth()]} ${s.getDate()} – ${months[e.getMonth()]} ${e.getDate()}, ${s.getFullYear()}`;
-}
-
 export default function EditCompetition() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -81,25 +62,22 @@ export default function EditCompetition() {
   const comp = useMemo(() => (id && NexusData ? NexusData.getCompetitionById(id) : null), [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const creator = comp ? (comp.createdBy || comp.organizerId || 'organizer') : 'organizer';
-  const initialCoOrgs = comp && Array.isArray(comp.organizers) ? comp.organizers.filter((u) => u !== creator) : [];
+  const initialCoOrgs = comp && Array.isArray(comp.organizers)
+    ? comp.organizers.filter((u) => String(u).toLowerCase() !== String(creator).toLowerCase())
+    : [];
 
   const [name, setName] = useState(comp ? comp.name || '' : '');
   const [description, setDescription] = useState(comp ? comp.description || '' : '');
-  const [maxplayers, setMaxplayers] = useState(comp && comp.maxPlayersPerTeam != null ? String(comp.maxPlayersPerTeam) : '');
-  const [maxteams, setMaxteams] = useState(comp && comp.maxTeams != null ? String(comp.maxTeams) : '');
   const [game, setGame] = useState(comp ? comp.game || '' : '');
   const [type, setType] = useState(comp ? comp.type || 'league' : 'league');
   const [status, setStatus] = useState(comp ? comp.status || 'upcoming' : 'upcoming');
-  const [startdate, setStartdate] = useState(comp ? comp.startDate || '' : '');
-  const [enddate, setEnddate] = useState(comp ? comp.endDate || '' : '');
-  const [regdeadline, setRegdeadline] = useState(comp && comp.regDeadline ? comp.regDeadline : '');
   const [coOrgs, setCoOrgs] = useState(initialCoOrgs.length ? initialCoOrgs : ['']);
   const [bannerSrc, setBannerSrc] = useState(null);
   const [locked, setLocked] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [endOpen, setEndOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [registeredTeams, setRegisteredTeams] = useState(null);
+  const savingRef = useRef(false);
 
   const ended = !!(comp && (comp.ended || comp.status === 'completed'));
   const isLocked = locked || ended;
@@ -111,150 +89,137 @@ export default function EditCompetition() {
     if (!comp) { navigate('/pages/my-activity.html'); }
   }, [id, comp, navigate]);
 
-  // §3.3 — live registered-team count backs the capacity hints and validation copy.
-  useEffect(() => {
-    let cancelled = false;
-    if (!id) return undefined;
-    TeamsAPI.getByCompetition(id)
-      .then((res) => {
-        if (cancelled) return;
-        const list = Array.isArray(res?.data) ? res.data : [];
-        setRegisteredTeams(list.filter((t) => t.status !== 'rejected' && t.status !== 'banned').length);
-      })
-      .catch(() => { if (!cancelled) setRegisteredTeams(null); });
-    return () => { cancelled = true; };
-  }, [id]);
-
   if (!comp) return <main className="edit-main"><h1 className="edit-page-title">Edit Competition</h1></main>;
 
   const s = STATUS_MAP[status] || STATUS_MAP.upcoming;
 
   async function validateClient() {
-    const trimmed = name.trim();
-    if (!trimmed) return 'Competition name is required.';
-
-    // §3.4 — chronology validated on Date values (timezone-safe, no string compare,
-    // no over-restriction of the competition start by the registration deadline).
-    const regEnd = regdeadline ? registrationEndValue({ regDeadline: regdeadline }) : registrationEndValue(comp);
-    const start = toDate(startdate);
-    const end = toDate(enddate);
-    if (start && end && start.getTime() > end.getTime()) {
-      return 'End date must be on or after the start date.';
-    }
-    if (regEnd && end && regEnd.getTime() > end.getTime()) {
-      return 'Registration closure cannot come after the competition end date.';
-    }
-    if (regEnd && isNaN(new Date(regdeadline || comp.regDeadline).getTime())) {
-      return 'Registration deadline is invalid.';
-    }
+    if (!name.trim()) return 'Competition name is required.';
     return null;
   }
 
   async function saveChanges() {
     if (isLocked) { showToast('This competition has ended and can no longer be edited.', 'error'); return; }
-    if (regClosed) {
-      // Always allow status updates after closure — but never the locked fields.
-      // This is a UI mirror of the backend §3.1 rule; backend still enforces it.
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      await performSave();
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
-    if (saving) return;
+  }
 
+  async function performSave() {
     const clientError = await validateClient();
     if (clientError) { showToast(clientError, 'error'); return; }
 
-    const currentMaxTeams = parseInt(comp.maxTeams, 10) || 0;
-    const currentMaxPlayers = parseInt(comp.maxPlayersPerTeam, 10) || 0;
-    const nextMaxTeams = parseInt(maxteams, 10);
-    const nextMaxPlayers = parseInt(maxplayers, 10);
-    if (nextMaxTeams && nextMaxTeams < currentMaxTeams) {
-      showToast(`Max teams cannot decrease below the current value (${currentMaxTeams}).`, 'error');
-      return;
-    }
-    if (nextMaxPlayers && nextMaxPlayers < currentMaxPlayers) {
-      showToast(`Max players per team cannot decrease below the current value (${currentMaxPlayers}).`, 'error');
-      return;
-    }
-    const registeredCount = registeredTeams != null ? registeredTeams : null;
-    if (registeredCount != null && nextMaxTeams && nextMaxTeams < Math.max(registeredCount, 2)) {
-      showToast(`Max teams cannot be smaller than the teams already registered (${registeredCount}).`, 'error');
+    // Build the desired co-organizer list from all non-empty rows. The creator is
+    // never assignable, duplicates are collapsed, and every username is checked
+    // against the authoritative backend before any update is sent.
+    const cleanCoOrgs = [];
+    const seen = new Set();
+    let selfAssignment = '';
+    coOrgs.forEach((raw) => {
+      const value = String(raw || '').trim().replace(/^@/, '');
+      if (!value) return;
+      const key = value.toLowerCase();
+      if (key === String(creator).toLowerCase()) { selfAssignment = value; return; }
+      if (seen.has(key)) return;
+      seen.add(key);
+      cleanCoOrgs.push(value);
+    });
+
+    if (selfAssignment) {
+      showToast('The creator is already the primary organizer; self-assignment is not allowed.', 'error');
       return;
     }
 
-    // §3.2 — prize pool is never sent; the backend rejects it anyway.
-    const cleanCoOrgs = coOrgs.map((v) => String(v || '').trim().replace(/^@/, '')).filter(Boolean);
+    if (cleanCoOrgs.length) {
+      let validationError = '';
+      const checks = await Promise.all(cleanCoOrgs.map(async (username) => {
+        const res = await AuthAPI.userExists(username);
+        if (!res.ok) {
+          if (!validationError) {
+            if (res.status === 401) validationError = 'Your session has expired. Please log in again.';
+            else if (res.status === 403) validationError = 'You are not authorized to validate co-organizers.';
+            else validationError = 'Unable to validate co-organizer usernames. Please try again.';
+          }
+          return { username, exists: false };
+        }
+        return { username, exists: !!res.data?.exists };
+      }));
+
+      if (validationError) {
+        showToast(validationError, 'error');
+        return;
+      }
+
+      const unknown = checks.filter((check) => !check.exists).map((check) => check.username);
+      if (unknown.length) {
+        showToast(
+          unknown.length === 1
+            ? `Co-organizer username "${unknown[0]}" does not exist. Please select a valid registered username.`
+            : `Co-organizer usernames ${unknown.map((u) => `"${u}"`).join(', ')} do not exist. Please select valid registered usernames.`,
+          'error',
+        );
+        return;
+      }
+    }
+
     const user = getUser();
     const sessionName = user?.username || user?.email || creator;
-
     const payload = {
+      name: name.trim(),
       description: String(description).trim(),
-      maxTeams: nextMaxTeams >= 2 ? nextMaxTeams : undefined,
-      maxPlayersPerTeam: nextMaxPlayers >= 1 ? nextMaxPlayers : undefined,
-      startDate: startdate || undefined,
-      endDate: enddate || undefined,
-      registrationCloseAt: regdeadline || undefined,
+      game: game || undefined,
+      type: type || undefined,
       status: status || undefined,
-      addCoOrganizers: cleanCoOrgs.filter((u) => u.toLowerCase() !== String(creator).toLowerCase()),
+      coOrganizers: cleanCoOrgs,
     };
 
-    setSaving(true);
-    let updated = null;
-    let backendError = null;
     try {
       const res = await CompetitionsAPI.update(comp.id || id, payload);
       if (res.ok && res.data) {
-        updated = res.data;
-      } else {
-        backendError = res.error || 'The backend rejected the update.';
+        const updated = res.data;
+        try {
+          NexusData.updateCompetition({
+            ...comp,
+            ...updated,
+            organizers: Array.isArray(updated.organizers) && updated.organizers.length
+              ? updated.organizers
+              : Array.from(new Set([creator, ...cleanCoOrgs])),
+          });
+        } catch (e) { /* local cache is best-effort only */ }
+        showToast('Changes saved successfully!', 'success');
+        return;
       }
-    } catch (err) {
-      backendError = err.message || 'Backend update failed.';
-    }
 
-    if (updated) {
-      // Mirror the authoritative result into the local cache so listings stay consistent.
-      const dates = startdate || enddate ? formatDateDisplay(startdate, enddate) : comp.dates;
-      try {
-        NexusData.updateCompetition({
+      const backendError = res.error || 'The backend rejected the update.';
+      if (/backend|network|Failed to fetch|is the backend/i.test(String(backendError))) {
+        // Offline fallback keeps the local record usable; it never overwrites
+        // dates, prize pool, or capacity because those fields are not in the form.
+        const updatedLocal = {
           ...comp,
-          ...updated,
-          dates,
-          organizers: Array.isArray(updated.organizers) && updated.organizers.length
-            ? updated.organizers
-            : Array.from(new Set([creator, ...cleanCoOrgs])),
-        });
-      } catch (e) { /* local cache is best-effort only */ }
-      setSaving(false);
-      showToast('Changes saved successfully!', 'success');
-      return;
-    }
+          name: name.trim(),
+          description: String(description).trim(),
+          game: game || comp.game,
+          type: type || comp.type,
+          status: status || comp.status,
+          organizers: Array.from(new Set([creator, ...cleanCoOrgs])),
+          updatedBy: sessionName,
+        };
+        NexusData.updateCompetition(updatedLocal);
+        showToast('Saved locally (backend offline). Re-sync when the API is back.', 'success');
+        return;
+      }
 
-    // Backend unreachable: keep the offline localStorage path working.
-    if (backendError && /backend|network|Failed to fetch|is the backend/i.test(String(backendError))) {
-      const dates = startdate || enddate ? formatDateDisplay(startdate, enddate) : comp.dates;
-      const updatedLocal = {
-        ...comp,
-        name: name.trim(),
-        game: game || comp.game,
-        type: type || comp.type,
-        status: status || comp.status,
-        description: String(description).trim(),
-        maxPlayersPerTeam: nextMaxPlayers >= 1 ? nextMaxPlayers : comp.maxPlayersPerTeam,
-        maxTeams: nextMaxTeams >= 2 ? nextMaxTeams : comp.maxTeams,
-        dates,
-        startDate: startdate || comp.startDate,
-        endDate: enddate || comp.endDate,
-        regDeadline: regdeadline || comp.regDeadline,
-        organizers: Array.from(new Set([creator, ...cleanCoOrgs])),
-        updatedBy: sessionName,
-      };
-      NexusData.updateCompetition(updatedLocal);
-      setSaving(false);
-      showToast('Saved locally (backend offline). Re-sync when the API is back.', 'success');
-      return;
+      // Surface backend validation verbatim, including invalid co-organizer names.
+      showToast(backendError, 'error');
+    } catch (err) {
+      showToast(err.message || 'Backend update failed.', 'error');
     }
-
-    setSaving(false);
-    // §16 — display the backend validation message verbatim.
-    showToast(backendError || 'Unable to save changes.', 'error');
   }
 
   function forceDeleteCompetitionById(targetId) {
@@ -309,8 +274,6 @@ export default function EditCompetition() {
   }
 
   const lockedFieldProps = regClosed || isLocked ? { disabled: true } : {};
-  const capacityFloorTeams = parseInt(comp.maxTeams, 10) || 0;
-  const capacityFloorPlayers = parseInt(comp.maxPlayersPerTeam, 10) || 0;
 
   return (
     <>
@@ -336,7 +299,7 @@ export default function EditCompetition() {
 
         {regClosed && !isLocked && (
           <div style={{ background: 'rgba(198,255,51,0.08)', border: '1px solid rgba(198,255,51,0.3)', color: '#c6ff33', padding: '12px 16px', borderRadius: 10, fontSize: 13, fontWeight: 700, textAlign: 'center', marginBottom: 16, letterSpacing: '0.5px' }}>
-            🔒 Registration has closed. Name, game, competition type and description can no longer be changed. Schedule, status and capacity (grow-only) can still be updated.
+            🔒 Registration has closed. Name, game, competition type and description can no longer be changed. Status and co-organizers can still be updated.
           </div>
         )}
 
@@ -375,46 +338,6 @@ export default function EditCompetition() {
                 <textarea className="edit-textarea" id="ef-description" rows="4" placeholder="Describe your competition..." value={description} onChange={(e) => setDescription(e.target.value)} {...lockedFieldProps} />
               </div>
 
-              {/* §3.2 — prize pool is immutable: shown read-only, never editable. */}
-              <div className="edit-form-row">
-                <div className="edit-form-group">
-                  <label className="edit-label">Prize Pool (RUPEES) — Locked</label>
-                  <div className="edit-input-prefix-wrap">
-                    <span className="edit-input-prefix">₹</span>
-                    <input type="number" className="edit-input edit-input-prefixed" id="ef-prize" value={parsePrize(comp.prizePool || comp.prize)} disabled readOnly title="The prize pool cannot be modified after creation." style={{ opacity: 0.65, cursor: 'not-allowed' }} />
-                  </div>
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginTop: 4 }}>The prize pool cannot be changed after the competition is created.</span>
-                </div>
-                <div className="edit-form-group">
-                  <label className="edit-label">Max Players per Team</label>
-                  <input type="number" className="edit-input" id="ef-maxplayers" placeholder="5" min={capacityFloorPlayers || 1} max="20" value={maxplayers} onChange={(e) => setMaxplayers(e.target.value)} disabled={isLocked} />
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginTop: 4 }}>Cannot be decreased (currently {capacityFloorPlayers || '—'}).</span>
-                </div>
-              </div>
-
-              <div className="edit-form-row">
-                <div className="edit-form-group">
-                  <label className="edit-label">Start Date</label>
-                  <input type="date" className="edit-input" id="ef-startdate" value={startdate} onChange={(e) => setStartdate(e.target.value)} disabled={isLocked} />
-                </div>
-                <div className="edit-form-group">
-                  <label className="edit-label">End Date</label>
-                  <input type="date" className="edit-input" id="ef-enddate" value={enddate} onChange={(e) => setEnddate(e.target.value)} disabled={isLocked} />
-                </div>
-              </div>
-
-              <div className="edit-form-row">
-                <div className="edit-form-group">
-                  <label className="edit-label">Max Teams {registeredTeams != null ? `(${registeredTeams} registered)` : ''}</label>
-                  <input type="number" className="edit-input" id="ef-maxteams" placeholder="32" min={Math.max(capacityFloorTeams, registeredTeams ?? 0) || 2} max="512" value={maxteams} onChange={(e) => setMaxteams(e.target.value)} disabled={isLocked} />
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginTop: 4 }}>Cannot be decreased (currently {capacityFloorTeams || '—'}).</span>
-                </div>
-                <div className="edit-form-group">
-                  <label className="edit-label">Registration Deadline</label>
-                  <input type="date" className="edit-input" id="ef-regdeadline" value={regdeadline} onChange={(e) => setRegdeadline(e.target.value)} disabled={isLocked} />
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginTop: 4 }}>The competition may start before or after this date — they are independent.</span>
-                </div>
-              </div>
             </div>
 
             <div className="edit-panel">

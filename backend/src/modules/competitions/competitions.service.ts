@@ -313,6 +313,41 @@ export class CompetitionsService {
       throw new BadRequestException('Registration has closed: "description" can no longer be edited.');
     }
 
+    // §2.1 — co-organizers are validated in full BEFORE any database write.
+    // Nonexistent usernames reject the whole update, so existing co-organizers
+    // and every other competition field remain untouched.
+    let nextOrganizers: string[] | undefined;
+    if (updateCompetitionDto.coOrganizers !== undefined && updateCompetitionDto.coOrganizers !== null) {
+      const requested = (Array.isArray(updateCompetitionDto.coOrganizers) ? updateCompetitionDto.coOrganizers : [])
+        .map((value) => String(value || '').trim().replace(/^@/, ''))
+        .filter(Boolean);
+
+      if (!requested.length) {
+        nextOrganizers = [comp.createdBy];
+      } else {
+        const allUsers = await this.userRepository.findAll();
+        const known = new Set(allUsers.map((u) => String(u.username || '').toLowerCase()));
+        const unknown = requested.filter((username) => !known.has(username.toLowerCase()));
+        if (unknown.length) {
+          throw new BadRequestException(
+            unknown.length === 1
+              ? `Co-organizer username "${unknown[0]}" does not exist. Please select a valid registered username.`
+              : `Co-organizer usernames ${unknown.map((u) => `"${u}"`).join(', ')} do not exist. Please select valid registered usernames.`,
+          );
+        }
+
+        const { coOrganizers, errors } = resolveCoOrganizers(
+          requested,
+          comp.createdBy,
+          allUsers.map((u) => String(u.username || '')),
+        );
+        if (errors.length) {
+          throw new BadRequestException(errors.map((e) => e.message).join(' '));
+        }
+        nextOrganizers = Array.from(new Set([comp.createdBy, ...coOrganizers].filter(Boolean)));
+      }
+    }
+
     // §3.3 capacity checks with real registered teams + roster sizes
     if (updateCompetitionDto.maxTeams !== undefined || updateCompetitionDto.maxPlayersPerTeam !== undefined) {
       const teams = await this.teamRepository.find({ where: { competitionId: id } });
@@ -345,7 +380,10 @@ export class CompetitionsService {
     const updates: Partial<ICompetition> = {};
     if (updateCompetitionDto.name !== undefined) updates.name = updateCompetitionDto.name;
     if (updateCompetitionDto.description !== undefined) updates.description = updateCompetitionDto.description;
+    if (updateCompetitionDto.game !== undefined) (updates as any).game = updateCompetitionDto.game;
+    if (updateCompetitionDto.type !== undefined) (updates as any).type = updateCompetitionDto.type;
     if (updateCompetitionDto.status) updates.status = updateCompetitionDto.status;
+    if (nextOrganizers !== undefined) (updates as any).organizers = nextOrganizers;
     if (updateCompetitionDto.endDate) updates.endDate = new Date(updateCompetitionDto.endDate);
     if (updateCompetitionDto.startDate) (updates as any).startDate = new Date(updateCompetitionDto.startDate);
     if (updateCompetitionDto.maxTeams !== undefined) (updates as any).maxTeams = updateCompetitionDto.maxTeams;

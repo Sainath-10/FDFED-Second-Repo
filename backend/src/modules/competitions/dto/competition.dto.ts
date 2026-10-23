@@ -205,14 +205,24 @@ export class UpdateCompetitionDto {
   @IsOptional()
   description?: string;
 
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  game?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  type?: string;
+
   @ApiProperty({
     description: 'Competition status',
-    enum: ['draft', 'active', 'completed'],
+    enum: ['draft', 'active', 'upcoming', 'ongoing', 'completed'],
     required: false,
   })
-  @IsEnum(['draft', 'active', 'completed'])
+  @IsEnum(['draft', 'active', 'upcoming', 'ongoing', 'completed'])
   @IsOptional()
-  status?: 'draft' | 'active' | 'completed';
+  status?: 'draft' | 'active' | 'upcoming' | 'ongoing' | 'completed';
 
   @ApiProperty({
     description: 'End date in ISO format',
@@ -262,6 +272,7 @@ export class UpdateCompetitionDto {
   /** coOrganizers — validated to exist, no self-assignment, no duplicates (§2.1) */
   @ApiProperty({ type: [String], required: false })
   @IsArray()
+  @IsString({ each: true })
   @IsOptional()
   coOrganizers?: string[];
 

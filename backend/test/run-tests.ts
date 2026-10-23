@@ -339,7 +339,7 @@ async function competitionServiceTests() {
     { id: 'u2', username: 'bob', email: 'bob@nexus.gg', verificationStatus: 'unverified' },
   ];
 
-  function makeService(comp: any, teams: any[] = []) {
+  function makeService(comp: any, teams: any[] = [], spy: { updateCalls?: number } = null) {
     const userRepository = {
       findById: async (id: string) => users.find((u) => u.id === id) || null,
       findAll: async () => users,
@@ -352,7 +352,11 @@ async function competitionServiceTests() {
         id: 'c1', name, description, startDate, endDate, createdBy,
         organizers: [createdBy, ...coOrganizers], ...extras,
       }),
-      update: async (_id: string, updates: any) => { Object.assign(comp, updates); return comp; },
+      update: async (_id: string, updates: any) => {
+        if (spy) spy.updateCalls = (spy.updateCalls || 0) + 1;
+        Object.assign(comp, updates);
+        return comp;
+      },
     };
     const teamRepository = { find: async () => teams };
     return new CompetitionsService(
@@ -528,6 +532,105 @@ async function competitionServiceTests() {
     assert.ok(Array.isArray(approvalRoles) && approvalRoles.includes('admin'));
     const deleteRoles = Reflect.getMetadata(ROLES_KEY, CompetitionsController.prototype.deleteCompetition);
     assert.deepEqual(deleteRoles, ['super_admin']);
+  });
+
+  function editableComp(overrides: any = {}) {
+    return {
+      id: 'c1',
+      name: 'Editable Cup',
+      description: 'Original description',
+      game: 'Valorant',
+      type: 'league',
+      status: 'upcoming',
+      createdBy: 'alice',
+      organizers: ['alice', 'bob'],
+      maxTeams: 8,
+      maxPlayersPerTeam: 4,
+      prize: 5000,
+      feeType: 'free',
+      startDate: future,
+      endDate: new Date(future.getTime() + 86_400_000),
+      registrationCloseAt: new Date(future.getTime() + 86_400_000),
+      ...overrides,
+    };
+  }
+
+  await test('edit rejects a nonexistent co-organizer and writes nothing', async () => {
+    const comp: any = editableComp();
+    const spy = { updateCalls: 0 };
+    const service = makeService(comp, [], spy);
+    await expectThrow(
+      () => service.updateCompetition('c1', { coOrganizers: ['bob', 'randomuser123'] } as any, 'alice', 'team_lead'),
+      BadRequestException,
+      'randomuser123',
+    );
+    assert.equal(spy.updateCalls, 0, 'no partial update may occur');
+    assert.deepEqual(comp.organizers, ['alice', 'bob'], 'existing co-organizers must be preserved');
+  });
+
+  await test('edit validates multiple co-organizers together before updating', async () => {
+    const comp: any = editableComp();
+    const spy = { updateCalls: 0 };
+    const service = makeService(comp, [], spy);
+    await expectThrow(
+      () => service.updateCompetition('c1', { coOrganizers: ['bob', 'ghost1', 'ghost2'] } as any, 'alice', 'team_lead'),
+      BadRequestException,
+      'ghost1',
+    );
+    assert.equal(spy.updateCalls, 0);
+  });
+
+  await test('edit saves valid co-organizers and deduplicates them', async () => {
+    const comp: any = editableComp();
+    const spy = { updateCalls: 0 };
+    const service = makeService(comp, [], spy);
+    const updated: any = await service.updateCompetition(
+      'c1',
+      { coOrganizers: ['bob', '@bob'] } as any,
+      'alice',
+      'team_lead',
+    );
+    assert.deepEqual(updated.organizers, ['alice', 'bob']);
+    assert.equal(spy.updateCalls, 1);
+  });
+
+  await test('edit rejects self-assignment and preserves existing organizers', async () => {
+    const comp: any = editableComp();
+    const spy = { updateCalls: 0 };
+    const service = makeService(comp, [], spy);
+    await expectThrow(
+      () => service.updateCompetition('c1', { coOrganizers: ['alice'] } as any, 'alice', 'team_lead'),
+      BadRequestException,
+      'self-assignment',
+    );
+    assert.equal(spy.updateCalls, 0);
+    assert.deepEqual(comp.organizers, ['alice', 'bob']);
+  });
+
+  await test('edit preserves co-organizers when the field is omitted, and can clear them', async () => {
+    const comp: any = editableComp();
+    const service = makeService(comp, [], { updateCalls: 0 });
+    await service.updateCompetition('c1', { name: 'Renamed Cup' } as any, 'alice', 'team_lead');
+    assert.deepEqual(comp.organizers, ['alice', 'bob']);
+    await service.updateCompetition('c1', { coOrganizers: [] } as any, 'alice', 'team_lead');
+    assert.deepEqual(comp.organizers, ['alice']);
+  });
+
+  await test('edit saves remaining fields: name, game, type, description and status', async () => {
+    const comp: any = editableComp();
+    const service = makeService(comp, [], { updateCalls: 0 });
+    await service.updateCompetition('c1', {
+      name: 'Updated Cup',
+      game: 'Dota 2',
+      type: 'tournament',
+      description: 'Updated description',
+      status: 'ongoing',
+    } as any, 'alice', 'team_lead');
+    assert.equal(comp.name, 'Updated Cup');
+    assert.equal(comp.game, 'Dota 2');
+    assert.equal(comp.type, 'tournament');
+    assert.equal(comp.description, 'Updated description');
+    assert.equal(comp.status, 'ongoing');
   });
 
   await test('participant contacts expose real emails only through the organizer path', async () => {
