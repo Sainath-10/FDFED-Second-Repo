@@ -9,6 +9,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import NexusData from '../services/data.js';
+import { MatchesAPI } from '../services/api.js';
+import { showToast } from '../lib/toast.js';
 import '../styles/pages/subpage.css';
 
 const PAGE_SIZE = 5;
@@ -36,11 +38,34 @@ export default function CompManageMatches() {
   const [team2, setTeam2] = useState('');
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
+  const [backendMatches, setBackendMatches] = useState([]);
+  const [backendLoaded, setBackendLoaded] = useState(false);
+  const [apiError, setApiError] = useState('');
+  const [busy, setBusy] = useState(false);
 
   const comp = useMemo(() => {
     if (!id || !NexusData) return null;
     const found = NexusData.getCompetitionById(id);
     return found || { id, name: 'New Competition', game: '—', type: 'league', status: 'upcoming', teams: [], matches: [], maxTeams: 16, format: '—', season: '—', totalMatches: 0, matchesCompleted: 0 };
+  }, [id, version]);
+
+  // §8/§11 — the organizer table reflects the authoritative match service.
+  useEffect(() => {
+    let cancelled = false;
+    if (!id) return undefined;
+    MatchesAPI.getByCompetition(id)
+      .then((res) => {
+        if (cancelled) return;
+        if (res.ok && Array.isArray(res.data)) {
+          setBackendMatches(res.data);
+          setBackendLoaded(true);
+          setApiError('');
+        } else if (res.error && !/backend|network|Failed to fetch|is the backend/i.test(String(res.error))) {
+          setApiError(res.error);
+        }
+      })
+      .catch(() => { /* keep local fallback */ });
+    return () => { cancelled = true; };
   }, [id, version]);
 
   useEffect(() => {
@@ -62,7 +87,25 @@ export default function CompManageMatches() {
   const roundOptions = ROUND_OPTIONS[getCompType(comp)] || ROUND_OPTIONS.tournament;
   const effectiveRound = roundOptions.includes(round) ? round : roundOptions[0];
 
-  const matches = comp.matches || [];
+  const apiMatches = backendMatches.map((m) => {
+    const [score1 = '—', score2 = '—'] = String(m.score || '').split(/\s*[-:]\s*/);
+    const scheduled = m.scheduledAt ? new Date(m.scheduledAt) : null;
+    const valid = scheduled && !Number.isNaN(scheduled.getTime());
+    return {
+      id: m.id,
+      team1: m.team1Name || 'TBD',
+      team2: m.team2Name || 'TBD',
+      team1Id: m.team1Id,
+      team2Id: m.team2Id,
+      round: m.round || '—',
+      status: m.status === 'ongoing' ? 'live' : (m.status || 'scheduled'),
+      score1,
+      score2,
+      date: valid ? scheduled.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—',
+      time: valid ? scheduled.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—',
+    };
+  });
+  const matches = backendLoaded ? apiMatches : (comp.matches || []);
   const filtered = matches.filter((m) => {
     const ms = filter === 'all' || m.status === filter;
     const mq = !searchQ || String(m.team1 || '').toLowerCase().includes(searchQ) || String(m.team2 || '').toLowerCase().includes(searchQ) || String(m.id || '').toLowerCase().includes(searchQ);
@@ -73,12 +116,43 @@ export default function CompManageMatches() {
   const start = (page - 1) * PAGE_SIZE;
   const slice = filtered.slice(start, start + PAGE_SIZE);
 
-  function scheduleMatch(event) {
+  async function scheduleMatch(event) {
     event.preventDefault();
-    if (!team1 || !team2 || team1 === team2) { window.alert('Please select two different teams.'); return; }
+    if (busy) return;
+    if (!team1 || !team2 || team1 === team2) { showToast('Please select two different teams.', 'error'); return; }
+    const teamOne = approvedTeams.find((t) => t.name === team1);
+    const teamTwo = approvedTeams.find((t) => t.name === team2);
+    const scheduledAt = date ? new Date(`${date}T${time || '00:00'}:00`).toISOString() : undefined;
+
+    setBusy(true);
+    // §11 — the backend validates the competition window and team overlaps.
+    const res = await MatchesAPI.create(
+      comp.dbId || comp.id,
+      teamOne?.dbId || teamOne?.id,
+      teamTwo?.dbId || teamTwo?.id,
+      team1,
+      team2,
+      scheduledAt,
+      effectiveRound,
+    );
+    setBusy(false);
+
+    if (res.ok) {
+      showToast('Match scheduled.');
+      setTeam1(''); setTeam2(''); setDate(''); setTime('');
+      setVersion((v) => v + 1);
+      return;
+    }
+    if (res.error && !/backend|network|Failed to fetch|is the backend/i.test(String(res.error))) {
+      showToast(res.error, 'error');
+      return;
+    }
+
+    // Offline fallback preserves the existing local behaviour.
     const fresh = NexusData.getCompetitionById(id);
     const target = fresh || comp;
-    const newMatch = {
+    if (!Array.isArray(target.matches)) target.matches = [];
+    target.matches.unshift({
       id: `M${Date.now().toString().slice(-6)}`,
       team1,
       team2,
@@ -86,15 +160,30 @@ export default function CompManageMatches() {
       status: 'scheduled',
       date: date ? new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—',
       time: time || '—',
-    };
-    target.matches.unshift(newMatch);
+    });
     target.totalMatches = target.matches.length;
     NexusData.updateCompetition(target);
-    setTeam1('');
-    setTeam2('');
-    setDate('');
-    setTime('');
+    setTeam1(''); setTeam2(''); setDate(''); setTime('');
     setVersion((v) => v + 1);
+  }
+
+  async function generateFixtures() {
+    if (busy) return;
+    setBusy(true);
+    const compKey = comp.dbId || comp.id;
+    let res = await MatchesAPI.generateSchedule(compKey, {});
+    if (!res.ok && /confirmOverlap/i.test(String(res.error || ''))) {
+      const confirmed = window.confirm('Existing scheduled matches will be replaced. Completed/verified results are always preserved. Continue?');
+      if (!confirmed) { setBusy(false); return; }
+      res = await MatchesAPI.generateSchedule(compKey, { confirmOverlap: true });
+    }
+    setBusy(false);
+    if (res.ok) {
+      showToast(`Generated ${res.data?.created ?? 0} fixture(s).`);
+      setVersion((v) => v + 1);
+    } else if (res.error && !/backend|network|Failed to fetch|is the backend/i.test(String(res.error))) {
+      showToast(res.error, 'error');
+    }
   }
 
   const teamOptions = (exclude) => approvedTeams
@@ -126,15 +215,26 @@ export default function CompManageMatches() {
         </div>
         <div className="banner-stats">
           <div><span className="banner-stat-label">TEAMS</span><span className="banner-stat-val">{approvedTeams.length}</span></div>
-          <div><span className="banner-stat-label">MATCHES</span><span className="banner-stat-val">{comp.totalMatches}</span></div>
+          <div><span className="banner-stat-label">MATCHES</span><span className="banner-stat-val">{matches.length}</span></div>
         </div>
       </div>
 
+      {apiError && (
+        <div role="alert" style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.4)', color: '#f87171', padding: '10px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700, marginBottom: 16 }}>
+          {apiError}
+        </div>
+      )}
+
       <div className="matches-body">
         <div className="sub-panel">
-          <div className="panel-section-title">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#C6FF33" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6" /><line x1="8" y1="5" x2="8" y2="8" /><line x1="10" y1="10" x2="8" y2="8" /></svg>
-            Schedule New Match
+          <div className="panel-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#C6FF33" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6" /><line x1="8" y1="5" x2="8" y2="8" /><line x1="10" y1="10" x2="8" y2="8" /></svg>
+              Schedule New Match
+            </span>
+            <button type="button" className="btn-xs" id="btn-generate-fixtures" onClick={generateFixtures} disabled={busy} title="Generate fixtures from the configured tournament format">
+              {busy ? 'Working…' : 'Auto-generate fixtures'}
+            </button>
           </div>
           <form id="schedule-form" className="schedule-form" onSubmit={scheduleMatch}>
             <div className="form-row-2">
@@ -163,7 +263,7 @@ export default function CompManageMatches() {
                 {roundOptions.map((o) => <option key={o} value={o}>{o}</option>)}
               </select>
             </div>
-            <button type="submit" className="btn-schedule">SCHEDULE MATCH</button>
+            <button type="submit" className="btn-schedule" disabled={busy}>{busy ? 'SCHEDULING…' : 'SCHEDULE MATCH'}</button>
           </form>
         </div>
 

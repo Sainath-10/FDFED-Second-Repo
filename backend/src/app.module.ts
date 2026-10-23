@@ -33,6 +33,7 @@ import { RevenueConfigEntity } from './entities/revenue-config.entity';
 import { AdminActivityLogEntity } from './entities/admin-activity-log.entity';
 import { AuditLogEntity } from './entities/audit-log.entity';
 import { RefundRequestEntity } from './entities/refund-request.entity';
+import { WorkflowEnhancements1710000000000 } from './database/migrations/1710000000000-workflow-enhancements';
 
 @Module({
   imports: [
@@ -74,7 +75,12 @@ import { RefundRequestEntity } from './entities/refund-request.entity';
             AuditLogEntity,
             RefundRequestEntity,
           ],
-          synchronize: true, // Auto-create tables in dev. Use migrations in production.
+          // §1.5 — schema changes are applied through migrations, never by
+          // automatic synchronization. Set DB_SYNCHRONIZE=true only for a
+          // throwaway local database.
+          synchronize: config.get<string>('DB_SYNCHRONIZE') === 'true',
+          migrations: [WorkflowEnhancements1710000000000],
+          migrationsRun: config.get<string>('DB_MIGRATIONS_RUN') !== 'false',
           logging: config.get<string>('NODE_ENV') === 'development' ? ['error', 'warn'] : false,
         };
       },

@@ -260,11 +260,11 @@ export class TeamsController {
   @ApiOperation({ summary: 'Player requests to join a team' })
   async createJoinRequest(
     @Param('id') teamId: string,
-    @Body() body: { competitionId?: string; fromUsername?: string; message?: string },
+    @Body() body: { competitionId?: string; fromUsername?: string; message?: string; joinCode?: string },
     @CurrentUser() user?: any,
   ) {
     // identity is derived from the JWT — the client-supplied username is only a hint
-    return this.teamsService.createJoinRequest(teamId, body.competitionId || '', user, body.message);
+    return this.teamsService.createJoinRequest(teamId, body.competitionId || '', user, body.message, body.joinCode);
   }
 
   @Get(':id/join-requests')

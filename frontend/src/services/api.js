@@ -298,6 +298,11 @@ export const CompetitionsAPI = {
   async getJoinCode(id) {
     return makeRequest(`/competitions/${id}/join-code`, { method: 'GET' });
   },
+
+  /** §13.2/§13.4 — organizer-only participant contacts (emails from real accounts). */
+  async getParticipants(id) {
+    return makeRequest(`/competitions/${id}/participants`, { method: 'GET' });
+  },
 };
 
 // ============ TEAMS API ============
@@ -382,10 +387,10 @@ export const TeamsAPI = {
     return makeRequest(`/teams/${id}/ban`, { method: 'PATCH' });
   },
 
-  async createJoinRequest(teamId, competitionId, fromUsername, message) {
+  async createJoinRequest(teamId, competitionId, fromUsername, message, joinCode) {
     return makeRequest(`/teams/${teamId}/join-requests`, {
       method: 'POST',
-      body: JSON.stringify({ competitionId, fromUsername, message }),
+      body: JSON.stringify({ competitionId, fromUsername, message, joinCode }),
     });
   },
 

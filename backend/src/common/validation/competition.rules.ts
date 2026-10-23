@@ -64,14 +64,17 @@ export function isRegistrationClosed(
   return validDate(cut) ? now.getTime() >= cut.getTime() : false;
 }
 
-/** True once the competition has started (roster lock §6.2). */
+/**
+ * True once the competition has started (roster lock §6.2).
+ *
+ * §3.4 — registration closure and competition start are separate concepts:
+ * closing registration never starts the competition.
+ */
 export function isCompetitionStarted(
-  comp: { startDate?: Date | null; registrationCloseAt?: Date | null },
+  comp: { startDate?: Date | null },
   now: Date = new Date(),
 ): boolean {
-  const start = validDate(comp.startDate) ? comp.startDate
-    : validDate(comp.registrationCloseAt) ? comp.registrationCloseAt : null;
-  return start ? now.getTime() >= start.getTime() : false;
+  return validDate(comp.startDate) ? now.getTime() >= comp.startDate.getTime() : false;
 }
 
 /** Validates the prize pool on create. Returns null when valid. */

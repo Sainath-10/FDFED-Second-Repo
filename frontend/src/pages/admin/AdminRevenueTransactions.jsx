@@ -9,6 +9,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
 import NexusData from '../../services/data.js';
+import { TeamsAPI } from '../../services/api.js';
+import { showToast } from '../../lib/toast.js';
 import '../../styles/pages/admin/dashboard.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -56,6 +58,43 @@ export default function AdminRevenueTransactions() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [dateFilter, setDateFilter] = useState('ALL');
   const [page, setPage] = useState(1);
+  const [refunds, setRefunds] = useState([]);
+  const [refundsLoading, setRefundsLoading] = useState(false);
+  const [refundsError, setRefundsError] = useState('');
+  const [refundBusy, setRefundBusy] = useState('');
+  const [refundVersion, setRefundVersion] = useState(0);
+
+  // §4.2 — traceable refund requests raised by team disbanding (support queue).
+  useEffect(() => {
+    let cancelled = false;
+    setRefundsLoading(true);
+    TeamsAPI.refundRequests()
+      .then((res) => {
+        if (cancelled) return;
+        if (res.ok && Array.isArray(res.data)) {
+          setRefunds(res.data);
+          setRefundsError('');
+        } else if (res.error && !/backend|network|Failed to fetch|is the backend/i.test(String(res.error))) {
+          setRefundsError(res.error);
+        }
+      })
+      .catch(() => { if (!cancelled) setRefundsError('Refund requests could not be loaded.'); })
+      .finally(() => { if (!cancelled) setRefundsLoading(false); });
+    return () => { cancelled = true; };
+  }, [refundVersion]);
+
+  async function resolveRefund(id, status) {
+    if (refundBusy) return;
+    setRefundBusy(id);
+    const res = await TeamsAPI.resolveRefundRequest(id, status);
+    setRefundBusy('');
+    if (res.ok) {
+      showToast(`Refund request marked ${status}.`);
+      setRefundVersion((v) => v + 1);
+    } else {
+      showToast(res.error || 'Unable to update the refund request.', 'error');
+    }
+  }
 
   useEffect(() => {
     const comps = NexusData ? NexusData.loadCompetitions() : [];
@@ -207,6 +246,55 @@ export default function AdminRevenueTransactions() {
             <button id="btn-next-page" className="btn-table-secondary" disabled={safePage >= totalPages} onClick={() => setPage((p) => p + 1)} style={{ padding: '6px 14px', fontSize: 12, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.18)', color: '#fff', borderRadius: 6, cursor: 'pointer', opacity: safePage >= totalPages ? 0.4 : 1 }}>Next →</button>
           </div>
         </div>
+      </div>
+
+      {/* §4.2 — support workflow for disband refunds. No automatic provider refund is claimed. */}
+      <div className="table-container-card" id="refund-requests-panel" style={{ marginTop: 24 }}>
+        <div className="table-header-between" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+          <div>
+            <h2 className="table-title-md" style={{ margin: 0 }}>Refund Requests</h2>
+            <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
+              Pending requests come from team disbanding. Mark one completed only after the payment provider confirms the refund.
+            </p>
+          </div>
+          <span style={{ fontSize: 12, color: '#c6ff33', fontWeight: 700 }}>{refunds.filter((r) => r.status === 'pending').length} pending</span>
+        </div>
+
+        {refundsLoading && <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)' }}>Loading refund requests…</div>}
+        {!refundsLoading && refundsError && <div role="alert" style={{ padding: 16, color: '#f87171' }}>{refundsError}</div>}
+        {!refundsLoading && !refundsError && refunds.length === 0 && (
+          <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)' }}>No refund requests recorded.</div>
+        )}
+        {!refundsLoading && !refundsError && refunds.length > 0 && (
+          <div className="table-scroll-wrap">
+            <table className="admin-table">
+              <thead><tr><th>Participant</th><th>Competition</th><th>Team</th><th>Amount</th><th>Reason</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody>
+                {refunds.map((refund) => (
+                  <tr key={refund.id}>
+                    <td style={{ fontWeight: 600, color: '#fff' }}>@{refund.username}</td>
+                    <td>{refund.competitionName || refund.competitionId}</td>
+                    <td>{refund.teamName || '—'}</td>
+                    <td style={{ color: '#c6ff33', fontWeight: 700 }}>{refund.amount == null ? '—' : money(refund.amount)}</td>
+                    <td style={{ maxWidth: 260, whiteSpace: 'normal', fontSize: 12 }}>{refund.reason}</td>
+                    <td><span className={`status-pill ${refund.status === 'completed' ? 'approved' : refund.status === 'pending' ? 'pending' : 'rejected'}`}>{String(refund.status || 'pending').toUpperCase()}</span></td>
+                    <td>
+                      {refund.status === 'pending' ? (
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          <button className="btn-table-secondary" disabled={refundBusy === refund.id} onClick={() => resolveRefund(refund.id, 'completed')}>Completed</button>
+                          <button className="btn-table-secondary" disabled={refundBusy === refund.id} onClick={() => resolveRefund(refund.id, 'failed')}>Failed</button>
+                          <button className="btn-table-secondary" disabled={refundBusy === refund.id} onClick={() => resolveRefund(refund.id, 'cancelled')}>Cancel</button>
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{refund.resolvedBy ? `by ${refund.resolvedBy}` : 'resolved'}</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </main>
   );

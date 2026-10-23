@@ -34,6 +34,31 @@
     return new Date().toISOString();
   }
 
+  /** §6.2 — one competition-started check shared by every local roster rule. */
+  function hasCompetitionStarted(comp) {
+    if (!comp) return false;
+    const status = normalize(comp.status);
+    if (['ongoing', 'live', 'completed', 'ended', 'finished'].includes(status)) return true;
+    const start = comp.startDate ? new Date(comp.startDate) : null;
+    return !!(start && !isNaN(start.getTime()) && start.getTime() <= Date.now());
+  }
+
+  /** §2.4 — returns an error string when a private competition's code is missing/invalid. */
+  function privateJoinCodeError(comp, joinCode) {
+    if (!comp || String(comp.visibility || 'public') !== 'private') return '';
+    const code = String(joinCode || '').trim();
+    if (!code) return 'This is a private competition. Enter the join code shared by the organizer.';
+    if (comp.joinCode && normalize(code) !== normalize(comp.joinCode)) {
+      return 'Invalid join code. Please check the code with your organizer and try again.';
+    }
+    return '';
+  }
+
+  function maxPlayers(comp) {
+    const configured = Number(comp && comp.maxPlayersPerTeam);
+    return configured > 0 ? configured : MAX_TEAM_PLAYERS;
+  }
+
   function loadNotifications() {
     return parseJson(localStorage.getItem(NOTIFICATIONS_KEY), []);
   }
@@ -401,6 +426,13 @@
       return { ok: false, error: 'Tournament context missing.' };
     }
 
+    if (hasCompetitionStarted(comp)) {
+      return { ok: false, error: 'The competition has started: new teams can no longer be created.' };
+    }
+
+    const codeError = privateJoinCodeError(comp, opts.joinCode);
+    if (codeError) return { ok: false, error: codeError };
+
     ensureCompetitionTeams(comp);
 
     const name = String(opts.name || '').trim();
@@ -426,6 +458,8 @@
 
     const team = {
       id: makeId('team'),
+      dbId: opts.dbId || null,
+      backendSynced: !!opts.backendSynced,
       name,
       tag,
       avatar: opts.avatar || 'SHIELD',
@@ -464,6 +498,7 @@
         name: team.name,
         competitionId: comp.dbId || comp.id,
         members: [session.username],
+        joinCode: String(opts.joinCode || '').trim(),
       }).then(res => {
         if (res && res.ok && res.data && res.data.id) {
           const latest = getCompetitionById(comp.id);
@@ -517,10 +552,16 @@
 
     const comp = getCompetitionById(opts.compId);
     if (!comp) return { ok: false, error: 'Competition not found.' };
+    if (hasCompetitionStarted(comp)) {
+      return { ok: false, error: 'The competition has started: players can no longer be invited.' };
+    }
     ensureCompetitionTeams(comp);
 
     const team = findTeam(comp, opts.teamId);
     if (!team) return { ok: false, error: 'Team not found.' };
+    if (team.members.length >= maxPlayers(comp)) {
+      return { ok: false, error: 'Team is already full (' + team.members.length + ' / ' + maxPlayers(comp) + ').' };
+    }
     if (!userCanManageTeam(team, session)) return { ok: false, error: 'Only team captain can send invites.' };
 
     const toUsername = String(opts.toUsername || '').trim();
@@ -610,10 +651,19 @@
 
     const comp = getCompetitionById(opts.compId);
     if (!comp) return { ok: false, error: 'Competition not found.' };
+    if (hasCompetitionStarted(comp)) {
+      return { ok: false, error: 'The competition has started: join requests are closed.' };
+    }
+    const codeError = privateJoinCodeError(comp, opts.joinCode);
+    if (codeError) return { ok: false, error: codeError };
     ensureCompetitionTeams(comp);
 
     const team = findTeam(comp, opts.teamId);
     if (!team) return { ok: false, error: 'Team not found.' };
+
+    if (team.members.length >= maxPlayers(comp)) {
+      return { ok: false, error: 'Team is full — maximum ' + maxPlayers(comp) + ' player(s) per team.' };
+    }
 
     if (normalize(team.createdBy) === normalize(session.username)) {
       return { ok: false, error: 'You are already the captain of this team.' };
@@ -694,8 +744,11 @@
     if (request.status !== 'pending') return { ok: false, error: 'This request was already handled.' };
 
     if (action === 'accepted') {
-      if (team.members.length >= MAX_TEAM_PLAYERS) {
-        return { ok: false, error: 'Team is already full.' };
+      if (hasCompetitionStarted(comp)) {
+        return { ok: false, error: 'The competition has started: rosters are locked.' };
+      }
+      if (team.members.length >= maxPlayers(comp)) {
+        return { ok: false, error: 'Team is already full (' + team.members.length + ' / ' + maxPlayers(comp) + ').' };
       }
 
       const exists = team.members.some(member => normalize(member.username) === normalize(request.username));
@@ -867,8 +920,11 @@
     }
 
     if (action === 'accepted') {
-      if (team.members.length >= MAX_TEAM_PLAYERS) {
-        return { ok: false, error: 'Team is already full.' };
+      if (hasCompetitionStarted(comp)) {
+        return { ok: false, error: 'The competition has started: rosters are locked.' };
+      }
+      if (team.members.length >= maxPlayers(comp)) {
+        return { ok: false, error: 'Team is already full (' + team.members.length + ' / ' + maxPlayers(comp) + ').' };
       }
 
       const inAnotherTeam = (comp.teams || []).some(item => {
@@ -947,6 +1003,11 @@
     }
 
     if (!comp) return { ok: false, error: 'Competition not found.' };
+    if (hasCompetitionStarted(comp)) {
+      return { ok: false, error: 'The competition has started: membership is locked.' };
+    }
+    const codeError = privateJoinCodeError(comp, opts.joinCode);
+    if (codeError) return { ok: false, error: codeError };
     ensureCompetitionTeams(comp);
 
     if (String(team.status || '').toLowerCase() !== 'approved') {
@@ -966,8 +1027,8 @@
       return { ok: false, error: 'You are already in another team for this competition.' };
     }
 
-    if (team.members.length >= MAX_TEAM_PLAYERS) {
-      return { ok: false, error: 'Team is already full.' };
+    if (team.members.length >= maxPlayers(comp)) {
+      return { ok: false, error: 'Team is already full (' + team.members.length + ' / ' + maxPlayers(comp) + ').' };
     }
 
     team.members.push({
@@ -1004,6 +1065,10 @@
     if (!comp) return { ok: false, error: 'Competition not found.' };
     ensureCompetitionTeams(comp);
 
+    if (hasCompetitionStarted(comp)) {
+      return { ok: false, error: 'The competition has started: players can no longer be removed. Use the dispute/report workflow instead.' };
+    }
+
     const team = findTeam(comp, opts.teamId);
     if (!team) return { ok: false, error: 'Team not found.' };
     if (!userCanManageTeam(team, session)) return { ok: false, error: 'Only team captain can remove players.' };
@@ -1011,8 +1076,18 @@
     const username = String(opts.username || '').trim();
     if (!username) return { ok: false, error: 'Player username missing.' };
 
+    if (String(opts.reason || '').trim().length < 5) {
+      return { ok: false, error: 'A meaningful removal reason (at least 5 characters) is required.' };
+    }
+
     if (normalize(username) === normalize(team.createdBy)) {
       return { ok: false, error: 'Captain cannot be removed.' };
+    }
+
+    // §6.1 — participants who paid an individual entry fee cannot be removed directly.
+    const memberRecord = (team.members || []).find(member => normalize(member.username) === normalize(username));
+    if (memberRecord && Number(memberRecord.feePaid) > 0) {
+      return { ok: false, error: 'This participant has paid the entry fee and cannot be removed directly. Use the dispute/report workflow instead.' };
     }
 
     const before = team.members.length;
@@ -1145,8 +1220,9 @@
       const key = (row.querySelector('.key') || {}).textContent || '';
       const val = row.querySelector('.val');
       if (!val) return;
-      if (key.indexOf('Current Players') >= 0) val.textContent = currentPlayers + ' / 5';
-      if (key.indexOf('Open Slots') >= 0) val.textContent = String(Math.max(0, 5 - currentPlayers));
+      const limit = maxPlayers(comp);
+      if (key.indexOf('Current Players') >= 0) val.textContent = currentPlayers + ' / ' + limit;
+      if (key.indexOf('Open Slots') >= 0) val.textContent = String(Math.max(0, limit - currentPlayers));
       if (key.indexOf('Join Requests') >= 0) val.textContent = String(pendingRequests);
       if (key.indexOf('Pending Invites') >= 0) val.textContent = String(pendingInvites);
     });

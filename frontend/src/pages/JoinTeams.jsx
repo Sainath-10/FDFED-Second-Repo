@@ -12,6 +12,9 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import NexusData from '../services/data.js';
 import NexusTeamWorkflow from '../services/teamWorkflow.js';
+import useVerificationGate from '../hooks/useVerificationGate.jsx';
+import useJoinCodeGate from '../hooks/useJoinCodeGate.jsx';
+import { TeamsAPI } from '../services/api.js';
 import { showToast } from '../lib/toast.js';
 import '../styles/pages/join-teams.css';
 
@@ -51,8 +54,12 @@ export default function JoinTeams() {
     [id, version],
   );
 
+ // §12.4 / §2.4 — shared gates for direct URLs (join-teams.html?id=...).
+ const gate = useVerificationGate('join a team in a competition');
+ const joinCodeGate = useJoinCodeGate(comp);
+
  // Rejected competitions are archived.
-  useEffect(() => {
+ useEffect(() => {
     if (!comp) return;
     const status = NexusData.getApprovalStatus ? NexusData.getApprovalStatus(comp) : 'approved';
     if (status === 'rejected') {
@@ -77,9 +84,31 @@ export default function JoinTeams() {
     if (!comp) showToast('Competition context missing.', 'error');
   }, [comp]);
 
-  function proceedJoinTeam(teamId) {
+  async function proceedJoinTeam(teamId) {
+    // §2.4 — the backend validates the private join code before any local
+    // request is recorded; a rejected code never creates a pending request.
+    const code = await joinCodeGate.requireCode();
+    if (code === null) return;
+
     const current = NexusData.getCompetitionById(comp.id);
-    const result = NexusTeamWorkflow.submitJoinRequest({ compId: current.id, teamId });
+    const team = (current.teams || []).find((t) => t.id === teamId);
+    if (team && team.dbId && session) {
+      try {
+        const res = await TeamsAPI.createJoinRequest(
+          team.dbId,
+          current.dbId || current.id,
+          session.username,
+          '',
+          code || undefined,
+        );
+        if (res && res.ok === false && !/backend|network|Failed to fetch|is the backend/i.test(String(res.error || ''))) {
+          showToast(res.error || 'Unable to send join request.', 'error');
+          return;
+        }
+      } catch (err) { /* backend unavailable — local workflow below */ }
+    }
+
+    const result = NexusTeamWorkflow.submitJoinRequest({ compId: current.id, teamId, joinCode: code || '' });
     if (!result.ok) { showToast(result.error || 'Request failed.', 'error'); return; }
     showToast('Join request sent successfully!');
     setVersion((v) => v + 1);
@@ -91,13 +120,16 @@ export default function JoinTeams() {
       showToast('Unable to send request right now.', 'error');
       return;
     }
-    const feeType = comp.feeType || 'free';
-    const entryFeeAmount = comp.entryFeeAmount || 0;
-    if (feeType === 'per_player' && entryFeeAmount > 0) {
-      setCheckout({ comp, feeAmount: entryFeeAmount, pendingTeamId: teamId });
-    } else {
-      proceedJoinTeam(teamId);
-    }
+    // §12.4 — verification is enforced before the request is created.
+    gate.run(async () => {
+      const feeType = comp.feeType || 'free';
+      const entryFeeAmount = comp.entryFeeAmount || 0;
+      if (feeType === 'per_player' && entryFeeAmount > 0) {
+        setCheckout({ comp, feeAmount: entryFeeAmount, pendingTeamId: teamId });
+      } else {
+        await proceedJoinTeam(teamId);
+      }
+    });
   }
 
  // ?teamId= — direct join (once, when a comp is available).
@@ -106,15 +138,20 @@ export default function JoinTeams() {
     if (directJoinAttempted.current || !comp || !preferredTeamId) return;
     directJoinAttempted.current = true;
     if (!session || !NexusTeamWorkflow || typeof NexusTeamWorkflow.directJoinTeam !== 'function') return;
-    const result = NexusTeamWorkflow.directJoinTeam({ compId: comp.id, teamId: preferredTeamId });
-    if (!result.ok) { showToast(result.error || 'Unable to join team.', 'error'); return; }
-    showToast(`You have joined ${result.team && result.team.name ? result.team.name : 'the team'}.`);
-    const compKey = (result.competition && result.competition.id) || comp.id;
-    const teamKey = (result.team && result.team.id) || preferredTeamId;
-    const isCaptain = result.team && result.team.createdBy && result.team.createdBy.toLowerCase() === session.username.toLowerCase();
-    navigate(isCaptain
-      ? `/pages/team/team-roster.html?compId=${encodeURIComponent(compKey)}&teamId=${encodeURIComponent(teamKey)}`
-      : `/pages/comp-participant.html?id=${encodeURIComponent(compKey)}`);
+    gate.run(async () => {
+      const code = await joinCodeGate.requireCode();
+      if (code === null) return;
+      const result = NexusTeamWorkflow.directJoinTeam({ compId: comp.id, teamId: preferredTeamId, joinCode: code || '' });
+      if (!result.ok) { showToast(result.error || 'Unable to join team.', 'error'); return; }
+      showToast(`You have joined ${result.team && result.team.name ? result.team.name : 'the team'}.`);
+      const compKey = (result.competition && result.competition.id) || comp.id;
+      const teamKey = (result.team && result.team.id) || preferredTeamId;
+      const isCaptain = result.team && result.team.createdBy && result.team.createdBy.toLowerCase() === session.username.toLowerCase();
+      navigate(isCaptain
+        ? `/pages/team/team-roster.html?compId=${encodeURIComponent(compKey)}&teamId=${encodeURIComponent(teamKey)}`
+        : `/pages/comp-participant.html?id=${encodeURIComponent(compKey)}`);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [comp, preferredTeamId, session, navigate]);
 
  // Highlight the preferred team card after render.
@@ -298,6 +335,9 @@ export default function JoinTeams() {
           </div>
         </div>
       )}
+
+      {gate.gateModal}
+      {joinCodeGate.modal}
     </main>
   );
 }

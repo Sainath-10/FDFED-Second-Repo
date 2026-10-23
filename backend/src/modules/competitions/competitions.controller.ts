@@ -105,7 +105,9 @@ export class CompetitionsController {
     description: 'Private competitions require a valid join code; public competitions never require one (§2.4).',
   })
   async joinValidate(@Body() dto: JoinValidateDto, @CurrentUser() user?: any) {
-    return this.competitionsService.participate(dto.competitionId, dto.joinCode, user?.username);
+    // §12.4 — the authenticated account (id + username) is used for the
+    // backend-enforced mock-verification gate; never trust the request body.
+    return this.competitionsService.participate(dto.competitionId, dto.joinCode, user);
   }
 
   @Get('organizer/:organizerId')

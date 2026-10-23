@@ -11,6 +11,10 @@ import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import NexusData from '../services/data.js';
 import NexusTeamWorkflow from '../services/teamWorkflow.js';
+import { TeamsAPI } from '../services/api.js';
+import { useAuth } from '../context/AuthContext.jsx';
+import useVerificationGate from '../hooks/useVerificationGate.jsx';
+import useJoinCodeGate from '../hooks/useJoinCodeGate.jsx';
 import { showToast } from '../lib/toast.js';
 import '../styles/pages/create-team.css';
 
@@ -28,6 +32,7 @@ const UPLOAD_SVG = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" 
 export default function CreateTeam() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
+  const { session } = useAuth();
 
   const [name, setName] = useState('');
   const [tag, setTag] = useState('');
@@ -56,18 +61,53 @@ export default function CreateTeam() {
   const context = NexusTeamWorkflow && typeof NexusTeamWorkflow.getActiveTeamContext === 'function'
     ? NexusTeamWorkflow.getActiveTeamContext()
     : null;
+
+  // §12.4 / §2.4 — direct create-team.html URLs are gated too.
+  const gateCompId = getCompIdFromPage();
+  const gateComp = gateCompId && NexusData ? NexusData.getCompetitionById(gateCompId) : null;
+  const gate = useVerificationGate('create a team for a competition');
+  const joinCodeGate = useJoinCodeGate(gateComp);
   const [inviteLink, setInviteLink] = useState(() => buildInviteLink(getCompIdFromPage(), context && context.teamId ? context.teamId : ''));
 
   function copyInviteLink() {
     navigator.clipboard.writeText(inviteLink).then(() => showToast('Invite link copied to clipboard!'));
   }
 
-  function proceedCreateTeam(compId, teamName, teamTag, logoSvg) {
-    const result = NexusTeamWorkflow.createTeam({ compId, name: teamName, tag: teamTag, avatar: logoSvg });
+  function proceedCreateTeam(compId, teamName, teamTag, logoSvg, joinCode = '', backendTeam = null) {
+    const result = NexusTeamWorkflow.createTeam({
+      compId,
+      name: teamName,
+      tag: teamTag,
+      avatar: logoSvg,
+      joinCode,
+      dbId: backendTeam?.id,
+      backendSynced: !!backendTeam?.id,
+    });
     if (!result.ok) { showToast(result.error || 'Failed to create team.', 'error'); return; }
     showToast(`Team "${teamName}" registered successfully!`);
     if (result.team && result.team.id) setInviteLink(buildInviteLink(compId, result.team.id));
     setTimeout(() => navigate('/pages/my-activity.html'), 1500);
+  }
+
+  /** §16 — confirm with the backend before reporting success (local fallback when offline). */
+  async function submitTeam(compId, teamName, teamTag, logoSvg, joinCode) {
+    const comp = NexusData ? NexusData.getCompetitionById(compId) : null;
+    let backendTeam = null;
+    try {
+      const res = await TeamsAPI.create({
+        name: teamName,
+        competitionId: comp?.dbId || compId,
+        members: session?.username ? [session.username] : [],
+        joinCode: joinCode || undefined,
+      });
+      if (res.ok && res.data?.id) {
+        backendTeam = res.data;
+      } else if (res.error && !/backend|network|Failed to fetch|is the backend/i.test(String(res.error))) {
+        showToast(res.error, 'error');
+        return;
+      }
+    } catch (err) { /* backend unavailable — local workflow below */ }
+    proceedCreateTeam(compId, teamName, teamTag, logoSvg, joinCode || '', backendTeam);
   }
 
   function createTeam() {
@@ -84,15 +124,21 @@ export default function CreateTeam() {
       return;
     }
 
-    const comp = NexusData ? NexusData.getCompetitionById(compId) : null;
-    const entryFeeAmount = comp ? (comp.entryFeeAmount || 0) : 0;
-    const feeType = comp ? (comp.feeType || 'free') : 'free';
+    // §12.4 — verification gate, then §2.4 private join code, then creation.
+    gate.run(async () => {
+      const joinCode = await joinCodeGate.requireCode();
+      if (joinCode === null) return;
 
-    if (comp && feeType === 'per_team' && entryFeeAmount > 0) {
-      setCheckout({ comp, teamName, feeAmount: entryFeeAmount });
-    } else {
-      proceedCreateTeam(compId, teamName, teamTag, logoSvg);
-    }
+      const comp = NexusData ? NexusData.getCompetitionById(compId) : null;
+      const entryFeeAmount = comp ? (comp.entryFeeAmount || 0) : 0;
+      const feeType = comp ? (comp.feeType || 'free') : 'free';
+
+      if (comp && feeType === 'per_team' && entryFeeAmount > 0) {
+        setCheckout({ comp, teamName, feeAmount: entryFeeAmount, joinCode: joinCode || '' });
+      } else {
+        await submitTeam(compId, teamName, teamTag, logoSvg, joinCode || '');
+      }
+    });
   }
 
   return (
@@ -184,8 +230,9 @@ export default function CreateTeam() {
                 onClick={() => {
                   const compId = getCompIdFromPage();
                   const logoSvg = (LOGOS.find((l) => l.id === activeLogo) || LOGOS[0]).svg;
+                  const pending = checkout;
                   setCheckout(null);
-                  proceedCreateTeam(compId, checkout.teamName, tag.trim(), logoSvg);
+                  submitTeam(compId, pending.teamName, tag.trim(), logoSvg, pending.joinCode || '');
                 }}
                 style={{ flex: 2, padding: 12, background: '#c6ff33', border: 'none', color: '#000', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}
               >
@@ -195,6 +242,9 @@ export default function CreateTeam() {
           </div>
         </div>
       )}
+
+      {gate.gateModal}
+      {joinCodeGate.modal}
     </main>
   );
 }

@@ -2,6 +2,8 @@ import { Injectable, NotFoundException, ForbiddenException, BadRequestException 
 import { DisputeRepository } from './repositories/dispute.repository';
 import { CompetitionRepository } from '../competitions/repositories/competition.repository';
 import { UserRepository } from '../auth/repositories/user.repository';
+import { NotificationsService } from '../notifications/notifications.service';
+import { AuditLogService } from '../../common/audit/audit.service';
 import {
   CreateDisputeDto,
   OrganizerReviewDisputeDto,
@@ -15,6 +17,8 @@ export class DisputesService {
     private disputeRepository: DisputeRepository,
     private competitionRepository: CompetitionRepository,
     private userRepository: UserRepository,
+    private notificationsService: NotificationsService,
+    private auditLog: AuditLogService,
   ) {}
 
   // ─── Player Creates Dispute ───────────────────────────────────────────────────
@@ -35,7 +39,7 @@ export class DisputesService {
         ? DisputeStatus.OPEN_ADMIN
         : DisputeStatus.OPEN_ORGANIZER;
 
-    return this.disputeRepository.create({
+    const dispute = await this.disputeRepository.create({
       competitionId,
       matchId,
       teamId,
@@ -48,6 +52,58 @@ export class DisputesService {
       category: category || undefined,
       status: initialStatus,
     });
+
+    await this.auditLog.record('DISPUTE_CREATED', {
+      actor: reportedBy,
+      entityType: 'dispute',
+      entityId: (dispute as any).id,
+      details: `${category || targetType} dispute filed in competition ${competitionId}.`,
+      metadata: { targetType, category: category || null },
+    });
+
+    // §13.3/§14 — notify the support/admin review team (resolved from real
+    // accounts by role, never hardcoded usernames).
+    const supportRoles = new Set(['dispute_admin', 'admin', 'super_admin', 'comp_admin']);
+    const staff = (await this.userRepository.findAll()).filter((u) => supportRoles.has(String((u as any).role || '').toLowerCase()));
+    staff.forEach((admin) => {
+      this.notificationsService.create({
+        toUsername: admin.username,
+        type: category === 'prize_not_received' ? 'prize-dispute' : 'dispute-created',
+        status: 'pending',
+        title: category === 'prize_not_received' ? '💰 Prize Not Received report' : '⚠ New dispute filed',
+        body: `@${reportedBy} filed a ${category || targetType} report in competition ${competitionId}.`,
+        meta: { compId: competitionId, disputeId: (dispute as any).id, category: category || null },
+      }).catch(() => {});
+    });
+
+    // Organizers also need visibility for participant/team disputes (not
+    // organizer-targeted ones, which go straight to platform review).
+    if (targetType !== DisputeTargetType.ORGANIZER) {
+      organizers.forEach((organizer) => {
+        this.notificationsService.create({
+          toUsername: organizer,
+          type: 'dispute-created',
+          status: 'pending',
+          title: '⚠ New dispute filed',
+          body: `A ${targetType} dispute was filed in your competition ${competitionId}.`,
+          meta: { compId: competitionId, disputeId: (dispute as any).id },
+        }).catch(() => {});
+      });
+    }
+
+    return dispute;
+  }
+
+  private async notifyReporter(dispute: IDispute, status: string, notes?: string) {
+    if (!dispute.reportedBy) return;
+    this.notificationsService.create({
+      toUsername: dispute.reportedBy,
+      type: 'dispute-status',
+      status,
+      title: 'Dispute status updated',
+      body: `Your dispute in competition ${dispute.competitionId} is now "${status}". ${notes || ''}`.trim(),
+      meta: { compId: dispute.competitionId, disputeId: (dispute as any).id },
+    }).catch(() => {});
   }
 
   // ─── Organizer Actions ────────────────────────────────────────────────────────
@@ -77,7 +133,16 @@ export class DisputesService {
       updates.banRequested = dto.requestBan ?? false;
     }
 
-    return this.disputeRepository.update(id, updates);
+    const updated = await this.disputeRepository.update(id, updates);
+    await this.auditLog.record('DISPUTE_ORGANIZER_REVIEW', {
+      actor: organizerUsername,
+      entityType: 'dispute',
+      entityId: id,
+      details: `Organizer action: ${dto.action}.`,
+      metadata: { status: updated.status, requestBan: !!dto.requestBan },
+    });
+    await this.notifyReporter(updated, updated.status, dto.notes);
+    return updated;
   }
 
   // ─── Admin Actions ─────────────────────────────────────────────────────────────
@@ -110,7 +175,16 @@ export class DisputesService {
       updates.banApplied = banned;
     }
 
-    return this.disputeRepository.update(id, updates);
+    const updated = await this.disputeRepository.update(id, updates);
+    await this.auditLog.record('DISPUTE_ADMIN_RESOLVED', {
+      actor: adminUsername,
+      entityType: 'dispute',
+      entityId: id,
+      details: `Admin action: ${dto.action}.`,
+      metadata: { status: updated.status, banApplied: !!updated.banApplied },
+    });
+    await this.notifyReporter(updated, updated.status, dto.resolutionNotes);
+    return updated;
   }
 
   // ─── Read Queries ─────────────────────────────────────────────────────────────

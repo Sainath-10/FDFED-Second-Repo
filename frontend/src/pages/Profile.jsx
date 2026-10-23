@@ -70,6 +70,9 @@ export default function Profile() {
   const [verifyOpen, setVerifyOpen] = useState(false);
   const [verificationStatus, setVerificationStatus] = useState(null); // null until loaded
   const verified = isVerified(verificationStatus);
+  const organizerVerified = String(
+    (verificationStatus && (verificationStatus.organizerVerificationStatus || verificationStatus.verificationStatus)) || '',
+  ).toLowerCase() === 'verified';
   useEffect(() => {
     let active = true;
     VerificationAPI.status().then((res) => {
@@ -320,6 +323,9 @@ export default function Profile() {
                       <div className="settings-label-info">
                         <h3>Account Verification</h3>
                         <p>Simulated Aadhaar verification (workflow flag — not real UIDAI/KYC identity proof). Required before creating or joining competitions.</p>
+                        <p style={{ fontSize: 12, color: '#94a3b8' }}>
+                          Organizer eligibility: <strong style={{ color: organizerVerified ? '#C6FF33' : '#f87171' }}>{organizerVerified ? 'Verified' : 'Unverified'}</strong>
+                        </p>
                       </div>
                       <div className="settings-action-input-wrap">
                         {verified ? (

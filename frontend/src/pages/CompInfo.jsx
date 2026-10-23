@@ -11,6 +11,9 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import NexusData from '../services/data.js';
 import NexusTeamWorkflow from '../services/teamWorkflow.js';
+import useVerificationGate from '../hooks/useVerificationGate.jsx';
+import useJoinCodeGate from '../hooks/useJoinCodeGate.jsx';
+import { DisputesAPI } from '../services/api.js';
 import { showToast } from '../lib/toast.js';
 import { assetUrl } from '../lib/assets.js';
 import '../styles/pages/comp-info.css';
@@ -81,6 +84,12 @@ export default function CompInfo() {
   const [dTargetUser, setDTargetUser] = useState('');
   const [dReason, setDReason] = useState('');
   const [dEvidence, setDEvidence] = useState('');
+  const [disputeSubmitting, setDisputeSubmitting] = useState(false);
+
+  // §12.4 / §2.4 — shared gates: simulated verification before joining or
+  // creating a team, and the organizer's code for private competitions.
+  const gate = useVerificationGate('join or create a team in a competition');
+  const joinCodeGate = useJoinCodeGate(comp);
 
   useEffect(() => {
     if (comp) document.title = `NEXUS ESPORTS — ${comp.name}`;
@@ -138,7 +147,16 @@ export default function CompInfo() {
       navigate(`/pages/comp-participant.html?id=${encodeURIComponent(myTeam.context.compId)}`);
       return;
     }
-    navigate(`/pages/join-teams.html?id=${comp.id}`);
+    // §12.4 — verification gate resumes this exact closure after verification.
+    gate.run(async () => {
+      // §2.4 — private competitions require the backend-validated join code.
+      const code = await joinCodeGate.requireCode();
+      if (code === null) return; // cancelled — no navigation, no duplicate records
+      if (code) {
+        try { sessionStorage.setItem(`nexus.joinCode.${comp.id}`, code); } catch (err) { /* ignore */ }
+      }
+      navigate(`/pages/join-teams.html?id=${comp.id}`);
+    });
   }
 
   function onCreate() {
@@ -152,7 +170,14 @@ export default function CompInfo() {
       }
       return;
     }
-    navigate(`/pages/create-team.html?id=${comp.id}`);
+    gate.run(async () => {
+      const code = await joinCodeGate.requireCode();
+      if (code === null) return;
+      if (code) {
+        try { sessionStorage.setItem(`nexus.joinCode.${comp.id}`, code); } catch (err) { /* ignore */ }
+      }
+      navigate(`/pages/create-team.html?id=${comp.id}`);
+    });
   }
 
  // Button state
@@ -222,6 +247,12 @@ export default function CompInfo() {
     targetOptions = players.length
       ? [{ value: '', label: '— Select a Player —' }, ...players.map((u) => ({ value: u, label: `@${u}` }))]
       : [{ value: '', label: '— No other players available —' }];
+  } else if (dTargetType === 'prize') {
+    // §13.3 — prize not received; routed to the platform review queue.
+    targetLabel = 'Prize Not Reported Against';
+    routingHint = '💰 This report is routed directly to the platform prize review queue (not to the organizer).';
+    const prizeOrg = participants.organizer || (comp && (comp.createdBy || comp.organizerId)) || 'organizer';
+    targetOptions = [{ value: prizeOrg, label: `Organizer: ${prizeOrg}` }];
   } else if (dTargetType === 'organizer') {
     targetLabel = 'Tournament Organizer *';
     routingHint = '📢 Dispute against Organizer is routed directly to Platform Admin.';
@@ -262,11 +293,13 @@ export default function CompInfo() {
     setDisputeOpen(true);
   }
 
-  function submitDispute(event) {
+  async function submitDispute(event) {
     event.preventDefault();
+    if (disputeSubmitting) return;
+    const isPrize = dTargetType === 'prize';
     const targetUserOrTeam = dTargetUser.trim();
     const reason = dReason.trim();
-    if (!dTargetType || !targetUserOrTeam || reason.length < 10) {
+    if (!dTargetType || (!isPrize && !targetUserOrTeam) || reason.length < 10) {
       showToast('Please fill in all required fields (target and min. 10 chars reason).', 'error');
       return;
     }
@@ -274,27 +307,56 @@ export default function CompInfo() {
       showToast('You cannot raise a dispute against yourself.', 'error');
       return;
     }
+    const evidenceUrls = dEvidence.trim() ? dEvidence.split(',').map((s) => s.trim()).filter(Boolean) : [];
+    const backendTargetType = isPrize ? 'organizer' : dTargetType;
+
+    setDisputeSubmitting(true);
+    // §13.3 — prize reports must reach the persisted dispute workflow so
+    // support/admin can review them (not just localStorage).
+    let backendRejected = '';
+    try {
+      const res = await DisputesAPI.create({
+        competitionId: compId,
+        targetType: backendTargetType,
+        targetUserOrTeam: isPrize ? (participants.organizer || (comp && (comp.createdBy || comp.organizerId)) || 'organizer') : targetUserOrTeam,
+        reason,
+        evidenceUrls,
+        category: isPrize ? 'prize_not_received' : undefined,
+      });
+      if (res && res.ok === false && !/backend|network|Failed to fetch|is the backend/i.test(String(res.error || ''))) {
+        backendRejected = res.error || 'The dispute could not be submitted.';
+      }
+    } catch (err) { /* offline — local workflow below preserves existing behaviour */ }
+
+    if (backendRejected) {
+      setDisputeSubmitting(false);
+      showToast(backendRejected, 'error');
+      return;
+    }
+
     if (NexusData && typeof NexusData.addDispute === 'function') {
-      const evidenceUrls = dEvidence.trim() ? dEvidence.split(',').map((s) => s.trim()).filter(Boolean) : [];
       const result = NexusData.addDispute({
         competitionId: compId,
         reportedBy: (session && session.username) || 'anonymous',
-        targetType: dTargetType,
+        targetType: backendTargetType,
+        category: isPrize ? 'prize_not_received' : undefined,
         targetUserOrTeam,
         reason,
         evidenceUrls,
-        status: dTargetType === 'organizer' ? 'open_admin' : 'open_organizer',
+        status: backendTargetType === 'organizer' ? 'open_admin' : 'open_organizer',
         organizerWarnings: 0,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
       if (result && result.ok === false) {
+        setDisputeSubmitting(false);
         showToast(result.error || 'Dispute blocked.', 'error');
         return;
       }
     }
+    setDisputeSubmitting(false);
     setDisputeOpen(false);
-    showToast('Dispute submitted');
+    showToast(isPrize ? 'Prize report submitted — the platform review team will review it.' : 'Dispute submitted');
   }
 
   return (
@@ -557,6 +619,7 @@ export default function CompInfo() {
                   <option value="team">Team (Opponent)</option>
                   <option value="player">Player (Participant)</option>
                   <option value="organizer">Tournament Organizer</option>
+                  <option value="prize">Prize Not Received</option>
                 </select>
                 {routingHint && <p style={{ margin: '6px 0 0', fontSize: 12, color: dTargetType === 'organizer' ? '#fb923c' : '#94a3b8' }}>{routingHint}</p>}
               </div>
@@ -581,12 +644,15 @@ export default function CompInfo() {
 
               <div style={{ display: 'flex', gap: 12 }}>
                 <button type="button" onClick={() => setDisputeOpen(false)} style={{ flex: 1, padding: 12, background: 'none', border: '1px solid #334155', color: '#94a3b8', borderRadius: 8, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
-                <button type="submit" style={{ flex: 1, padding: 12, background: '#f87171', border: 'none', color: '#fff', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}>Submit Dispute</button>
+                <button type="submit" disabled={disputeSubmitting} style={{ flex: 1, padding: 12, background: '#f87171', border: 'none', color: '#fff', borderRadius: 8, cursor: disputeSubmitting ? 'wait' : 'pointer', fontSize: 14, fontWeight: 600 }}>{disputeSubmitting ? 'Submitting…' : 'Submit Dispute'}</button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {gate.gateModal}
+      {joinCodeGate.modal}
     </>
   );
 }

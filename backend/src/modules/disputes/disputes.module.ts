@@ -6,6 +6,8 @@ import { DisputeRepository } from './repositories/dispute.repository';
 import { CompetitionsModule } from '../competitions/competitions.module';
 import { AuthModule } from '../auth/auth.module';
 import { TeamsModule } from '../teams/teams.module';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { AuditModule } from '../../common/audit/audit.module';
 import { DisputeTrackingMiddleware } from '../../common/middleware';
 import { DisputeEntity } from '../../entities/dispute.entity';
 
@@ -15,6 +17,8 @@ import { DisputeEntity } from '../../entities/dispute.entity';
     CompetitionsModule,
     AuthModule,
     TeamsModule,
+    NotificationsModule,
+    AuditModule,
   ],
   controllers: [DisputesController],
   providers: [DisputesService, DisputeRepository],

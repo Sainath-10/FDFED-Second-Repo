@@ -307,33 +307,55 @@ export class MatchesService {
     if ((match as any).winnerId) {
       throw new BadRequestException('A verified result already exists for this match. Duplicate submissions are rejected.');
     }
-    if (winnerId && !winnerName) throw new BadRequestException('Winner is required.');
     if (!score || !String(score).trim()) throw new BadRequestException('A score is required to record a result.');
 
-    // winner must be one of the two teams of the match
-    const candidates = [match.team1Id, match.team2Id, match.team1Name, match.team2Name].filter(Boolean).map(String);
-    if (!candidates.includes(String(winnerId)) && !candidates.includes(String(winnerName))) {
-      throw new BadRequestException('Only a participating team of this match can be declared the winner.');
+    // §10 — draws are valid in league formats; knockout matches must have a winner.
+    const competition = await this.competitionRepository.findById(match.competitionId);
+    const isLeague = competition ? this.resolveFormat(competition) !== 'elimination' : false;
+    const noWinner = !String(winnerId || '').trim() && !String(winnerName || '').trim();
+    if (noWinner && !isLeague) {
+      throw new BadRequestException('Knockout matches require a winner; draws are only valid in league formats.');
     }
 
-    const resolvedName = String(winnerName || candidates.find(() => true) || winnerId);
-    const loserName = resolvedName === match.team1Name ? match.team2Name : match.team1Name;
+    let resolvedName: string | null = null;
+    if (!noWinner) {
+      if (!winnerName) throw new BadRequestException('Winner is required.');
+      // winner must be one of the two teams of the match
+      const candidates = [match.team1Id, match.team2Id, match.team1Name, match.team2Name].filter(Boolean).map(String);
+      if (!candidates.includes(String(winnerId)) && !candidates.includes(String(winnerName))) {
+        throw new BadRequestException('Only a participating team of this match can be declared the winner.');
+      }
+      resolvedName = String(winnerName);
+    }
 
-    await this.repo.update(id, { winnerId, winnerName: resolvedName, score, status: 'completed' });
+    await this.repo.update(id, {
+      winnerId: noWinner ? null : winnerId,
+      winnerName: noWinner ? null : resolvedName,
+      score,
+      status: 'completed',
+    });
     const updated = await this.findById(id);
 
     await this.auditLog.record('MATCH_RESULT_RECORDED', {
       actor,
       entityType: 'match',
       entityId: id,
-      details: `Result verified: ${updated.team1Name} vs ${updated.team2Name} — winner ${resolvedName} (${score}).`,
+      details: noWinner
+        ? `Result verified: ${updated.team1Name} vs ${updated.team2Name} — draw (${score}).`
+        : `Result verified: ${updated.team1Name} vs ${updated.team2Name} — winner ${resolvedName} (${score}).`,
       metadata: { competitionId: updated.competitionId },
     });
 
     await this.applyProgression(updated, actor);
 
     // §14 — result confirmation notification
-    await this.notifyTeams(updated, '✅ Match Result', `Result confirmed: ${updated.team1Name} vs ${updated.team2Name} — winner ${resolvedName} (${score}).`);
+    await this.notifyTeams(
+      updated,
+      '✅ Match Result',
+      noWinner
+        ? `Result confirmed: ${updated.team1Name} vs ${updated.team2Name} — draw (${score}).`
+        : `Result confirmed: ${updated.team1Name} vs ${updated.team2Name} — winner ${resolvedName} (${score}).`,
+    );
     return updated;
   }
 

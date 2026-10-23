@@ -446,7 +446,7 @@ export class TeamsService {
     return this.teamRepository.setStatus(teamId, status, issuedBy);
   }
 
-  async createJoinRequest(teamId: string, competitionId: string, user: any, message?: string) {
+  async createJoinRequest(teamId: string, competitionId: string, user: any, message?: string, joinCode?: string) {
     // backend-derived username; the frontend value is never trusted
     const fromUsername = String(user?.username || '').trim();
     if (!fromUsername) throw new ForbiddenException('User context required');
@@ -459,7 +459,16 @@ export class TeamsService {
     }
 
     const competition = await this.competitionRepository.findById(competitionId || team.competitionId);
-    if (competition && isCompetitionStarted(competition as any)) {
+    if (!competition) {
+      throw new NotFoundException(`Competition with ID ${competitionId || team.competitionId} not found`);
+    }
+    if (competition.visibility === 'private') {
+      const code = String(joinCode || '').trim().toUpperCase();
+      if (!competition.joinCode || code !== String(competition.joinCode).toUpperCase()) {
+        throw new BadRequestException('Invalid join code. Please check the code with your organizer and try again.');
+      }
+    }
+    if (isCompetitionStarted(competition as any)) {
       throw new ForbiddenException('The competition has started: join requests are closed.');
     }
 

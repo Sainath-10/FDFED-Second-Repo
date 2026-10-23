@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import NexusData from '../services/data.js';
+import { CompetitionsAPI } from '../services/api.js';
 import { showToast } from '../lib/toast.js';
 import '../styles/pages/subpage.css';
 
@@ -46,6 +47,29 @@ export default function CompManageTeams() {
   const [filter, setFilter] = useState('all');
   const [searchQ, setSearchQ] = useState('');
   const [selected, setSelected] = useState([]);
+  const [contacts, setContacts] = useState(null);
+  const [contactsLoading, setContactsLoading] = useState(false);
+  const [contactsError, setContactsError] = useState('');
+
+  // §13.2/§13.4 — authorized organizer-only participant contact list.
+  useEffect(() => {
+    let cancelled = false;
+    if (!id) return undefined;
+    setContactsLoading(true);
+    CompetitionsAPI.getParticipants(id)
+      .then((res) => {
+        if (cancelled) return;
+        if (res.ok && Array.isArray(res.data)) {
+          setContacts(res.data);
+          setContactsError('');
+        } else if (res.error && !/backend|network|Failed to fetch|is the backend/i.test(String(res.error))) {
+          setContactsError(res.error);
+        }
+      })
+      .catch(() => { if (!cancelled) setContactsError('Participant contacts could not be loaded.'); })
+      .finally(() => { if (!cancelled) setContactsLoading(false); });
+    return () => { cancelled = true; };
+  }, [id]);
 
   const comp = useMemo(() => {
     if (!id || !NexusData) return null;
@@ -214,6 +238,51 @@ export default function CompManageTeams() {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* §13.2/§13.4 — organizer-only participant emails for external contact. */}
+      <div className="sub-panel" id="participant-contacts-panel" style={{ marginTop: 24 }}>
+        <div className="sub-panel-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: 18 }}>Participant Contacts</h2>
+            <p style={{ margin: '4px 0 0', fontSize: 12, color: '#94a3b8' }}>
+              Emails come from registered participant accounts. Use your own email client to contact them — NEXUS does not send Gmail messages automatically.
+            </p>
+          </div>
+          {Array.isArray(contacts) && contacts.length > 0 && (
+            <span style={{ fontSize: 12, color: '#94a3b8' }}>{contacts.length} participant{contacts.length === 1 ? '' : 's'}</span>
+          )}
+        </div>
+
+        {contactsLoading && <div className="empty-state">Loading participant contacts…</div>}
+        {!contactsLoading && contactsError && (
+          <div className="empty-state" role="alert" style={{ color: '#f87171' }}>{contactsError}</div>
+        )}
+        {!contactsLoading && !contactsError && Array.isArray(contacts) && contacts.length === 0 && (
+          <div className="empty-state">No registered participants yet.</div>
+        )}
+        {!contactsLoading && !contactsError && Array.isArray(contacts) && contacts.length > 0 && (
+          <div className="teams-table-wrap">
+            <div className="teams-table-header" style={{ gridTemplateColumns: '1.2fr 1.4fr 1.2fr 0.8fr' }}>
+              <span>PLAYER</span>
+              <span>EMAIL</span>
+              <span>TEAM</span>
+              <span>ROLE</span>
+            </div>
+            {contacts.map((contact, index) => (
+              <div className="teams-table-row" key={`${contact.username}-${contact.teamName}-${index}`} style={{ gridTemplateColumns: '1.2fr 1.4fr 1.2fr 0.8fr' }}>
+                <span>@{contact.username}</span>
+                <span>
+                  {contact.email
+                    ? <a href={`mailto:${encodeURIComponent(contact.email)}`} style={{ color: '#60a5fa', textDecoration: 'underline' }}>{contact.email}</a>
+                    : <span style={{ color: '#64748b' }}>Not available</span>}
+                </span>
+                <span>{contact.teamName || '—'}</span>
+                <span>{contact.role === 'team_lead' ? 'Team Lead' : 'Player'}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </main>
   );

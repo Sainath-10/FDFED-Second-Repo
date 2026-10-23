@@ -152,7 +152,13 @@ export class CompetitionsService {
   }
 
   async getCompetitionById(id: string): Promise<ICompetition> {
-    return this.competitionRepository.findById(id);
+    const comp = await this.competitionRepository.findById(id);
+    if (!comp) return comp;
+    // §2.4 — never expose a private competition's join code on the public
+    // detail endpoint. The organizer-only /competitions/:id/join-code route
+    // is the single authorized reveal path.
+    const { joinCode, ...publicCompetition } = comp as any;
+    return publicCompetition as ICompetition;
   }
 
   /** Join-code validation for private competitions (§2.4). */
@@ -181,8 +187,16 @@ export class CompetitionsService {
   async participate(
     competitionId: string,
     joinCode: string | undefined,
-    username: string,
+    user: any,
   ): Promise<{ ok: boolean; message: string }> {
+    // §12.4 — joining requires the persisted (simulated) verification status.
+    // Frontend gating alone is not sufficient: direct API calls are rejected here.
+    const userId = typeof user === 'string' ? null : user?.id;
+    if (!userId) {
+      throw new ForbiddenException('Authentication is required to join a competition.');
+    }
+    await this.assertVerified(userId, 'join a competition');
+
     const comp = await this.competitionRepository.findById(competitionId);
     if (!comp) throw new NotFoundException(`Competition ${competitionId} not found`);
     if (comp.visibility === 'private') {
@@ -362,7 +376,7 @@ export class CompetitionsService {
           username,
           email: user ? user.email : null,
           teamName: team.name,
-          role: username === team.leaderUsername || username === team.leaderUsername ? 'team_lead' : 'player',
+          role: username === team.leaderUsername || username === team.leaderId || username === team.createdBy ? 'team_lead' : 'player',
           feePaid: typeof (team as any).feePaid === 'number' ? (team as any).feePaid : 0,
         });
       }

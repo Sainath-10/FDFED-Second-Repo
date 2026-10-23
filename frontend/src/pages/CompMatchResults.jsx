@@ -8,6 +8,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import NexusData from '../services/data.js';
+import { MatchesAPI } from '../services/api.js';
+import { showToast } from '../lib/toast.js';
 import '../styles/pages/subpage.css';
 
 const PAGE_SIZE = 5;
@@ -45,25 +47,64 @@ export default function CompMatchResults() {
   const [editMatchId, setEditMatchId] = useState(null);
   const [score1, setScore1] = useState('0');
   const [score2, setScore2] = useState('0');
+  const [backendMatches, setBackendMatches] = useState([]);
+  const [backendLoaded, setBackendLoaded] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const comp = useMemo(() => {
     if (!id || !NexusData) return null;
     return NexusData.getCompetitionById(id) || { id, name: 'Competition', game: '—', type: 'league', status: 'upcoming', teams: [], matches: [], totalMatches: 0, matchesCompleted: 0, format: '—', season: '—' };
   }, [id, version]);
 
- // Auto-open the modal when ?matchId= is present.
+  // §10 — results and standings come from the authoritative match service.
   useEffect(() => {
-    if (!comp || !initialMatchId) return;
-    const target = (comp.matches || []).find((m) => String(m.id) === String(initialMatchId));
+    let cancelled = false;
+    if (!id) return undefined;
+    MatchesAPI.getByCompetition(id)
+      .then((res) => {
+        if (cancelled) return;
+        if (res.ok && Array.isArray(res.data)) {
+          setBackendMatches(res.data);
+          setBackendLoaded(true);
+        }
+      })
+      .catch(() => { /* keep local fallback */ });
+    return () => { cancelled = true; };
+  }, [id, version]);
+
+  const apiMatches = backendMatches.map((m) => {
+    const [s1 = '—', s2 = '—'] = String(m.score || '').split(/\s*[-:]\s*/);
+    const scheduled = m.scheduledAt ? new Date(m.scheduledAt) : null;
+    const valid = scheduled && !Number.isNaN(scheduled.getTime());
+    return {
+      id: m.id,
+      team1: m.team1Name || 'TBD',
+      team2: m.team2Name || 'TBD',
+      team1Id: m.team1Id,
+      team2Id: m.team2Id,
+      round: m.round || '—',
+      status: m.status === 'ongoing' ? 'live' : (m.status || 'scheduled'),
+      score1: s1,
+      score2: s2,
+      winnerName: m.winnerName || '',
+      date: valid ? scheduled.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—',
+      time: valid ? scheduled.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—',
+    };
+  });
+  const matches = backendLoaded ? apiMatches : (comp?.matches || []);
+  const rounds = [...new Set(matches.map((m) => m.round))];
+  const completedCount = matches.filter((m) => m.status === 'completed').length;
+  const pct = matches.length ? Math.round((completedCount / matches.length) * 100) : 0;
+
+  // Auto-open the modal when ?matchId= is present.
+  useEffect(() => {
+    if (!initialMatchId) return;
+    const target = matches.find((m) => String(m.id) === String(initialMatchId));
     if (target) openEnter(target);
- // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [comp, initialMatchId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matches, initialMatchId]);
 
   if (!comp) return <main className="sub-main"><h1 className="sub-page-title">Match Results</h1></main>;
-
-  const matches = comp.matches || [];
-  const rounds = [...new Set(matches.map((m) => m.round))];
-  const pct = comp.totalMatches ? Math.round((comp.matchesCompleted / comp.totalMatches) * 100) : 0;
 
   function canStartMatch(match) {
     if (!match || match.status !== 'scheduled') return false;
@@ -92,17 +133,39 @@ export default function CompMatchResults() {
     setVersion((v) => v + 1);
   }
 
-  function submitResult() {
+  async function submitResult() {
+    if (busy) return;
     const s1 = parseInt(score1, 10) || 0;
     const s2 = parseInt(score2, 10) || 0;
+    const match = matches.find((x) => String(x.id) === String(editMatchId));
+    if (!match) return;
+
+    // §10 — draw (equal score) is valid for leagues; knockout requires a winner.
+    const winnerName = s1 > s2 ? match.team1 : (s2 > s1 ? match.team2 : '');
+    const winnerId = s1 > s2 ? match.team1Id : (s2 > s1 ? match.team2Id : '');
+
+    setBusy(true);
+    const res = await MatchesAPI.recordResult(match.id, winnerId || '', winnerName, `${s1}-${s2}`);
+    setBusy(false);
+    if (res.ok) {
+      showToast('Result recorded. Standings and brackets were updated.');
+      setEditMatchId(null);
+      setVersion((v) => v + 1);
+      return;
+    }
+    if (res.error && !/backend|network|Failed to fetch|is the backend/i.test(String(res.error))) {
+      showToast(res.error, 'error');
+      return;
+    }
+
+    // Offline fallback preserves the existing local behaviour.
     const fresh = NexusData.getCompetitionById(id) || comp;
-    const m = fresh.matches.find((x) => String(x.id) === String(editMatchId));
-    if (!m) return;
+    const m = (fresh.matches || []).find((x) => String(x.id) === String(editMatchId));
+    if (!m) { setEditMatchId(null); return; }
     m.score1 = s1;
     m.score2 = s2;
     m.status = 'completed';
     fresh.matchesCompleted = fresh.matches.filter((x) => x.status === 'completed').length;
-    // Auto-start the next scheduled match (auto-advance).
     if (!fresh.matches.some((item) => item.status === 'live')) {
       const next = fresh.matches.find((item) => item.status === 'scheduled');
       if (next) next.status = 'live';
@@ -148,8 +211,8 @@ export default function CompMatchResults() {
           </div>
           <div className="summary-sub">{comp.game} • {comp.format}</div>
           <div className="summary-stats">
-            <div><span className="stat-label">TOTAL MATCHES</span><span className="stat-val-sm">{comp.totalMatches}</span></div>
-            <div><span className="stat-label">MATCHES COMPLETED</span><span className="stat-val-sm stat-green">{comp.matchesCompleted}</span></div>
+            <div><span className="stat-label">TOTAL MATCHES</span><span className="stat-val-sm">{matches.length}</span></div>
+            <div><span className="stat-label">MATCHES COMPLETED</span><span className="stat-val-sm stat-green">{completedCount}</span></div>
             <div className="summary-progress-wrap">
               <span className="stat-label">PROGRESS</span>
               <div className="progress-bar"><div className="progress-fill" style={{ width: `${pct}%` }}></div></div>
@@ -211,14 +274,8 @@ export default function CompMatchResults() {
                   <span className="rc-status"><span className={`sm-status-badge ${ST_CLS[m.status] || ''}`}>{ST_LABEL[m.status] || m.status}</span></span>
                   <span className="rc-actions">
                     {isComp ? (
-                      <>
-                        <button className="icon-btn" title="Edit" onClick={() => openEnter(m)}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
-                        </button>
-                        <button className="icon-btn" title="View">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
-                        </button>
-                      </>
+                      // §10 — verified results are immutable; no edit action.
+                      <span style={{ fontSize: 11, color: '#64748b', fontWeight: 700 }}>VERIFIED</span>
                     ) : isLive ? (
                       <button className="btn-xs btn-enter" type="button" data-match-id={m.id} onClick={() => openEnter(m)}>ENTER RESULT</button>
                     ) : (
@@ -264,7 +321,7 @@ export default function CompMatchResults() {
                 </div>
                 <div className="result-modal-actions">
                   <button className="btn-cancel" onClick={() => setEditMatchId(null)}>Cancel</button>
-                  <button className="btn-submit" onClick={submitResult}>Save Result</button>
+                  <button className="btn-submit" onClick={submitResult} disabled={busy}>{busy ? 'Saving…' : 'Save Result'}</button>
                 </div>
               </>
             )}

@@ -11,7 +11,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import NexusData from '../services/data.js';
 import NexusTeamWorkflow from '../services/teamWorkflow.js';
-import { CompetitionsAPI } from '../services/api.js';
+import { CompetitionsAPI, MatchesAPI, DisputesAPI } from '../services/api.js';
 import { showToast } from '../lib/toast.js';
 import '../styles/pages/comp-participant.css';
 
@@ -23,6 +23,39 @@ function fmtPrize(val) {
   return str.toLowerCase().includes('prize pool') ? str : `${str} Prize Pool`;
 }
 
+function fmtShortDate(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function parseScore(score) {
+  const parts = String(score || '').split(/\s*[-:]\s*/).map((part) => part.trim());
+  if (parts.length < 2) return [null, null];
+  return [parts[0], parts[1]];
+}
+
+/** Maps the persisted match record onto the shape this page renders. */
+function mapBackendMatch(match, index) {
+  const [score1, score2] = parseScore(match.score);
+  const scheduled = match.scheduledAt ? new Date(match.scheduledAt) : null;
+  const validDate = scheduled && !Number.isNaN(scheduled.getTime());
+  const status = match.status === 'ongoing' ? 'live' : (match.status || 'scheduled');
+  return {
+    id: match.id || `backend-match-${index}`,
+    team1: match.team1Name || 'TBD',
+    team2: match.team2Name || 'TBD',
+    status,
+    score1,
+    score2,
+    winnerName: match.winnerName || '',
+    round: match.round || '—',
+    date: validDate ? scheduled.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : '—',
+    time: validDate ? scheduled.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '',
+  };
+}
+
 export default function CompParticipant() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -32,10 +65,13 @@ export default function CompParticipant() {
   const [tick, setTick] = useState(0);
   const [disputeOpen, setDisputeOpen] = useState(false);
   const [syncError, setSyncError] = useState('');
+  const [backendMatches, setBackendMatches] = useState([]);
+  const [backendStandings, setBackendStandings] = useState([]);
   const [dTargetType, setDTargetType] = useState('');
   const [dTargetUser, setDTargetUser] = useState('');
   const [dReason, setDReason] = useState('');
   const [dEvidence, setDEvidence] = useState('');
+  const [disputeSubmitting, setDisputeSubmitting] = useState(false);
 
   function freshComp() {
     // §7 — this page must only ever show THE competition it was opened for;
@@ -109,6 +145,27 @@ export default function CompParticipant() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [compId]);
 
+  // §7/§9/§10 — schedule, bracket and standings come from the authoritative
+  // match service (verified results only), not from a stale local cache.
+  useEffect(() => {
+    let cancelled = false;
+    if (!compId) return undefined;
+
+    async function loadMatchData() {
+      const [matchRes, standingsRes] = await Promise.all([
+        MatchesAPI.getByCompetition(compId),
+        MatchesAPI.getStandings(compId),
+      ]);
+      if (cancelled) return;
+      if (matchRes.ok && Array.isArray(matchRes.data)) setBackendMatches(matchRes.data);
+      if (standingsRes.ok && Array.isArray(standingsRes.data)) setBackendStandings(standingsRes.data);
+    }
+
+    loadMatchData();
+    const timer = setInterval(loadMatchData, 10000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [compId]);
+
   const isLeague = (comp0.type || 'league') === 'league';
   const compName = comp0.name || 'Competition';
   const compGame = comp0.game || 'Unknown Game';
@@ -116,7 +173,9 @@ export default function CompParticipant() {
   const compFormat = comp0.format || (isLeague ? 'Round Robin' : 'Single Elimination');
   const compLocation = comp0.location || 'Online';
   const compPrize = comp0.prizePool || comp0.prize || '₹0';
-  const compDates = comp0.dates || 'TBD';
+  const compDates = comp0.dates || (comp0.startDate
+    ? `${fmtShortDate(comp0.startDate)}${comp0.endDate ? ` – ${fmtShortDate(comp0.endDate)}` : ''}`
+    : 'TBD');
   const compParticipants = comp0.participants || comp0.registeredTeams || 0;
   const compPrizeFormatted = fmtPrize(compPrize);
   const compDesc = comp0.description || `${compName} is a competitive ${compGame} ${isLeague ? 'league' : 'tournament'}. Teams battle across ${isLeague ? 'a structured league format with standings' : 'a knockout bracket'} competing for ${compPrizeFormatted.toLowerCase() === 'no prize pool' ? 'victory' : `the ${compPrizeFormatted}`}.`;
@@ -126,6 +185,8 @@ export default function CompParticipant() {
   const myTeam = freshMyTeam(comp); // eslint-disable-line react-hooks/exhaustive-deps
   const myTeamName = myTeam ? (myTeam.name || '') : '';
   const rawMatches = Array.isArray(comp.matches) ? comp.matches : [];
+  const authoritativeMatches = backendMatches.map(mapBackendMatch);
+  const displayMatches = authoritativeMatches.length ? authoritativeMatches : rawMatches;
 
   const teamName = myTeam ? (myTeam.name || 'My Team') : '';
   const abbr = teamName.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase() || 'MT';
@@ -137,7 +198,9 @@ export default function CompParticipant() {
     const st = normalize(m.status);
     return isCaptain || !st || st === 'approved' || st === 'active';
   });
-  const standingsArr = Array.isArray(comp.standings) ? comp.standings : [];
+  const standingsArr = backendStandings.length
+    ? backendStandings.map((row, index) => ({ ...row, rank: index + 1 }))
+    : (Array.isArray(comp.standings) ? comp.standings : []);
   let rank = '#—';
   if (standingsArr.length) {
     const idx = standingsArr.findIndex((s) => normalize(s.team) === normalize(teamName));
@@ -220,8 +283,9 @@ export default function CompParticipant() {
     setDisputeOpen(true);
   }
 
-  function submitDispute(event) {
+  async function submitDispute(event) {
     event.preventDefault();
+    if (disputeSubmitting) return;
     const reason = dReason.trim();
     const isPrize = dTargetType === 'prize';
     if (!dTargetType || (!isPrize && !dTargetUser.trim()) || reason.length < 10) {
@@ -229,17 +293,44 @@ export default function CompParticipant() {
       return;
     }
     if (userKey && normalize(dTargetUser) === userKey) { showToast('You cannot raise a dispute against yourself.', 'error'); return; }
-    // §13.3 — prize disputes route to the platform review queue (open_admin),
-    // categorized as prize_not_received. Filing a report never labels the
-    // organizer fraudulent automatically — review happens under platform policy.
+    const evidenceUrls = dEvidence.trim() ? dEvidence.split(',').map((s) => s.trim()).filter(Boolean) : [];
+    const targetUserOrTeam = isPrize
+      ? (participants.organizer || (comp && (comp.createdBy || comp.organizerId)) || 'organizer')
+      : dTargetUser.trim();
+
+    setDisputeSubmitting(true);
+    // §13.3 — prize disputes are persisted through the backend dispute
+    // workflow (admin review queue) and require a target + evidence trail.
+    let backendRejected = '';
+    try {
+      const res = await DisputesAPI.create({
+        competitionId: compId,
+        targetType: isPrize ? 'organizer' : dTargetType,
+        targetUserOrTeam,
+        reason,
+        evidenceUrls,
+        category: isPrize ? 'prize_not_received' : undefined,
+      });
+      if (res && res.ok === false && !/backend|network|Failed to fetch|is the backend/i.test(String(res.error || ''))) {
+        backendRejected = res.error || 'The dispute could not be submitted.';
+      }
+    } catch (err) { /* offline — local workflow below preserves existing behaviour */ }
+
+    if (backendRejected) {
+      setDisputeSubmitting(false);
+      showToast(backendRejected, 'error');
+      return;
+    }
+
+    // Local copy keeps the existing dispute UI/queues working in this hybrid app.
+    // Filing a report never labels the organizer fraudulent automatically.
     if (NexusData && NexusData.addDispute) {
-      const evidenceUrls = dEvidence.trim() ? dEvidence.split(',').map((s) => s.trim()).filter(Boolean) : [];
       const result = NexusData.addDispute({
         competitionId: compId,
         reportedBy: (session && session.username) || 'anonymous',
         targetType: isPrize ? 'organizer' : dTargetType,
         category: isPrize ? 'prize_not_received' : undefined,
-        targetUserOrTeam: isPrize ? (participants.organizer || (comp && (comp.createdBy || comp.organizerId)) || 'organizer') : dTargetUser.trim(),
+        targetUserOrTeam,
         reason,
         evidenceUrls,
         status: dTargetType === 'organizer' || isPrize ? 'open_admin' : 'open_organizer',
@@ -247,8 +338,13 @@ export default function CompParticipant() {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
-      if (result && result.ok === false) { showToast(result.error || 'Dispute blocked.', 'error'); return; }
+      if (result && result.ok === false) {
+        setDisputeSubmitting(false);
+        showToast(result.error || 'Dispute blocked.', 'error');
+        return;
+      }
     }
+    setDisputeSubmitting(false);
     setDisputeOpen(false);
     setDEvidence('');
     showToast(isPrize ? 'Prize report submitted — the platform review team will look into it and you will be notified when its status changes.' : 'Dispute submitted');
@@ -330,7 +426,7 @@ export default function CompParticipant() {
                     <div className="my-team-avatar-box">{abbr}</div>
                     <div className="my-team-info">
                       <div className="my-team-name">{teamName}</div>
-                      <div className="my-team-sub">Season {comp.season || '1'}</div>
+                      <div className="my-team-sub">{compGame} · {compFormat}</div>
                     </div>
                   </div>
                   <div className="my-team-stats-grid">
@@ -376,10 +472,10 @@ export default function CompParticipant() {
               </div>
             </div>
             <div className="part-matches-list" id="part-matches-list">
-              {rawMatches.length === 0 ? (
+              {displayMatches.length === 0 ? (
                 <p style={{ color: '#4b5563', fontSize: 14, padding: '16px 0' }}>No matches scheduled yet.</p>
               ) : (
-                rawMatches.map((m, i) => {
+                displayMatches.map((m, i) => {
                   const status = m.status === 'scheduled' ? 'upcoming' : (m.status || 'upcoming');
                   const [cls, lbl] = statusMap[status] || ['msb msb-upcoming', 'Upcoming'];
                   const myNorm = normalize(myTeamName);
@@ -417,28 +513,80 @@ export default function CompParticipant() {
             </div>
           </div>
           <div id="part-standings-table">
-            {!isLeague ? (
-              <div style={{ padding: 32, textAlign: 'center' }}>
-                <p style={{ color: '#9aa4b2', fontSize: 14, margin: '0 0 6px' }}>
-                  This is a <strong style={{ color: '#fff' }}>{compFormat}</strong> tournament —<br />standings tables are not used.
-                </p>
-                <span style={{ fontSize: 12, color: '#4b5563' }}>Bracket view available once all teams are confirmed.</span>
-              </div>
-            ) : (() => {
-              const teams = (comp.teams || []).filter((t) => t.status === 'approved');
-              const table = {};
-              teams.forEach((t) => { table[t.name] = { team: t.name, mp: 0, w: 0, l: 0, pts: 0 }; });
-              (comp.matches || []).forEach((m) => {
-                if (m.status !== 'completed') return;
-                if (!table[m.team1]) table[m.team1] = { team: m.team1, mp: 0, w: 0, l: 0, pts: 0 };
-                if (!table[m.team2]) table[m.team2] = { team: m.team2, mp: 0, w: 0, l: 0, pts: 0 };
-                const t1 = table[m.team1]; const t2 = table[m.team2];
-                t1.mp += 1; t2.mp += 1;
-                if (m.score1 > m.score2) { t1.w += 1; t1.pts += 3; t2.l += 1; }
-                else if (m.score2 > m.score1) { t2.w += 1; t2.pts += 3; t1.l += 1; }
-                else { t1.pts += 1; t2.pts += 1; }
+            {!isLeague ? (() => {
+              // §9 — the bracket is rendered from the authoritative match
+              // records (verified results only). No winner is computed here.
+              const rounds = {};
+              displayMatches.forEach((m) => {
+                const label = m.round || 'Round 1';
+                if (!rounds[label]) rounds[label] = [];
+                rounds[label].push(m);
               });
-              const rows = Object.values(table).sort((a, b) => (b.pts - a.pts) || (b.w - a.w)).map((s, i) => ({ ...s, rank: i + 1, you: myTeamName && normalize(s.team) === normalize(myTeamName) }));
+              const labels = Object.keys(rounds);
+              if (!labels.length) {
+                return (
+                  <div style={{ padding: 32, textAlign: 'center' }}>
+                    <p style={{ color: '#9aa4b2', fontSize: 14, margin: '0 0 6px' }}>
+                      This is a <strong style={{ color: '#fff' }}>{compFormat}</strong> tournament.
+                    </p>
+                    <span style={{ fontSize: 12, color: '#4b5563' }}>The bracket appears once the organizer generates fixtures.</span>
+                  </div>
+                );
+              }
+              return (
+                <div style={{ display: 'flex', gap: 20, overflowX: 'auto', padding: '8px 0 16px', alignItems: 'flex-start' }}>
+                  {labels.map((label) => (
+                    <div key={label} style={{ minWidth: 230, flex: '1 0 230px' }}>
+                      <div style={{ fontSize: 11, fontWeight: 800, color: '#94a3b8', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 10 }}>{label}</div>
+                      {rounds[label].map((m) => {
+                        const done = m.status === 'completed';
+                        const winner1 = done && (m.winnerName ? normalize(m.winnerName) === normalize(m.team1) : Number(m.score1) > Number(m.score2));
+                        const winner2 = done && (m.winnerName ? normalize(m.winnerName) === normalize(m.team2) : Number(m.score2) > Number(m.score1));
+                        return (
+                          <div key={m.id} style={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: 10, padding: '10px 12px', marginBottom: 8 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: winner1 ? '#C6FF33' : '#e2e8f0', fontWeight: winner1 ? 700 : 500 }}>
+                              <span>{m.team1}</span><span>{done ? (m.score1 ?? '—') : '—'}</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: winner2 ? '#C6FF33' : '#e2e8f0', fontWeight: winner2 ? 700 : 500, marginTop: 4 }}>
+                              <span>{m.team2}</span><span>{done ? (m.score2 ?? '—') : '—'}</span>
+                            </div>
+                            <div style={{ marginTop: 8, fontSize: 10, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                              {m.status}{m.date && m.date !== '—' ? ` · ${m.date}${m.time ? ` ${m.time}` : ''}` : ''}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              );
+            })() : (() => {
+              const rows = backendStandings.length
+                ? backendStandings.map((s, i) => ({
+                  team: s.team,
+                  mp: s.mp ?? 0,
+                  w: s.w ?? 0,
+                  l: s.l ?? 0,
+                  pts: s.pts ?? s.points ?? 0,
+                  rank: i + 1,
+                  you: myTeamName && normalize(s.team) === normalize(myTeamName),
+                }))
+                : (() => {
+                  const teams = (comp.teams || []).filter((t) => t.status === 'approved');
+                  const table = {};
+                  teams.forEach((t) => { table[t.name] = { team: t.name, mp: 0, w: 0, l: 0, pts: 0 }; });
+                  (comp.matches || []).forEach((m) => {
+                    if (m.status !== 'completed') return;
+                    if (!table[m.team1]) table[m.team1] = { team: m.team1, mp: 0, w: 0, l: 0, pts: 0 };
+                    if (!table[m.team2]) table[m.team2] = { team: m.team2, mp: 0, w: 0, l: 0, pts: 0 };
+                    const t1 = table[m.team1]; const t2 = table[m.team2];
+                    t1.mp += 1; t2.mp += 1;
+                    if (m.score1 > m.score2) { t1.w += 1; t1.pts += 3; t2.l += 1; }
+                    else if (m.score2 > m.score1) { t2.w += 1; t2.pts += 3; t1.l += 1; }
+                    else { t1.pts += 1; t2.pts += 1; }
+                  });
+                  return Object.values(table).sort((a, b) => (b.pts - a.pts) || (b.w - a.w)).map((s, i) => ({ ...s, rank: i + 1, you: myTeamName && normalize(s.team) === normalize(myTeamName) }));
+                })();
               if (!rows.length) return <p style={{ color: '#4b5563', fontSize: 14, padding: '16px 0' }}>No standing data yet.</p>;
               return (
                 <div className="part-standings-wrap">
@@ -500,7 +648,7 @@ export default function CompParticipant() {
               </div>
               <div style={{ display: 'flex', gap: 12 }}>
                 <button type="button" onClick={() => setDisputeOpen(false)} style={{ flex: 1, padding: 12, background: 'none', border: '1px solid #334155', color: '#94a3b8', borderRadius: 8, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
-                <button type="submit" style={{ flex: 1, padding: 12, background: '#f87171', border: 'none', color: '#fff', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}>Submit Dispute</button>
+                <button type="submit" disabled={disputeSubmitting} style={{ flex: 1, padding: 12, background: '#f87171', border: 'none', color: '#fff', borderRadius: 8, cursor: disputeSubmitting ? 'wait' : 'pointer', fontSize: 14, fontWeight: 600 }}>{disputeSubmitting ? 'Submitting…' : 'Submit Dispute'}</button>
               </div>
             </form>
           </div>
