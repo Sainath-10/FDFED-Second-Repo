@@ -67,9 +67,9 @@ database (no server on `127.0.0.1:5432`) and browser end-to-end click-throughs
 - Participant dashboard loads the correct competition by ID, syncs from the
   backend, shows loading/error states, and reads schedule, bracket, and
   standings from the authoritative match service.
-- Bracket view renders rounds, pairings, status, scores, and winners from
-  persisted matches for elimination formats; league view uses backend
-  standings.
+- Bracket view renders rounds, pairings, status, scores, and persisted winners
+  from backend matches on the participant dashboard and the public competition
+  info tab; league standings are rebuilt from the same verified match data.
 - Organizer team page shows authorized participant contact emails with loading,
   empty, and error states. Emails are not exposed on public pages.
 

@@ -13,7 +13,7 @@ import NexusData from '../services/data.js';
 import NexusTeamWorkflow from '../services/teamWorkflow.js';
 import useVerificationGate from '../hooks/useVerificationGate.jsx';
 import useJoinCodeGate from '../hooks/useJoinCodeGate.jsx';
-import { DisputesAPI } from '../services/api.js';
+import { DisputesAPI, MatchesAPI } from '../services/api.js';
 import { showToast } from '../lib/toast.js';
 import { assetUrl } from '../lib/assets.js';
 import '../styles/pages/comp-info.css';
@@ -70,6 +70,25 @@ function buildStandings(compData) {
     .map((row, index) => ({ ...row, rank: index + 1 }));
 }
 
+/** Maps the persisted match record for the bracket/standings tabs. */
+function mapApiMatch(match, index) {
+  const [score1 = '—', score2 = '—'] = String(match.score || '').split(/\s*[-:]\s*/);
+  const scheduled = match.scheduledAt ? new Date(match.scheduledAt) : null;
+  const valid = scheduled && !Number.isNaN(scheduled.getTime());
+  return {
+    id: match.id || `match-${index}`,
+    team1: match.team1Name || 'TBD',
+    team2: match.team2Name || 'TBD',
+    status: match.status === 'ongoing' ? 'live' : (match.status || 'scheduled'),
+    score1,
+    score2,
+    winnerName: match.winnerName || '',
+    round: match.round || '—',
+    date: valid ? scheduled.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : '—',
+    time: valid ? scheduled.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '',
+  };
+}
+
 export default function CompInfo() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -90,6 +109,19 @@ export default function CompInfo() {
   // creating a team, and the organizer's code for private competitions.
   const gate = useVerificationGate('join or create a team in a competition');
   const joinCodeGate = useJoinCodeGate(comp);
+
+  // §9/§10 — bracket and standings use persisted match records, not local cache.
+  const [apiMatches, setApiMatches] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    if (!compId) return undefined;
+    MatchesAPI.getByCompetition(compId)
+      .then((res) => {
+        if (!cancelled && res.ok && Array.isArray(res.data)) setApiMatches(res.data);
+      })
+      .catch(() => { /* keep local fallback */ });
+    return () => { cancelled = true; };
+  }, [compId]);
 
   useEffect(() => {
     if (comp) document.title = `NEXUS ESPORTS — ${comp.name}`;
@@ -116,8 +148,10 @@ export default function CompInfo() {
   }
 
   const approvedTeams = (comp.teams || []).filter((t) => t.status === 'approved');
-  const standings = buildStandings(comp);
-  const matches = (comp.matches || []).filter((m) => ['completed', 'live', 'scheduled'].includes(m.status));
+  const authoritativeMatches = apiMatches.map(mapApiMatch);
+  const matchSource = authoritativeMatches.length ? authoritativeMatches : (comp.matches || []);
+  const standings = buildStandings({ ...comp, matches: matchSource });
+  const matches = matchSource.filter((m) => ['completed', 'live', 'scheduled'].includes(m.status));
   const prizes = comp.prizes || [];
   const hasPrize = comp.prizePool && !['No Prize Pool', '₹0', '—'].includes(comp.prizePool);
   const prizePhrase = hasPrize ? `the prize pool of ${comp.prizePool}` : 'glory and championship honors';
@@ -459,14 +493,17 @@ export default function CompInfo() {
                       const isDone = m.status === 'completed';
                       const t1Banned = NexusData && NexusData.isTeamBannedInComp && NexusData.isTeamBannedInComp(m.team1, comp);
                       const t2Banned = NexusData && NexusData.isTeamBannedInComp && NexusData.isTeamBannedInComp(m.team2, comp);
+                      // Prefer the persisted winner; never infer one when absent.
+                      const winner1 = isDone && (m.winnerName ? normalize(m.winnerName) === normalize(m.team1) : Number(m.score1) > Number(m.score2));
+                      const winner2 = isDone && (m.winnerName ? normalize(m.winnerName) === normalize(m.team2) : Number(m.score2) > Number(m.score1));
                       return (
                         <div className="bracket-match" key={m.id || `${m.team1}-${m.team2}-${m.round}`}>
                           <div className="round-label">{m.round || 'Match'} · {isLive ? '🔴 LIVE' : (isDone ? 'Completed' : 'Scheduled')}</div>
-                          <div className={`bracket-team ${isDone && m.score1 >= m.score2 ? 'winner' : ''}`}>
+                          <div className={`bracket-team ${winner1 ? 'winner' : ''}`}>
                             <span>{t1Banned ? (<><del style={{ color: '#ef4444' }}>{m.team1 || 'TBD'}</del> <span style={{ color: '#ef4444', fontSize: 10, fontWeight: 700 }}>(BANNED)</span></>) : (m.team1 || 'TBD')}</span>
                             <span className="score">{isDone ? m.score1 : '—'}</span>
                           </div>
-                          <div className={`bracket-team ${isDone && m.score2 > m.score1 ? 'winner' : ''}`}>
+                          <div className={`bracket-team ${winner2 ? 'winner' : ''}`}>
                             <span>{t2Banned ? (<><del style={{ color: '#ef4444' }}>{m.team2 || 'TBD'}</del> <span style={{ color: '#ef4444', fontSize: 10, fontWeight: 700 }}>(BANNED)</span></>) : (m.team2 || 'TBD')}</span>
                             <span className="score">{isDone ? m.score2 : '—'}</span>
                           </div>
