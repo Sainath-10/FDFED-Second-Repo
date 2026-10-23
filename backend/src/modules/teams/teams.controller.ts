@@ -6,12 +6,14 @@ import {
   Delete,
   Param,
   Body,
+  Query,
   UseGuards,
   HttpCode,
+  NotFoundException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { TeamsService } from './teams.service';
-import { CreateTeamDto, UpdateTeamDto, AddTeamMemberDto, TeamResponseDto } from './dto/team.dto';
+import { CreateTeamDto, UpdateTeamDto, AddTeamMemberDto, TeamResponseDto, DisbandTeamDto, RemoveMemberDto } from './dto/team.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/decorators/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -49,8 +51,7 @@ export class TeamsController {
     @Body() createTeamDto: CreateTeamDto,
     @CurrentUser() user?: any,
   ): Promise<TeamResponseDto> {
-    const leaderId = user?.username || user?.id || 'system';
-    return this.teamsService.createTeam(createTeamDto, leaderId);
+    return this.teamsService.createTeam(createTeamDto, user);
   }
 
   @Get()
@@ -123,8 +124,47 @@ export class TeamsController {
     @Body() updateTeamDto: UpdateTeamDto,
     @CurrentUser() user?: any,
   ): Promise<TeamResponseDto> {
-    await this.teamsService.verifyTeamOwnership(id, user);
-    return this.teamsService.updateTeam(id, updateTeamDto);
+    return this.teamsService.updateTeam(id, updateTeamDto, user);
+  }
+
+  @Post(':id/disband')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Disband a team (§4.2)',
+    description: 'Team lead disbands the team with a mandatory reason. Blocked after the competition starts. Records pending refunds for eligible paid participants and notifies the organizer + members.',
+  })
+  async disbandTeam(
+    @Param('id') id: string,
+    @Body() dto: DisbandTeamDto,
+    @CurrentUser() user?: any,
+  ) {
+    return this.teamsService.disbandTeam(id, dto.reason, user);
+  }
+
+  @Get('refund-requests')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.DISPUTE_ADMIN, UserRole.SUPER_ADMIN, UserRole.REVENUE_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List refund requests (support workflow). Filter with ?status=pending' })
+  async refundRequests(@Query('status') status?: string) {
+    return this.teamsService.getRefundRequests(status);
+  }
+
+  @Patch('refund-requests/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.DISPUTE_ADMIN, UserRole.SUPER_ADMIN, UserRole.REVENUE_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Resolve a refund request (support workflow). Never auto-claims a provider refund was completed.' })
+  async resolveRefundRequest(
+    @Param('id') id: string,
+    @Body() body: { status: 'completed' | 'failed' | 'cancelled'; note?: string },
+    @CurrentUser() user?: any,
+  ) {
+    const resolvedBy = user?.username || user?.id || 'admin';
+    return this.teamsService.resolveRefundRequest(id, body.status, resolvedBy, body.note);
   }
 
   @Post(':id/members')
@@ -150,8 +190,7 @@ export class TeamsController {
     @Body() addTeamMemberDto: AddTeamMemberDto,
     @CurrentUser() user?: any,
   ): Promise<TeamResponseDto> {
-    await this.teamsService.verifyTeamOwnership(id, user);
-    return this.teamsService.addMember(id, addTeamMemberDto);
+    return this.teamsService.addMember(id, addTeamMemberDto, user);
   }
 
   @Delete(':id/members/:memberId')
@@ -175,10 +214,10 @@ export class TeamsController {
   async removeMember(
     @Param('id') id: string,
     @Param('memberId') memberId: string,
+    @Body() body: RemoveMemberDto,
     @CurrentUser() user?: any,
   ): Promise<TeamResponseDto> {
-    await this.teamsService.verifyTeamOwnership(id, user);
-    return this.teamsService.removeMember(id, memberId);
+    return this.teamsService.removeMember(id, memberId, body.reason, user);
   }
 
   @Patch(':id/status')
@@ -221,9 +260,11 @@ export class TeamsController {
   @ApiOperation({ summary: 'Player requests to join a team' })
   async createJoinRequest(
     @Param('id') teamId: string,
-    @Body() body: { competitionId: string; fromUsername: string; message?: string },
+    @Body() body: { competitionId?: string; fromUsername?: string; message?: string },
+    @CurrentUser() user?: any,
   ) {
-    return this.teamsService.createJoinRequest(teamId, body.competitionId, body.fromUsername, body.message);
+    // identity is derived from the JWT — the client-supplied username is only a hint
+    return this.teamsService.createJoinRequest(teamId, body.competitionId || '', user, body.message);
   }
 
   @Get(':id/join-requests')
@@ -253,11 +294,11 @@ export class TeamsController {
   @ApiOperation({ summary: 'Invite player to team' })
   async createInvite(
     @Param('id') teamId: string,
-    @Body() body: { competitionId: string; toUsername: string; fromUsername: string },
+    @Body() body: { competitionId?: string; toUsername: string; fromUsername?: string },
     @CurrentUser() user?: any,
   ) {
-    await this.teamsService.verifyTeamOwnership(teamId, user);
-    return this.teamsService.createInvite(teamId, body.competitionId, body.toUsername, body.fromUsername);
+    const fromUsername = user?.username || body.fromUsername || 'system';
+    return this.teamsService.createInvite(teamId, body.competitionId || '', body.toUsername, fromUsername, user);
   }
 
   @Get('invites/:username')
@@ -275,8 +316,9 @@ export class TeamsController {
   async updateInvite(
     @Param('inviteId') inviteId: string,
     @Body() body: { status: string },
+    @CurrentUser() user?: any,
   ) {
-    return this.teamsService.updateInvite(inviteId, body.status);
+    return this.teamsService.updateInvite(inviteId, body.status, user);
   }
 
   @Delete(':id')
@@ -292,8 +334,8 @@ export class TeamsController {
     status: 204,
     description: 'Team successfully deleted',
   })
-  async deleteTeam(@Param('id') id: string): Promise<void> {
-    await this.teamsService.deleteTeam(id);
+  async deleteTeam(@Param('id') id: string, @CurrentUser() user?: any): Promise<void> {
+    await this.teamsService.deleteTeam(id, user);
   }
 }
 

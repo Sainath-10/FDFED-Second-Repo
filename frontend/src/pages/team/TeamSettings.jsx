@@ -6,9 +6,10 @@
  */
 import { useState } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
-import { useTeamContext } from '../../hooks/useTeamContext.js';
+import { useTeamContext, hasCompetitionStarted } from '../../hooks/useTeamContext.js';
 import NexusTeamWorkflow from '../../services/teamWorkflow.js';
 import NexusData from '../../services/data.js';
+import { TeamsAPI } from '../../services/api.js';
 import TeamTabs from '../../components/TeamTabs.jsx';
 import { showToast } from '../../lib/toast.js';
 import '../../styles/pages/team/team-settings.css';
@@ -26,11 +27,14 @@ const UPLOAD_SVG = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" 
 
 export default function TeamSettings() {
   const navigate = useNavigate();
-  const { ctx, refresh, canManage: hookCanManage, isEnded: hookIsEnded } = useTeamContext();
+  const { ctx, refresh, canManage: hookCanManage, isEnded: hookIsEnded, isStarted: hookIsStarted } = useTeamContext();
   const [name, setName] = useState(() => (ctx && ctx.team ? ctx.team.name || '' : ''));
   const [tag, setTag] = useState(() => (ctx && ctx.team ? ctx.team.tag || '' : ''));
   const [logo, setLogo] = useState('shield');
   const [policy, setPolicy] = useState('open');
+  const [disbandOpen, setDisbandOpen] = useState(false);
+  const [disbandReason, setDisbandReason] = useState('');
+  const [disbanding, setDisbanding] = useState(false);
 
   if (!ctx || !ctx.comp || !ctx.team) {
     return <main className="main-content"><h1 className="page-title">Team Settings</h1></main>;
@@ -39,6 +43,7 @@ export default function TeamSettings() {
   const { comp, team, session, context } = ctx;
   const canManage = hookCanManage ?? !!(session && (session.username || '').toLowerCase() === (team.createdBy || '').toLowerCase());
   const isEnded = hookIsEnded ?? !!(comp.ended || comp.status === 'completed');
+  const isStarted = hookIsStarted ?? hasCompetitionStarted(comp);
 
   if (!canManage) {
     return <Navigate to={`/pages/team/team-roster.html?compId=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(team.id)}`} replace />;
@@ -57,17 +62,46 @@ export default function TeamSettings() {
     showToast(`Team settings for "${name.trim()}" updated successfully!`);
   }
 
+  // §4.2 — disband opens a reason modal; the competition-started and ended locks apply.
   function disbandTeam() {
-    if (!window.confirm(`Are you sure you want to disband "${team.name || 'this team'}"? This cannot be undone.`)) return;
+    if (isStarted) { showToast('The competition has started — teams can no longer be disbanded.', 'error'); return; }
+    if (isEnded) { showToast('This competition has ended — teams can no longer be disbanded.', 'error'); return; }
+    setDisbandReason('');
+    setDisbandOpen(true);
+  }
+
+  async function confirmDisband() {
+    const reason = String(disbandReason || '').trim();
+    if (reason.length < 10) { showToast('Please provide a meaningful reason (min 10 characters) — it will be shared with the organizer and participants.', 'error'); return; }
+    if (disbanding) return;
+    setDisbanding(true);
+    // Backend first: records the reason, notifies organizer + participants,
+    // creates pending refund requests for eligible paid participants (idempotent).
+    let offline = false;
+    try {
+      const res = await TeamsAPI.disband(team.id, reason);
+      if (!res.ok && !/backend|network|Failed to fetch|is the backend/i.test(String(res.error || ''))) {
+        setDisbanding(false);
+        showToast(res.error || 'Unable to disband the team.', 'error');
+        return;
+      }
+      if (!res.ok) offline = true;
+    } catch (err) { offline = true; }
+
     const comps = (NexusData && NexusData.loadCompetitions) ? NexusData.loadCompetitions() || [] : [];
     const found = comps.find((c) => String(c.id) === String(comp.id));
     if (found && Array.isArray(found.teams)) {
       found.teams = found.teams.filter((t) => String(t.id) !== String(team.id));
       if (NexusData.updateCompetition) NexusData.updateCompetition(found);
     }
+    if (NexusTeamWorkflow && typeof NexusTeamWorkflow.disbandTeam === 'function') {
+      try { NexusTeamWorkflow.disbandTeam({ compId: comp.id, teamId: team.id, reason }); } catch (e) { /* ignore */ }
+    }
     try { localStorage.removeItem('nexus.team.context'); } catch (e) { /* ignore */ }
-    showToast('Team disbanded successfully.', 'error');
-    setTimeout(() => { navigate('/pages/competitions.html'); }, 1200);
+    setDisbanding(false);
+    setDisbandOpen(false);
+    showToast(offline ? 'Team disbanded locally (backend offline). Refund records will be created when the API returns.' : 'Team disbanded. Refunds for eligible paid participants may take a few days to process.', 'error');
+    setTimeout(() => { navigate('/pages/competitions.html'); }, 1500);
   }
 
   return (
@@ -127,10 +161,44 @@ export default function TeamSettings() {
 
         <div className="design-card danger-card-red-border">
           <label className="design-label" style={{ color: '#f87171' }}>⚠ Danger Zone</label>
-          <p className="danger-desc-v2">Disbanding this team is permanent and cannot be undone. All members will be removed from the competition registry immediately.</p>
-          <button className="btn-action btn-disband-v2" onClick={disbandTeam}>DISBAND TEAM PERMANENTLY</button>
+          <p className="danger-desc-v2">Disbanding this team is permanent and cannot be undone. All members will be removed from the competition registry immediately. A refund request will be recorded for eligible paid participants (processing may take a few days).</p>
+          {isStarted && !isEnded && (
+            <p className="danger-desc-v2" style={{ color: '#fb923c', marginBottom: 8 }}><strong>🔒 The competition has started — disbanding is no longer permitted.</strong></p>
+          )}
+          <button className="btn-action btn-disband-v2" onClick={disbandTeam} disabled={isEnded || isStarted}>{isStarted && !isEnded ? 'DISBANDING LOCKED' : 'DISBAND TEAM PERMANENTLY'}</button>
         </div>
       </div>
+
+      {disbandOpen && (
+        <div className="modal-overlay open" style={{ display: 'flex' }}>
+          <div className="modal-box" style={{ maxWidth: 480 }}>
+            <div className="modal-header">
+              <h3 className="modal-title" style={{ color: '#f87171' }}>Disband Team</h3>
+              <button className="modal-close" onClick={() => { if (!disbanding) setDisbandOpen(false); }}>✕</button>
+            </div>
+            <p style={{ color: '#9aa4b2', fontSize: 14, marginBottom: 8 }}>
+              You are disbanding <strong style={{ color: '#fff' }}>{team.name}</strong> for <strong style={{ color: '#c6ff33' }}>{comp.name}</strong>. This cannot be undone.
+            </p>
+            <p style={{ color: '#9aa4b2', fontSize: 12, marginBottom: 12 }}>
+              A meaningful reason is mandatory: the organizer and all participants are notified with this reason, and eligible paid participants get a refund request recorded (refunds may take a few days, subject to payment-provider processing).
+            </p>
+            <textarea
+              className="form-input"
+              rows={3}
+              placeholder="e.g. Half the roster cannot attend the scheduled match days"
+              value={disbandReason}
+              onChange={(e) => setDisbandReason(e.target.value)}
+              style={{ width: '100%', marginBottom: 16 }}
+              maxLength={500}
+              disabled={disbanding}
+            />
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+              <button className="btn-cancel" onClick={() => { if (!disbanding) setDisbandOpen(false); }}>Cancel</button>
+              <button className="btn-submit" style={{ background: '#ef4444' }} disabled={disbanding} onClick={confirmDisband}>{disbanding ? 'Disbanding…' : 'Disband Team'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

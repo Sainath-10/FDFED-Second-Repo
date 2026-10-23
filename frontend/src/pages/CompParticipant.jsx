@@ -11,6 +11,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import NexusData from '../services/data.js';
 import NexusTeamWorkflow from '../services/teamWorkflow.js';
+import { CompetitionsAPI } from '../services/api.js';
 import { showToast } from '../lib/toast.js';
 import '../styles/pages/comp-participant.css';
 
@@ -30,14 +31,17 @@ export default function CompParticipant() {
 
   const [tick, setTick] = useState(0);
   const [disputeOpen, setDisputeOpen] = useState(false);
+  const [syncError, setSyncError] = useState('');
   const [dTargetType, setDTargetType] = useState('');
   const [dTargetUser, setDTargetUser] = useState('');
   const [dReason, setDReason] = useState('');
   const [dEvidence, setDEvidence] = useState('');
 
   function freshComp() {
+    // §7 — this page must only ever show THE competition it was opened for;
+    // no other entry may leak in through fallbacks.
     const all = NexusData ? NexusData.loadCompetitions() : [];
-    return all.find((c) => String(c.id) === String(compId)) || all.find((c) => c.role === 'participant') || {};
+    return all.find((c) => String(c.id) === String(compId)) || {};
   }
   function freshMyTeam(comp) {
     if (!NexusTeamWorkflow || !comp.id || typeof NexusTeamWorkflow.findUserTeamInCompetition !== 'function') return null;
@@ -61,6 +65,49 @@ export default function CompParticipant() {
     const id = setInterval(() => setTick((t) => t + 1), 3000);
     return () => clearInterval(id);
   }, []);
+
+  // §7 — fetch the authoritative competition record from the backend and mirror
+  // it into the local cache so the summary, schedule and standings all reflect
+  // the real record instead of a stale localStorage copy.
+  useEffect(() => {
+    let cancelled = false;
+    if (!compId) { setSyncError('No competition specified in the URL.'); return undefined; }
+    CompetitionsAPI.getById(compId)
+      .then((res) => {
+        if (cancelled) return;
+        if (res.ok && res.data && res.data.id && NexusData && typeof NexusData.updateCompetition === 'function') {
+          // Map backend fields onto the local-cache record shape.
+          const b = res.data;
+          const local = freshComp();
+          NexusData.updateCompetition({
+            ...local,
+            id: local.id || compId,
+            dbId: b.id,
+            name: b.name || local.name,
+            description: b.description || local.description,
+            game: b.game || local.game,
+            type: b.type || local.type,
+            format: b.format || local.format,
+            status: b.status || local.status,
+            prizePool: b.prizePool || local.prizePool,
+            prize: b.prize ?? local.prize,
+            startDate: b.startDate ? String(b.startDate).slice(0, 10) : local.startDate,
+            endDate: b.endDate ? String(b.endDate).slice(0, 10) : local.endDate,
+            regDeadline: b.registrationCloseAt ? String(b.registrationCloseAt).slice(0, 10) : local.regDeadline,
+            maxTeams: b.maxTeams ?? local.maxTeams,
+            maxPlayersPerTeam: b.maxPlayersPerTeam ?? local.maxPlayersPerTeam,
+            visibility: b.visibility || local.visibility,
+            organizers: Array.isArray(b.organizers) ? b.organizers : local.organizers,
+          });
+          setSyncError('');
+        } else if (!res.ok && !/backend|network|Failed to fetch|is the backend/i.test(String(res.error || ''))) {
+          setSyncError(res.error || 'This competition could not be loaded.');
+        }
+      })
+      .catch(() => { if (!cancelled) setSyncError(''); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [compId]);
 
   const isLeague = (comp0.type || 'league') === 'league';
   const compName = comp0.name || 'Competition';
@@ -120,6 +167,12 @@ export default function CompParticipant() {
     targetOptions = teams.length
       ? [{ value: '', label: '— Select a Team —' }, ...teams.map((t) => ({ value: t.name, label: `${t.name} (${t.status || 'registered'})` }))]
       : [{ value: '', label: '— No other teams available —' }];
+  } else if (dTargetType === 'prize') {
+    // §13.3 — the organizer is auto-resolved; the participant only describes the issue.
+    targetLabel = 'Prize Not Reported Against';
+    routingHint = '💰 This report is routed directly to the platform prize review queue (not to the organizer).';
+    const prizeOrg = participants.organizer || (comp && (comp.createdBy || comp.organizerId)) || 'organizer';
+    targetOptions = [{ value: prizeOrg, label: `Organizer: ${prizeOrg}` }];
   } else if (dTargetType === 'player') {
     targetLabel = 'Choose Tournament Player *';
     routingHint = '📋 Dispute sent to Tournament Organizer for review.';
@@ -170,21 +223,26 @@ export default function CompParticipant() {
   function submitDispute(event) {
     event.preventDefault();
     const reason = dReason.trim();
-    if (!dTargetType || !dTargetUser.trim() || reason.length < 10) {
+    const isPrize = dTargetType === 'prize';
+    if (!dTargetType || (!isPrize && !dTargetUser.trim()) || reason.length < 10) {
       showToast('Please fill in all required fields (target and min. 10 chars reason).', 'error');
       return;
     }
     if (userKey && normalize(dTargetUser) === userKey) { showToast('You cannot raise a dispute against yourself.', 'error'); return; }
+    // §13.3 — prize disputes route to the platform review queue (open_admin),
+    // categorized as prize_not_received. Filing a report never labels the
+    // organizer fraudulent automatically — review happens under platform policy.
     if (NexusData && NexusData.addDispute) {
       const evidenceUrls = dEvidence.trim() ? dEvidence.split(',').map((s) => s.trim()).filter(Boolean) : [];
       const result = NexusData.addDispute({
         competitionId: compId,
         reportedBy: (session && session.username) || 'anonymous',
-        targetType: dTargetType,
-        targetUserOrTeam: dTargetUser.trim(),
+        targetType: isPrize ? 'organizer' : dTargetType,
+        category: isPrize ? 'prize_not_received' : undefined,
+        targetUserOrTeam: isPrize ? (participants.organizer || (comp && (comp.createdBy || comp.organizerId)) || 'organizer') : dTargetUser.trim(),
         reason,
         evidenceUrls,
-        status: dTargetType === 'organizer' ? 'open_admin' : 'open_organizer',
+        status: dTargetType === 'organizer' || isPrize ? 'open_admin' : 'open_organizer',
         organizerWarnings: 0,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -192,12 +250,23 @@ export default function CompParticipant() {
       if (result && result.ok === false) { showToast(result.error || 'Dispute blocked.', 'error'); return; }
     }
     setDisputeOpen(false);
-    showToast('Dispute submitted');
+    setDEvidence('');
+    showToast(isPrize ? 'Prize report submitted — the platform review team will look into it and you will be notified when its status changes.' : 'Dispute submitted');
   }
 
   return (
     <>
       <main className="part-main">
+        {syncError && (
+          <div style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.4)', color: '#f87171', padding: '10px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700, textAlign: 'center', marginBottom: 16 }}>
+            ⚠ {syncError} Showing locally cached data below.
+          </div>
+        )}
+        {!comp0.id && !syncError && (
+          <div style={{ background: 'rgba(251,146,60,0.12)', border: '1px solid rgba(251,146,60,0.4)', color: '#fb923c', padding: '10px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700, textAlign: 'center', marginBottom: 16 }}>
+            ⏳ Loading competition details…
+          </div>
+        )}
         <div className="part-hero" id="part-hero">
           <div className="part-hero-left">
             <div className="part-hero-tags" id="part-hero-tags">
@@ -271,7 +340,7 @@ export default function CompParticipant() {
                   </div>
                   {rosterMembers.length > 0 ? (
                     <div style={{ marginTop: 20 }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.8px' }}>Team Roster · {rosterMembers.length} / 5 players</div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.8px' }}>Team Roster · {rosterMembers.length} / {myTeam.maxPlayers || comp.maxPlayersPerTeam || 5} players</div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                         {rosterMembers.map((m) => {
                           const name = m.displayName || m.username || 'Unknown Player';
@@ -400,7 +469,7 @@ export default function CompParticipant() {
           <div style={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: 16, width: 'min(96vw,520px)', padding: 32, position: 'relative', boxShadow: '0 20px 60px #000a' }}>
             <button onClick={() => setDisputeOpen(false)} style={{ position: 'absolute', top: 16, right: 18, background: 'none', border: 'none', color: '#9aa4b2', fontSize: 20, cursor: 'pointer' }}>✕</button>
             <h2 style={{ margin: '0 0 6px', color: '#f1f5f9', fontSize: 20 }}>⚠ Raise a Dispute</h2>
-            <p style={{ margin: '0 0 24px', color: '#64748b', fontSize: 13 }}>Select whether the dispute is against a Team, a Player, or the Organizer.</p>
+            <p style={{ margin: '0 0 24px', color: '#64748b', fontSize: 13 }}>Select whether the dispute is against a Team, a Player, the Organizer, or report a prize you did not receive.</p>
             <form onSubmit={submitDispute}>
               <div style={{ marginBottom: 16 }}>
                 <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, marginBottom: 6 }}>Dispute Against *</label>
@@ -409,6 +478,8 @@ export default function CompParticipant() {
                   <option value="team">Team (Opponent)</option>
                   <option value="player">Player (Participant)</option>
                   <option value="organizer">Tournament Organizer</option>
+                  {/* §13.3 — prize disputes are filed against the organizer, but tagged as a distinct category */}
+                  <option value="prize">Prize Not Received</option>
                 </select>
                 {routingHint && <p style={{ margin: '6px 0 0', fontSize: 12, color: dTargetType === 'organizer' ? '#fb923c' : '#94a3b8' }}>{routingHint}</p>}
               </div>

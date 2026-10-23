@@ -22,6 +22,7 @@ export class DisputeRepository {
     reason: string;
     evidenceUrls?: string[];
     status: DisputeStatus;
+    category?: string; // §13.3 — e.g. prize_not_received
   }): Promise<DisputeEntity> {
     const dispute = this.repo.create({
       ...data,

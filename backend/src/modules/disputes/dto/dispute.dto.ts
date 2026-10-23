@@ -26,6 +26,11 @@ export class CreateDisputeDto {
   @IsEnum(DisputeTargetType)
   targetType: DisputeTargetType;
 
+  @ApiProperty({ description: 'Dispute category (optional)', required: false, example: 'prize_not_received' })
+  @IsString()
+  @IsOptional()
+  category?: string;
+
   @ApiProperty({ description: 'Offending player username or team name', required: true, example: 'TeamStormRiders' })
   @IsString()
   @MinLength(2)

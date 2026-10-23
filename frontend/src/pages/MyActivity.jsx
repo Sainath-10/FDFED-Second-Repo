@@ -120,7 +120,7 @@ export default function MyActivity() {
     if (comp.role === 'participant') { navigate(`/pages/comp-participant.html?id=${encodeURIComponent(comp.id)}`); return; }
     if (comp.role === 'teamlead') {
       const status = normalize(comp.teamStatus || 'approved');
-      if (status !== 'approved') { showToast(`Your team registration is ${status}. Access is available after organiser approval.`, 'error'); return; }
+      if (status !== 'approved') { showToast(`Your team registration is ${status}. Contact the organizer if you think this is an error.`, 'error'); return; }
       if (comp.teamContext && comp.teamContext.teamId) {
         navigate(`/pages/team/team-roster.html?compId=${encodeURIComponent(comp.teamContext.compId)}&teamId=${encodeURIComponent(comp.teamContext.teamId)}`);
       } else {

@@ -100,6 +100,25 @@ export class AuthService {
     return user;
   }
 
+  async findUsername(username: string) {
+    return this.userRepository.findByUsername(String(username || '').trim().replace(/^@/, ''));
+  }
+
+  /** Usernames must all exist before a competition can be saved with them as co-organizers (§2.1). */
+  async findUsernames(usernames: string[]) {
+    const existing = await this.userRepository.findAll();
+    const existingSet = new Set(existing.map((u) => String(u.username || '').toLowerCase()));
+    const missing: string[] = [];
+    const valid: string[] = [];
+    (usernames || []).forEach((raw) => {
+      const clean = String(raw || '').trim().replace(/^@/, '');
+      if (!clean) return;
+      if (existingSet.has(clean.toLowerCase())) valid.push(clean);
+      else missing.push(clean);
+    });
+    return { valid, missing };
+  }
+
   async getAllUsers() {
     return this.userRepository.findAll();
   }

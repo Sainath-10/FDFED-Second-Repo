@@ -95,6 +95,24 @@ export class CompetitionEntity {
   @Column({ default: false })
   organizerPaid: boolean;
 
+  /**
+   * Competition visibility (§2.4): 'public' joins need no code; 'private'
+   * competitions require the organizer-generated joinCode to register a team.
+   */
+  @Column({ type: 'varchar', default: 'public' })
+  visibility: string;
+
+  /** Unpredictable join code for private competitions (null for public). */
+  @Column({ nullable: true, type: 'varchar' })
+  joinCode: string;
+
+  /** Registration window (§3.4): validated separately from competition start/end dates. */
+  @Column({ type: 'timestamptz', nullable: true, default: null })
+  registrationOpenAt: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true, default: null })
+  registrationCloseAt: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

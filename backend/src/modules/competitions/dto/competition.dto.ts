@@ -75,6 +75,34 @@ export class CreateCompetitionDto {
   @IsOptional()
   season?: string;
 
+  /** §2.4 visibility: 'public' (no join code) | 'private' (join code required) */
+  @ApiProperty({ enum: ['public', 'private'], required: false })
+  @IsEnum(['public', 'private'])
+  @IsOptional()
+  visibility?: 'public' | 'private';
+
+  /** ISO date — registration window opens (validated separately from start/end, §3.4) */
+  @ApiProperty({ required: false })
+  @IsDateString()
+  @IsOptional()
+  registrationOpenAt?: string;
+
+  /** ISO date — registration window closes (validated separately from start/end, §3.4) */
+  @ApiProperty({ required: false })
+  @IsDateString()
+  @IsOptional()
+  registrationCloseAt?: string;
+
+  @ApiProperty({ required: false })
+  @IsDateString()
+  @IsOptional()
+  regOpen?: string;
+
+  @ApiProperty({ required: false })
+  @IsDateString()
+  @IsOptional()
+  regClose?: string;
+
   @ApiProperty({ required: false })
   @IsNumber()
   @IsOptional()
@@ -173,6 +201,67 @@ export class UpdateCompetitionDto {
   @IsDateString()
   @IsOptional()
   endDate?: string;
+
+  @ApiProperty({ required: false })
+  @IsDateString()
+  @IsOptional()
+  startDate?: string;
+
+  @ApiProperty({ required: false })
+  @IsDateString()
+  @IsOptional()
+  registrationOpenAt?: string;
+
+  @ApiProperty({ required: false })
+  @IsDateString()
+  @IsOptional()
+  registrationCloseAt?: string;
+
+  /** §3.3 — capacity may not decrease; validated against current values + registered teams/rosters */
+  @ApiProperty({ required: false })
+  @IsNumber()
+  @IsOptional()
+  maxTeams?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber()
+  @IsOptional()
+  maxPlayersPerTeam?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber()
+  @IsOptional()
+  entryFeeAmount?: number;
+
+  /** joinCode — only used to join a private competition; never editable after creation */
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  joinCode?: string;
+
+  /** coOrganizers — validated to exist, no self-assignment, no duplicates (§2.1) */
+  @ApiProperty({ type: [String], required: false })
+  @IsArray()
+  @IsOptional()
+  coOrganizers?: string[];
+
+  /** Obsolete since §3.5 — rejected if present on edit. */
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  format?: string;
+
+  /** Obsolete since §3.5 — rejected if present on edit. */
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  season?: string;
+
+  /** Obsolete since §2.2 — prize pools no longer require administrative approval. */
+  @ApiProperty({ required: false })
+  @IsEnum(['pending', 'approved', 'rejected'])
+  @IsOptional()
+  approvalStatus?: 'pending' | 'approved' | 'rejected';
 }
 
 export class CompetitionResponseDto {
@@ -203,6 +292,52 @@ export class CompetitionResponseDto {
   @ApiProperty({ required: false })
   approvalStatus?: string;
 
+  @ApiProperty({ required: false, nullable: true })
+  visibility?: string;
+
+  @ApiProperty({ required: false, nullable: true })
+  registrationOpenAt?: Date | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  registrationCloseAt?: Date | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  game?: string;
+
+  @ApiProperty({ required: false, nullable: true })
+  type?: string;
+
+  @ApiProperty({ required: false, nullable: true })
+  location?: string;
+
+  @ApiProperty({ required: false, nullable: true })
+  prizePool?: string;
+
+  @ApiProperty({ required: false, nullable: true })
+  prize?: number;
+
+  @ApiProperty({ required: false, nullable: true })
+  format?: string;
+
+  @ApiProperty({ required: false, nullable: true })
+  season?: string;
+
+  @ApiProperty() maxTeams?: number;
+
+  @ApiProperty() maxPlayersPerTeam?: number;  @ApiProperty({ required: false, nullable: true })
+  img?: string;
+
   @ApiProperty()
   createdAt: Date;
+}
+
+export class JoinValidateDto {
+  @ApiProperty({ description: 'Competition id to join' })
+  @IsString()
+  competitionId: string;
+
+  @ApiProperty({ description: 'Join code required only for private competitions', required: false })
+  @IsString()
+  @IsOptional()
+  joinCode?: string;
 }

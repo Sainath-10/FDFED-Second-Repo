@@ -1,0 +1,145 @@
+/**
+ * NEXUS ESPORTS — Verification styles (shared modal + profile status)
+ * Uses the existing design system vars — no separate design system.
+ */
+
+.verify-simulated-banner {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  background: rgba(198, 255, 51, 0.08);
+  border: 1px solid var(--accent-border, rgba(198, 255, 51, 0.35));
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 18px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-secondary, #9aa4b2);
+}
+.verify-simulated-banner strong { color: var(--accent, #c6ff33); }
+
+.verify-step-count {
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--text-muted, #64748b);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.verify-field-label {
+  display: block;
+  font-size: 12px;
+  letter-spacing: 1.2px;
+  color: var(--text-muted, #64748b);
+  text-transform: uppercase;
+  margin: 16px 0 8px;
+}
+
+.verify-input,
+.verify-otp-row .verify-input {
+  width: 100%;
+  background: #0a0a0a;
+  border: 1px solid #1f2a3a;
+  border-radius: 10px;
+  color: #fff;
+  padding: 12px 14px;
+  font-size: 15px;
+  letter-spacing: 2px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.verify-input:focus { border-color: var(--accent, #c6ff33); }
+
+.verify-error {
+  color: #ff6b6b;
+  font-size: 12.5px;
+  margin-top: 8px;
+}
+
+.verify-help {
+  color: var(--text-muted, #64748b);
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+.verify-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 22px;
+}
+.verify-actions .btn { flex: 1; }
+
+.verify-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 28px 0;
+  color: var(--text-secondary, #9aa4b2);
+  font-size: 13.5px;
+}
+
+.verify-spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-top-color: var(--accent, #c6ff33);
+  animation: verify-spin 0.7s linear infinite;
+}
+@keyframes verify-spin { to { transform: rotate(360deg); } }
+
+/* Profile verification section */
+.profile-verification {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: #0e0e0e;
+  border: 1px solid #1f2a3a;
+  border-radius: 16px;
+  padding: 20px;
+  margin-top: 16px;
+}
+.profile-verification-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.profile-verification-label {
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: var(--text-muted, #64748b);
+  text-transform: uppercase;
+  font-weight: 700;
+}
+.verify-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.verify-status-chip.verified {
+  background: rgba(198, 255, 51, 0.12);
+  color: var(--accent, #c6ff33);
+  border: 1px solid rgba(198, 255, 51, 0.4);
+}
+.verify-status-chip.unverified {
+  background: rgba(255, 107, 107, 0.1);
+  color: #ff6b6b;
+  border: 1px solid rgba(255, 107, 107, 0.35);
+}
+.profile-verification-note {
+  font-size: 12.5px;
+  color: var(--text-muted, #9aa4b2);
+  line-height: 1.55;
+}
+
+@media (max-width: 640px) {
+  .verify-actions { flex-direction: column; }
+}

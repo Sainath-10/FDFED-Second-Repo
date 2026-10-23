@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { CompetitionsService } from './competitions.service';
-import { CreateCompetitionDto, UpdateCompetitionDto, CompetitionResponseDto, AddCoOrganizerDto } from './dto/competition.dto';
+import { CreateCompetitionDto, UpdateCompetitionDto, CompetitionResponseDto, AddCoOrganizerDto, JoinValidateDto } from './dto/competition.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/decorators/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -51,7 +51,7 @@ export class CompetitionsController {
     @CurrentUser() user?: any,
   ): Promise<CompetitionResponseDto> {
     const creatorId = user?.username || user?.id || 'organizer';
-    return this.competitionsService.createCompetition(createCompetitionDto, creatorId);
+    return this.competitionsService.createCompetition(createCompetitionDto, creatorId, user?.id);
   }
 
   @Post(':id/organizers')
@@ -70,8 +70,9 @@ export class CompetitionsController {
   async addCoOrganizer(
     @Param('id') id: string,
     @Body() addCoOrganizerDto: AddCoOrganizerDto,
+    @CurrentUser() user?: any,
   ): Promise<CompetitionResponseDto> {
-    return this.competitionsService.addCoOrganizer(id, addCoOrganizerDto.organizerId);
+    return this.competitionsService.addCoOrganizer(id, addCoOrganizerDto.organizerId, user?.username);
   }
 
   @Delete(':id/organizers/:organizerId')
@@ -90,8 +91,21 @@ export class CompetitionsController {
   async removeCoOrganizer(
     @Param('id') id: string,
     @Param('organizerId') organizerId: string,
+    @CurrentUser() user?: any,
   ): Promise<CompetitionResponseDto> {
-    return this.competitionsService.removeCoOrganizer(id, organizerId);
+    return this.competitionsService.removeCoOrganizer(id, organizerId, user?.username);
+  }
+
+  @Post('join-validate')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Validate a join attempt (public/private + join code)',
+    description: 'Private competitions require a valid join code; public competitions never require one (§2.4).',
+  })
+  async joinValidate(@Body() dto: JoinValidateDto, @CurrentUser() user?: any) {
+    return this.competitionsService.participate(dto.competitionId, dto.joinCode, user?.username);
   }
 
   @Get('organizer/:organizerId')
@@ -138,6 +152,33 @@ export class CompetitionsController {
     return this.competitionsService.getActiveCompetitions();
   }
 
+  /** §2.4 — organizer-only reveal of a private competition's join code. */
+  @Get(':id/join-code')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.TEAM_LEAD, UserRole.COMP_ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get the join code of a private competition (organizer-only)',
+    description: 'Returns null for public competitions. Only the competition organizer or an admin may read the code.',
+  })
+  async getJoinCode(@Param('id') id: string, @CurrentUser() user?: any) {
+    const role = String(user?.role || 'participant');
+    return this.competitionsService.getJoinCode(id, user?.username, role);
+  }
+
+  /** §13.2/§13.4 — organizer-only participant contact list (emails come from the
+   * actual user accounts; never exposed publicly or to unrelated users). */
+  @Get(':id/participants')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.TEAM_LEAD, UserRole.COMP_ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Participant list with contact emails (authorized organizers/admins only)',
+  })
+  async getParticipants(@Param('id') id: string, @CurrentUser() user?: any) {
+    return this.competitionsService.getParticipantContacts(id, user?.username, String(user?.role || 'participant'));
+  }
+
   @Get(':id')
   @ApiOperation({
     summary: 'Get competition by ID',
@@ -180,8 +221,14 @@ export class CompetitionsController {
   async updateCompetition(
     @Param('id') id: string,
     @Body() updateCompetitionDto: UpdateCompetitionDto,
+    @CurrentUser() user?: any,
   ): Promise<CompetitionResponseDto> {
-    return this.competitionsService.updateCompetition(id, updateCompetitionDto);
+    return this.competitionsService.updateCompetition(
+      id,
+      updateCompetitionDto,
+      user?.username || 'system',
+      user?.role || '',
+    );
   }
 
   @Patch(':id/approval')
@@ -218,8 +265,8 @@ export class CompetitionsController {
     status: 403,
     description: 'Forbidden - Super Admin role required',
   })
-  async deleteCompetition(@Param('id') id: string): Promise<void> {
-    await this.competitionsService.deleteCompetition(id);
+  async deleteCompetition(@Param('id') id: string, @CurrentUser() user?: any): Promise<void> {
+    await this.competitionsService.deleteCompetition(id, user?.username || '', user?.role || '');
   }
 }
 

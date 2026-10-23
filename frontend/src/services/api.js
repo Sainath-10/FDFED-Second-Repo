@@ -207,6 +207,25 @@ export const AuthAPI = {
   },
 };
 
+// ============ VERIFICATION API (§12 — simulated Aadhaar flow) ============
+export const VerificationEndpoints = {
+  async status() {
+    return makeRequest('/verification/status', { method: 'GET' });
+  },
+  async requestOtp(aadhaarNumber) {
+    return makeRequest('/verification/aadhaar/request-otp', {
+      method: 'POST',
+      body: JSON.stringify({ aadhaarNumber }),
+    });
+  },
+  async verify(otp) {
+    return makeRequest('/verification/aadhaar/verify', {
+      method: 'POST',
+      body: JSON.stringify({ otp }),
+    });
+  },
+};
+
 // ============ COMPETITIONS API ============
 export const CompetitionsAPI = {
   async getAll() {
@@ -266,6 +285,19 @@ export const CompetitionsAPI = {
   async delete(id) {
     return makeRequest(`/competitions/${id}`, { method: 'DELETE' });
   },
+
+  /** §2.4 — pre-join validation: public needs no code; private validates the code server-side. */
+  async joinValidate(competitionId, joinCode) {
+    return makeRequest('/competitions/join-validate', {
+      method: 'POST',
+      body: JSON.stringify({ competitionId, joinCode }),
+    });
+  },
+
+  /** §2.4 — organizer-only reveal of a private competition join code. */
+  async getJoinCode(id) {
+    return makeRequest(`/competitions/${id}/join-code`, { method: 'GET' });
+  },
 };
 
 // ============ TEAMS API ============
@@ -314,9 +346,31 @@ export const TeamsAPI = {
     });
   },
 
-  async removeMember(id, memberId) {
-    return makeRequest(`/teams/${id}/members/${memberId}`, {
+  /** §6.1 — removal requires the mandatory backend-validated reason. */
+  async removeMember(id, memberId, reason) {
+    return makeRequest(`/teams/${id}/members/${encodeURIComponent(memberId)}`, {
       method: 'DELETE',
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  /** §4.2 — disband with a mandatory reason (backend validates + records refunds). */
+  async disband(id, reason) {
+    return makeRequest(`/teams/${id}/disband`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  async refundRequests(status) {
+    const q = status ? `?status=${encodeURIComponent(status)}` : '';
+    return makeRequest(`/teams/refund-requests${q}`, { method: 'GET' });
+  },
+
+  async resolveRefundRequest(id, status, note) {
+    return makeRequest(`/teams/refund-requests/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status, note }),
     });
   },
 
@@ -490,6 +544,27 @@ export const MatchesAPI = {
     return makeRequest(`/matches/${id}`, { method: 'GET' });
   },
 
+  /** §8 — fixture generation for the competition's tournament format. */
+  async generateSchedule(competitionId, options = {}) {
+    return makeRequest(`/matches/competition/${competitionId}/generate-schedule`, {
+      method: 'POST',
+      body: JSON.stringify(options),
+    });
+  },
+
+  /** §10 — league standings from verified completed matches only. */
+  async getStandings(competitionId) {
+    return makeRequest(`/matches/competition/${competitionId}/standings`, { method: 'GET' });
+  },
+
+  /** §11 — organizer reschedule of an eligible (non-completed) match. */
+  async reschedule(id, scheduledAt) {
+    return makeRequest(`/matches/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ scheduledAt }),
+    });
+  },
+
   async create(competitionId, team1Id, team2Id, team1Name, team2Name, scheduledAt, round, notes) {
     return makeRequest('/matches', {
       method: 'POST',
@@ -552,5 +627,3 @@ const NexusAPI = {
 };
 
 export default NexusAPI;
-
-

@@ -7,7 +7,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
-import { useTeamContext } from '../../hooks/useTeamContext.js';
+import { useTeamContext, hasCompetitionStarted } from '../../hooks/useTeamContext.js';
 import NexusTeamWorkflow from '../../services/teamWorkflow.js';
 import TeamTabs from '../../components/TeamTabs.jsx';
 import { showToast } from '../../lib/toast.js';
@@ -42,6 +42,10 @@ export default function AddPlayers() {
   const invites = NexusTeamWorkflow.getInvites(comp.id, team.id) || [];
   const requests = NexusTeamWorkflow.getJoinRequests(comp.id, team.id) || [];
   const maxPlayers = comp.maxPlayersPerTeam || 5;
+  // §5/§6 — shared competition-started check; roster additions are locked once it begins
+  const isStarted = hasCompetitionStarted(comp);
+  const isFull = members.length >= maxPlayers;
+  const rosterLocked = isEnded || isStarted;
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -54,6 +58,8 @@ export default function AddPlayers() {
 
   function sendInvite(name) {
     if (!name) return;
+    if (isFull) { showToast('Team is full — no slots remaining.', 'error'); return; }
+    if (isStarted) { showToast('The competition has started — team members can no longer be added.', 'error'); return; }
     const result = NexusTeamWorkflow.sendInvite({ compId: comp.id, teamId: team.id, toUsername: name, roleOffered: 'Player' });
     if (!result.ok) { showToast(result.error || 'Failed to send invite.', 'error'); return; }
     showToast(`Invitation sent to ${name}.`);
@@ -80,6 +86,18 @@ export default function AddPlayers() {
         </div>
       )}
 
+      {isStarted && !isEnded && (
+        <div style={{ background: 'rgba(251,146,60,0.12)', border: '1px solid rgba(251,146,60,0.4)', color: '#fb923c', padding: '14px 20px', borderRadius: 10, fontSize: 14, fontWeight: 700, textAlign: 'center', margin: '24px 0', letterSpacing: '0.5px' }}>
+          🎮 Competition has started — team members can no longer be added.
+        </div>
+      )}
+
+      {isFull && !isEnded && !isStarted && (
+        <div style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.35)', color: '#f87171', padding: '14px 20px', borderRadius: 10, fontSize: 14, fontWeight: 700, textAlign: 'center', margin: '24px 0' }}>
+          🚫 Team is full — {members.length} / {maxPlayers} slots taken. Remove a player first to free a slot.
+        </div>
+      )}
+
       <div className="layout-wrapper">
         <div className="content-column">
           <div className="search-card">
@@ -87,7 +105,7 @@ export default function AddPlayers() {
             <div className="search-controls-row">
               <div className="search-bar search-bar-alt" style={{ maxWidth: '100%' }}>
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="7" cy="7" r="5" /><line x1="10.5" y1="10.5" x2="14" y2="14" /></svg>
-                <input type="text" placeholder="Search by username…" id="player-search" value={query} onChange={(e) => setQuery(e.target.value)} disabled={isEnded} />
+                <input type="text" placeholder="Search by username…" id="player-search" value={query} onChange={(e) => setQuery(e.target.value)} disabled={rosterLocked} />
               </div>
             </div>
 
@@ -106,7 +124,7 @@ export default function AddPlayers() {
                         <div className="player-meta-info">Registered user</div>
                       </div>
                       <span className="status-pill approved status-pill-sm">Available</span>
-                      <button className="btn-table-primary" onClick={() => sendInvite(username)} disabled={isEnded}>Send Invite</button>
+                      <button className="btn-table-primary" onClick={() => sendInvite(username)} disabled={rosterLocked || isFull}>{isFull ? 'Team Full' : 'Send Invite'}</button>
                     </div>
                   );
                 })
@@ -117,8 +135,8 @@ export default function AddPlayers() {
           <div className="direct-invite-card">
             <h2 className="card-title-sm">Invite by Username</h2>
             <div className="direct-invite-row">
-              <input className="form-input direct-invite-input" type="text" id="direct-username" placeholder="Enter exact username…" value={direct} onChange={(e) => setDirect(e.target.value)} disabled={isEnded} />
-              <button className="btn-primary" onClick={directInvite} disabled={isEnded}>Send Invitation</button>
+              <input className="form-input direct-invite-input" type="text" id="direct-username" placeholder="Enter exact username…" value={direct} onChange={(e) => setDirect(e.target.value)} disabled={rosterLocked} />
+              <button className="btn-primary" onClick={directInvite} disabled={rosterLocked}>{isFull ? 'Team Is Full' : 'Send Invitation'}</button>
             </div>
           </div>
         </div>
@@ -127,6 +145,7 @@ export default function AddPlayers() {
           <div className="comp-sidebar-block">
             <h3>Roster Status</h3>
             <div className="info-row"><span className="key">Current Players</span><span className="val">{members.length} / {maxPlayers}</span></div>
+            <div className="info-row"><span className="key">Max Team Size</span><span className="val stat-val-accent">{maxPlayers}</span></div>
             <div className="info-row"><span className="key">Open Slots</span><span className="val stat-val-accent">{Math.max(0, maxPlayers - members.length)}</span></div>
             <div className="info-row"><span className="key">Pending Invites</span><span className="val" id="pending-count">{pendingInvites}</span></div>
             <div className="info-row"><span className="key">Join Requests</span><span className="val stat-val-accent">{pendingRequests}</span></div>

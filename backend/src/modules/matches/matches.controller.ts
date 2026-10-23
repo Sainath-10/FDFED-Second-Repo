@@ -50,13 +50,32 @@ export class MatchesController {
     });
   }
 
+  @Post('competition/:competitionId/generate-schedule')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.TEAM_LEAD, UserRole.COMP_ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Generate fixtures for the selected tournament format (§8). Safe regeneration: requires confirmOverlap=true when scheduled matches would change.' })
+  async generateSchedule(
+    @Param('competitionId') competitionId: string,
+    @Body() body: { confirmOverlap?: boolean; matchDurationMinutes?: number; intervalMinutes?: number },
+    @Request() req?: any,
+  ) {
+    return this.service.generateSchedule(competitionId, req?.user?.username || 'system', body || {});
+  }
+
+  @Get('competition/:competitionId/standings')
+  @ApiOperation({ summary: 'League standings computed from verified completed matches only (§10)' })
+  async getStandings(@Param('competitionId') competitionId: string) {
+    return this.service.getStandings(competitionId);
+  }
+
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.TEAM_LEAD, UserRole.COMP_ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a match (Organizers / Admins only)' })
-  async update(@Param('id') id: string, @Body() body: any) {
-    return this.service.update(id, body);
+  async update(@Param('id') id: string, @Body() body: any, @Request() req?: any) {
+    return this.service.updateSchedule(id, body, req?.user?.username || 'system');
   }
 
   @Patch(':id/result')
@@ -67,8 +86,9 @@ export class MatchesController {
   async recordResult(
     @Param('id') id: string,
     @Body() body: { winnerId: string; winnerName: string; score: string },
+    @Request() req?: any,
   ) {
-    return this.service.recordResult(id, body.winnerId, body.winnerName, body.score);
+    return this.service.recordResult(id, body.winnerId, body.winnerName, body.score, req?.user?.username || 'system');
   }
 
   @Delete(':id')
@@ -76,8 +96,8 @@ export class MatchesController {
   @Roles(UserRole.COMP_ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a match (Admins only)' })
-  async delete(@Param('id') id: string) {
-    await this.service.delete(id);
+  async delete(@Param('id') id: string, @Request() req?: any) {
+    await this.service.delete(id, req?.user?.username || 'admin');
     return { message: 'Match deleted' };
   }
 }

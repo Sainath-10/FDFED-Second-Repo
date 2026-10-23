@@ -14,6 +14,7 @@ import { PoliciesModule } from './modules/policies/policies.module';
 import { MatchesModule } from './modules/matches/matches.module';
 import { RevenueModule } from './modules/revenue/revenue.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { VerificationModule } from './modules/verification/verification.module';
 import { SeederService } from './database/seeder.service';
 
 import { SecurityMiddleware, RateLimiterMiddleware, LoggingMiddleware } from './common/middleware';
@@ -30,6 +31,8 @@ import { PlatformPolicyEntity } from './entities/platform-policy.entity';
 import { RevenueTransactionEntity } from './entities/revenue-transaction.entity';
 import { RevenueConfigEntity } from './entities/revenue-config.entity';
 import { AdminActivityLogEntity } from './entities/admin-activity-log.entity';
+import { AuditLogEntity } from './entities/audit-log.entity';
+import { RefundRequestEntity } from './entities/refund-request.entity';
 
 @Module({
   imports: [
@@ -68,6 +71,8 @@ import { AdminActivityLogEntity } from './entities/admin-activity-log.entity';
             RevenueTransactionEntity,
             RevenueConfigEntity,
             AdminActivityLogEntity,
+            AuditLogEntity,
+            RefundRequestEntity,
           ],
           synchronize: true, // Auto-create tables in dev. Use migrations in production.
           logging: config.get<string>('NODE_ENV') === 'development' ? ['error', 'warn'] : false,
@@ -99,6 +104,7 @@ import { AdminActivityLogEntity } from './entities/admin-activity-log.entity';
     MatchesModule,
     RevenueModule,
     AdminModule,
+    VerificationModule,
   ],
   providers: [SeederService],
 })

@@ -429,7 +429,10 @@
       name,
       tag,
       avatar: opts.avatar || 'SHIELD',
-      status: 'pending',
+      // §4.1 — automatic team approval: new teams are eligible to join (and
+      // visible in the competition team listing) immediately after creation.
+      // No organizer approval step. The organizer still gets an FYI notification.
+      status: 'approved',
       createdBy: session.username,
       leader: session.displayName || session.username,
       leaderUsername: session.username,
@@ -456,7 +459,7 @@
     saveCompetition(comp);
     setActiveTeamContext({ compId: comp.id, teamId: team.id });
 
-    if (window.NexusAPI && window.NexusAPI.Teams) {
+    if (window.NexusAPI && window.NexusAPI.Teams && !team.backendSynced) {
       window.NexusAPI.Teams.create({
         name: team.name,
         competitionId: comp.dbId || comp.id,
@@ -477,27 +480,28 @@
       }).catch(() => {});
     }
 
- // Notify organiser that a new team registration needs approval.
+    // §4.1 — organizer is informed; no approval is required anymore.
     const organiserUsername = String(comp.createdBy || comp.organizerId || '').trim();
     if (organiserUsername) {
       pushNotification({
         toUsername: organiserUsername,
-        type: 'team-registration',
-        status: 'pending',
-        title: 'Team registration pending approval',
-        body: 'A new team "' + team.name + '" requested to join ' + (comp.name || 'this competition') + '.',
+        type: 'team-registered',
+        status: 'approved',
+        title: 'New team registered',
+        body: '"' + team.name + '" (captain: ' + session.username + ') has joined ' + (comp.name || 'this competition') + '.',
         createdAt: isoNow(),
         read: false,
-        meta: { compId: comp.id, teamId: team.id, teamStatus: 'pending' }
+        meta: { compId: comp.id, teamId: team.id, teamStatus: 'approved' }
       });
     }
 
+    // §4.1 — the team is immediately available; no pending-approval copy.
     pushNotification({
       toUsername: session.username,
       type: 'team-created',
-      status: 'pending',
-      title: 'Team created — pending organiser approval',
-      body: 'Your team "' + team.name + '" is pending approval for ' + (comp.name || 'this competition') + '.',
+      status: 'approved',
+      title: 'Team created — ready to play',
+      body: 'Your team "' + team.name + '" is registered for ' + (comp.name || 'this competition') + ' and can be managed from the Team dashboard.',
       createdAt: isoNow(),
       read: false,
       meta: { compId: comp.id, teamId: team.id }

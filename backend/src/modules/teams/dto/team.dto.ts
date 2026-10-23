@@ -25,6 +25,26 @@ export class CreateTeamDto {
   @IsArray()
   @IsOptional()
   members?: string[];
+
+  /** §2.4 — required only when registering for a PRIVATE competition. */
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  joinCode?: string;
+}
+
+export class DisbandTeamDto {
+  @ApiProperty({ description: 'Meaningful reason for disbanding (shown to the organizer)', minLength: 10 })
+  @IsString()
+  @MinLength(10)
+  reason: string;
+}
+
+export class RemoveMemberDto {
+  @ApiProperty({ description: 'Mandatory meaningful reason for the removal', minLength: 5 })
+  @IsString()
+  @MinLength(5)
+  reason: string;
 }
 
 export class UpdateTeamDto {

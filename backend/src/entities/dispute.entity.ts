@@ -42,6 +42,10 @@ export class DisputeEntity {
   @Column({ type: 'varchar', default: DisputeStatus.OPEN_ORGANIZER })
   status: DisputeStatus;
 
+  /** §13.3 — optional dispute category, e.g. prize_not_received */
+  @Column({ nullable: true, type: 'varchar' })
+  category: string;
+
   @Column({ nullable: true, type: 'text' })
   organizerNotes: string;
 

@@ -3,15 +3,18 @@
  *
  * header + bio, 5 tabs (match history,
  * stats, sessions, account, preferences), the live my-teams / upcoming-matches
- * sidebar computed from competition data, and the edit-profile / email / password
- * modals. Auth is handled by ProtectedRoute (the had a blocking guard).
+ * sidebar computed from competition data, the edit-profile / email / password
+ * modals, and the §12 Account Verification section (persisted backend status,
+ * simulated Aadhaar flow opened from the shared VerificationModal).
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import NexusData from '../services/data.js';
 import { showToast } from '../lib/toast.js';
 import { assetUrl } from '../lib/assets.js';
+import { VerificationAPI, isVerified } from '../services/verificationApi.js';
+import VerificationModal from '../components/VerificationModal.jsx';
 import '../styles/pages/profile.css';
 
 const PTABS = [
@@ -62,6 +65,19 @@ export default function Profile() {
   const [email, setEmail] = useState(session ? (session.email || session.emailAddress || '') : '');
   const [emailInput, setEmailInput] = useState(session ? (session.email || '') : '');
   const [pwd, setPwd] = useState({ current: '', next: '', confirm: '' });
+
+  // §12.1 — account verification (persisted backend status, simulated flow)
+  const [verifyOpen, setVerifyOpen] = useState(false);
+  const [verificationStatus, setVerificationStatus] = useState(null); // null until loaded
+  const verified = isVerified(verificationStatus);
+  useEffect(() => {
+    let active = true;
+    VerificationAPI.status().then((res) => {
+      if (active && res?.ok !== false && res?.data) setVerificationStatus(res.data);
+      else if (active && res?.ok !== false && res) setVerificationStatus(res);
+    }).catch(() => { /* offline: leave as unverified rather than claiming verified */ });
+    return () => { active = false; };
+  }, []);
 
   const derived = useMemo(() => {
     const myTeams = [];
@@ -300,6 +316,20 @@ export default function Profile() {
                       </div>
                     </div>
                     <div className="settings-divider"></div>
+                    <div id="profile-verification-section" className="settings-item-row">
+                      <div className="settings-label-info">
+                        <h3>Account Verification</h3>
+                        <p>Simulated Aadhaar verification (workflow flag — not real UIDAI/KYC identity proof). Required before creating or joining competitions.</p>
+                      </div>
+                      <div className="settings-action-input-wrap">
+                        {verified ? (
+                          <span id="verification-status-badge" className="verify-status-chip verified" aria-live="polite">✔ Verified{verificationStatus && verificationStatus.aadhaarMasked ? ` · ${verificationStatus.aadhaarMasked}` : ''}</span>
+                        ) : (
+                          <button id="verify-aadhaar-btn" className="btn-update-pill" onClick={() => setVerifyOpen(true)}>Verify Aadhaar</button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="settings-divider"></div>
                     <div className="settings-item-row">
                       <div className="settings-label-info">
                         <h3>Two factor Authentication</h3>
@@ -418,6 +448,16 @@ export default function Profile() {
           </div>
         </div>
       </div>
+
+      <VerificationModal
+        open={verifyOpen}
+        onClose={() => setVerifyOpen(false)}
+        onVerified={() => {
+          setVerificationStatus({ verificationStatus: 'verified', simulated: true });
+          showToast('Verification complete (simulated).');
+        }}
+        purpose="continue"
+      />
 
       <div className={`modal-overlay${passwordOpen ? ' open' : ''}`} id="password-modal" onClick={(e) => { if (e.target.id === 'password-modal') setPasswordOpen(false); }}>
         <div className="modal modal-relative">

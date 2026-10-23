@@ -5,9 +5,11 @@ import { CompetitionsController } from './competitions.controller';
 import { CompetitionRepository } from './repositories/competition.repository';
 import { CompetitionEntity } from '../../entities/competition.entity';
 import { CompetitionAuditMiddleware } from '../../common/middleware';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { TeamEntity } from '../../entities/team.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([CompetitionEntity])],
+  imports: [TypeOrmModule.forFeature([CompetitionEntity, TeamEntity]), NotificationsModule],
   controllers: [CompetitionsController],
   providers: [CompetitionsService, CompetitionRepository],
   exports: [CompetitionsService, CompetitionRepository],

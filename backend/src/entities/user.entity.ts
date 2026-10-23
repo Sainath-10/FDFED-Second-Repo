@@ -42,6 +42,29 @@ export class UserEntity {
   @Column({ nullable: true, type: 'text' })
   bio: string;
 
+  /**
+   * Mock verification status ('unverified' | 'verified').
+   * NOTE: This is a simulated workflow flag, NOT real UIDAI/KYC proof of identity.
+   * It is used to gate competition create/join workflows.
+   */
+  @Column({ name: 'verificationStatus', type: 'varchar', default: 'unverified' })
+  verificationStatus: string;
+
+  @Column({ name: 'verifiedAt', type: 'timestamptz', nullable: true, default: null })
+  verifiedAt: Date | null;
+
+  /** Masked representation only (e.g. XXXX XXXX 1234) — the full Aadhaar number is never stored, logged or sent anywhere. */
+  @Column({ name: 'aadhaarMasked', type: 'varchar', nullable: true, default: null })
+  aadhaarMasked: string | null;
+
+  /**
+   * Requires mock verification before publishing a competition (§13.1).
+   * Same mock flag as verificationStatus; separate column so organizer-specific
+   * product rules can diverge from participant verification later.
+   */
+  @Column({ name: 'organizerVerificationStatus', type: 'varchar', default: 'unverified' })
+  organizerVerificationStatus: string;
+
   @CreateDateColumn({ name: 'createdAt' })
   createdAt: Date;
 

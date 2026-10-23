@@ -5,6 +5,7 @@ import {
   Patch,
   Body,
   Param,
+  Query,
   HttpCode,
   UseGuards,
   Request,
@@ -44,9 +45,32 @@ export class AuthController {
   @Get('me')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get current authenticated user' })
+  @ApiOperation({ summary: 'Get current authenticated user (fresh from DB, includes mock verification status)' })
   async getMe(@Request() req: any) {
-    return req.user;
+    const fresh = await this.authService.getUserById(req.user.id);
+    if (!fresh) return req.user;
+    return {
+      ...req.user,
+      username: fresh.username,
+      email: fresh.email,
+      role: fresh.role,
+      adminType: fresh.adminType,
+      verificationStatus: fresh.verificationStatus || 'unverified',
+      verifiedAt: fresh.verifiedAt || null,
+      profilePicUrl: fresh.profilePicUrl || null,
+      bio: fresh.bio || null,
+    };
+  }
+
+  @Get('users/exists')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Check whether a username exists (for co-organizer validation)' })
+  async userExists(@Query('username') username: string) {
+    const clean = String(username || '').trim();
+    if (!clean) return { exists: false };
+    const user = await this.authService.findUsername(clean);
+    return { exists: !!user, username: user ? user.username : clean, role: user ? user.role : null };
   }
 
   @Get('users')

@@ -2,18 +2,26 @@
  * NEXUS ESPORTS — Create Competition
  *
  * the full form with
- * live summary, co-organizer rows, banner upload/preview, the strict QA validation
- * rules, Super-Admin platform limits, the platform-fee checkout modal, and the
- * co-organizer invitation notifications.
+ * live summary, co-organizer rows (validated against registered accounts),
+ * banner upload/preview, the strict QA validation rules, prize-pool cap
+ * (₹10,00,000) and min entry fee ₹10, public/private visibility with a private
+ * join code, the theme-coloured platform-fee checkout modal, and the
+ * simulated-verification gate (§12.4) enforced before publishing.
  */
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import NexusData from '../services/data.js';
 import NexusTeamWorkflow from '../services/teamWorkflow.js';
+import NexusAPI, { CompetitionsAPI } from '../services/api.js';
+import useVerificationGate from '../hooks/useVerificationGate.jsx';
 import { showToast } from '../lib/toast.js';
 import { assetUrl } from '../lib/assets.js';
 import '../styles/pages/create-competition.css';
+
+/** §2.2 — backend mirrors these limits (competition.rules.ts). */
+const MAX_PRIZE_POOL = 1_000_000; // ₹10,00,000
+const MIN_ENTRY_FEE = 10; // ₹10 where a fee applies
 
 const GAMES = ['Counter-Strike 2', 'League of Legends', 'Dota 2', 'Fortnite', 'Valorant', 'Rocket League'];
 const DEFAULT_BANNERS = [
@@ -46,8 +54,10 @@ function validateDates(regOpen, regClose, startDate, endDate) {
   else if (rClose < today) errors['reg-close'] = 'Registration Close date cannot be in the past.';
 
   if (!startDate) errors['start-date'] = 'Tournament Start Date is required.';
-  else if (rClose && sDate && sDate < rClose) errors['start-date'] = 'Tournament Start Date must be on or after Registration Close date.';
   else if (sDate < today) errors['start-date'] = 'Tournament Start Date cannot be in the past.';
+  // §3.4 — registration closure, competition start and competition end are
+  // validated as separate concepts: a registration deadline that occurs before
+  // the competition starts is legitimate, so no reg-close→start restriction.
 
   if (!endDate) errors['end-date'] = 'Tournament End Date is required.';
   else if (sDate && eDate && eDate <= sDate) errors['end-date'] = 'Tournament End Date must be strictly after Tournament Start Date.';
@@ -80,6 +90,10 @@ export default function CreateCompetition() {
   const [userUploadedBanner, setUserUploadedBanner] = useState(false);
   const [errors, setErrors] = useState({});
   const [checkout, setCheckout] = useState(null);
+  const [publishing, setPublishing] = useState(false);
+  const [visibility, setVisibility] = useState('public'); // §2.4 public | private
+  const [published, setPublished] = useState(null); // { comp, joinCode }
+  const gate = useVerificationGate('create or publish a competition');
 
  // Super-Admin platform settings (format availability + max-teams limit).
   const platform = useMemo(() => {
@@ -124,7 +138,7 @@ export default function CreateCompetition() {
     reader.readAsDataURL(file);
   }
 
-  function submit(event) {
+  async function submit(event) {
     event.preventDefault();
     const next = {};
     if (!session) { showToast('Session expired. Please login again.', 'error'); return; }
@@ -152,15 +166,22 @@ export default function CreateCompetition() {
 
     const entryFeeRaw = String(entryFee).trim();
     const entryFeeNum = entryFeeRaw !== '' ? parseFloat(entryFeeRaw) : 0;
-    if (entryFeeRaw !== '' && (Number.isNaN(entryFeeNum) || entryFeeNum < 0)) next['entry-fee'] = 'Entry fee cannot be negative.';
+    if (feeType !== 'free') {
+      if (entryFeeRaw === '' || Number.isNaN(entryFeeNum) || entryFeeNum < 0) next['entry-fee'] = 'Entry fee must be a valid amount.';
+      else if (entryFeeNum < MIN_ENTRY_FEE) next['entry-fee'] = 'Entry fee must be at least ₹10.';
+      else if (entryFeeNum > MAX_PRIZE_POOL) next['entry-fee'] = 'Entry fee is unreasonably high.';
+    }
 
     if (n1 < 0) next['prize-1'] = 'Prize cannot be negative.';
     if (n2 < 0) next['prize-2'] = 'Prize cannot be negative.';
     if (n3 < 0) next['prize-3'] = 'Prize cannot be negative.';
     if (n2 > 0 && n2 > n1) next['prize-2'] = '1st place prize must be ≥ 2nd place prize.';
     if (n3 > 0 && n3 > n2 && n2 > 0) next['prize-3'] = '2nd place prize must be ≥ 3rd place prize.';
+    // §2.2 — total prize pool is capped at ₹10,00,000 (no admin approval checks)
+    if (totalPrize > MAX_PRIZE_POOL) next['prize-1'] = `Total prize pool cannot exceed ₹${MAX_PRIZE_POOL.toLocaleString('en-IN')} (₹10 lakh).`;
 
- // Co-organizers
+ // Co-organizers — self/duplicate checks synchronously; existence is validated
+ // against registered accounts via the backend below (§2.1).
     const cleanCoOrgs = [];
     let coOrgError = false;
     coOrgs.forEach((val) => {
@@ -176,7 +197,18 @@ export default function CreateCompetition() {
         cleanCoOrgs.push(v);
       }
     });
-    if (coOrgError) next['co-organizers'] = 'Fix the co-organizer entries.';
+    if (!coOrgError && cleanCoOrgs.length) {
+      // Validate against ACTUAL registered accounts before publishing.
+      const usersRes = await NexusAPI.Auth.getAllUsers();
+      const known = new Set((usersRes.ok && Array.isArray(usersRes.data) ? usersRes.data : [])
+        .map((u) => String(u.username || '').toLowerCase()));
+      const unknown = cleanCoOrgs.filter((v) => !known.has(v.toLowerCase()));
+      if (unknown.length) {
+        next['co-organizers'] = `This username does not exist. (@${unknown.join(', @')})`;
+        coOrgError = true;
+      }
+    }
+    if (coOrgError) next['co-organizers'] = next['co-organizers'] || 'Fix the co-organizer entries.';
 
     setErrors(next);
     if (Object.keys(next).length > 0) {
@@ -186,14 +218,14 @@ export default function CreateCompetition() {
 
     const type = format.toLowerCase().includes('robin') ? 'league' : 'tournament';
     const bannerImg = userUploadedBanner && bannerSrc ? bannerSrc : getDefaultBanner(game);
-    const prizePoolStr = `₹${totalPrize.toLocaleString('en-IN')}`;
+    const prizePoolStr = totalPrize > 0 ? `₹${totalPrize.toLocaleString('en-IN')}` : 'No Prize Pool';
     const entryFeeAmount = feeType !== 'free' ? (parseFloat(entryFee) || 0) : 0;
     let formattedEntryFee = 'Free';
     if (feeType === 'per_team') formattedEntryFee = `₹${entryFeeAmount.toLocaleString('en-IN')} / Team`;
     else if (feeType === 'per_player') formattedEntryFee = `₹${entryFeeAmount.toLocaleString('en-IN')} / Player`;
 
-    const isHighStakes = totalPrize > 50000;
-
+    // §2.2 — competitions are auto-approved at any prize size; the >₹50,000
+    // administrative approval requirement has been removed.
     const newComp = {
       id: NexusData.generateId(name),
       name,
@@ -231,9 +263,12 @@ export default function CreateCompetition() {
       createdBy: session.username,
       organizers: Array.from(new Set([session.username, ...cleanCoOrgs].filter(Boolean))),
       pendingCoOrganizers: Array.from(new Set(cleanCoOrgs)),
-      approvalStatus: isHighStakes ? 'pending' : 'approved',
-      badge: isHighStakes ? 'Pending' : 'New',
-      badgeClass: isHighStakes ? 'live' : 'hot',
+      visibility, // §2.4 — join code (private) is generated by the backend
+      approvalStatus: 'approved',
+      badge: 'New',
+      badgeClass: 'hot',
+      regOpen,
+      regClose,
       season: 'Season 1',
       totalMatches: 0,
       matchesCompleted: 0,
@@ -243,9 +278,50 @@ export default function CreateCompetition() {
   }
 
   function confirmCheckout() {
-    const { comp } = checkout;
+    // §12.4 — verification gate resumes this exact closure after verification.
+    gate.run(() => publishCompetition(checkout));
+  }
+
+  async function publishCompetition(checkoutData) {
+    const { comp } = checkoutData;
     const { pendingCoOrganizers } = comp;
-    if (NexusData) NexusData.addCompetition(comp);
+
+    // Backend is the source of truth — create there first, merge the returned
+    // id/joinCode; failure here must not leave a partially published competition.
+    setPublishing(true);
+    const backendPayload = {
+      name: comp.name,
+      description: comp.description,
+      startDate: comp.startDate,
+      endDate: comp.endDate,
+      game: comp.game,
+      type: comp.type,
+      format: comp.format,
+      visibility: comp.visibility,
+      coOrganizers: pendingCoOrganizers,
+      prize: comp.prize,
+      prizePool: comp.prizePool,
+      maxTeams: comp.maxTeams,
+      maxPlayersPerTeam: comp.maxPlayersPerTeam,
+      feeType: comp.feeType,
+      entryFeeAmount: comp.entryFeeAmount,
+      registrationOpenAt: comp.registrationDates?.open ? new Date(`${comp.registrationDates.open}T00:00:00`).toISOString() : undefined,
+      registrationCloseAt: comp.registrationDates?.close ? new Date(`${comp.registrationDates.close}T00:00:00`).toISOString() : undefined,
+    };
+    const res = await CompetitionsAPI.create(backendPayload);
+    setPublishing(false);
+
+    if (!res.ok) {
+      // Backend validation failed — nothing was created; surface the messages.
+      showToast(res.error || 'Publishing failed. Please fix the highlighted issues and try again.', 'error');
+      setErrors((prev) => ({ ...prev, 'co-organizers': 'Fix the co-organizer entries.' }));
+      setCheckout(null);
+      return;
+    }
+    const created = res.data || {};
+    const finalComp = { ...comp, id: created.id || comp.id, joinCode: created.joinCode || null };
+
+    if (NexusData) NexusData.addCompetition(finalComp);
 
     pendingCoOrganizers.forEach((coOrgUsername) => {
       if (!coOrgUsername) return;
@@ -254,10 +330,10 @@ export default function CreateCompetition() {
         type: 'co-organizer-invite',
         status: 'pending',
         title: '🏆 Co-Organizer Invitation',
-        body: `@${session.username} invited you to be a co-organizer for tournament "${comp.name}".`,
+        body: `@${session.username} invited you to be a co-organizer for tournament "${finalComp.name}".`,
         createdAt: new Date().toISOString(),
         read: false,
-        meta: { compId: comp.id, compName: comp.name, invitedBy: session.username },
+        meta: { compId: finalComp.id, compName: finalComp.name, invitedBy: session.username },
       };
       if (NexusTeamWorkflow && NexusTeamWorkflow.pushNotification) NexusTeamWorkflow.pushNotification(notifEntry);
       else if (NexusData && NexusData.pushSystemNotification) NexusData.pushSystemNotification(notifEntry);
@@ -270,12 +346,14 @@ export default function CreateCompetition() {
       }
     });
 
-    const isHighStakes = comp.approvalStatus === 'pending';
-    if (isHighStakes) showToast(`Tournament submitted! Requires Admin approval because prize pool (₹${checkout.prizePool.toLocaleString('en-IN')}) exceeds ₹50,000.`, 'warning');
-    else showToast('Tournament Created & Published! Co-organizers invited.', 'success');
-
     setCheckout(null);
-    setTimeout(() => navigate('/pages/my-activity.html'), 1500);
+    if (finalComp.visibility === 'private') {
+      // §2.4 — show the private join code to the organizer with a copy action.
+      setPublished({ comp: finalComp, joinCode: finalComp.joinCode || '' });
+    } else {
+      showToast('Tournament Created & Published! Co-organizers invited.', 'success');
+      setTimeout(() => navigate('/pages/my-activity.html'), 1200);
+    }
   }
 
   const formatOptions = ['Single Elimination', 'Round Robin'].filter((f) => (f === 'Round Robin' ? platform.allowRoundRobin : platform.allowKnockout));
@@ -347,6 +425,7 @@ export default function CreateCompetition() {
                   ))}
                 </div>
                 <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>Click <strong>+ Add Co-Organizer</strong> to assign organizers. Co-organizers can manage brackets, approve teams, and resolve disputes for this tournament.</p>
+                <FieldError id="co-organizers" />
               </div>
 
               <div className="form-section-title">Tournament Banner</div>
@@ -359,6 +438,22 @@ export default function CreateCompetition() {
                 <input type="file" id="banner-file" accept="image/*" style={{ display: 'none' }} onChange={previewBanner} />
               </div>
               <img id="banner-preview" src={effectiveBanner} alt="" style={{ display: effectiveBanner ? 'block' : 'none', width: '100%', borderRadius: 10, marginTop: 12, maxHeight: 180, objectFit: 'cover' }} />
+
+              <div className="form-section-title">Visibility</div>
+              <div className="form-row" id="visibility-group">
+                <div className="form-group">
+                  <label className="form-label" htmlFor="comp-visibility">Competition Visibility <span style={{ color: '#ef4444' }}>*</span></label>
+                  <select className="form-select" id="comp-visibility" value={visibility} onChange={(e) => setVisibility(e.target.value)}>
+                    <option value="public">Public — anyone eligible can join (no code)</option>
+                    <option value="private">Private — join code required</option>
+                  </select>
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>
+                    {visibility === 'private'
+                      ? 'A unique join code is generated when you publish. Only participants with the correct code can register — share it with verified teams only.'
+                      : 'Public competitions never ask for a join code and are discoverable on the Competitions page.'}
+                  </p>
+                </div>
+              </div>
 
               <div className="form-section-title">Dates &amp; Capacity</div>
 
@@ -430,10 +525,11 @@ export default function CreateCompetition() {
                   <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.5px' }}>TOTAL PRIZE POOL</span>
                   <span id="prize-total-display" style={{ fontSize: 18, fontWeight: 800, color: '#c6ff33' }}>₹{totalPrize.toLocaleString('en-IN')}</span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px dashed rgba(251,146,60,0.3)', paddingTop: 10, marginTop: 2 }}>
-                  <span style={{ fontSize: 13, color: '#fb923c', fontWeight: 700 }}>PLATFORM FEE DUE BY ORGANIZER</span>
-                  <span id="total-due-display" style={{ fontSize: 22, fontWeight: 900, color: '#fb923c' }}>₹{platformFee.toLocaleString('en-IN')}</span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px dashed rgba(198,255,51,0.3)', paddingTop: 10, marginTop: 2 }}>
+                  <span style={{ fontSize: 13, color: 'var(--accent, #c6ff33)', fontWeight: 700, letterSpacing: '0.5px' }}>PLATFORM FEE DUE BY ORGANIZER</span>
+                  <span id="total-due-display" style={{ fontSize: 20, fontWeight: 900, color: 'var(--accent, #c6ff33)' }}>₹{platformFee.toLocaleString('en-IN')}</span>
                 </div>
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>Payment status is synced with your revenue records after checkout.</p>
               </div>
 
               <div style={{ marginTop: 32 }}>
@@ -447,6 +543,7 @@ export default function CreateCompetition() {
             <div className="summary-row"><span className="k">Name</span> <span className="v" id="s-name">{name.trim() || '—'}</span></div>
             <div className="summary-row"><span className="k">Game</span> <span className="v" id="s-game">{game || '—'}</span></div>
             <div className="summary-row"><span className="k">Format</span> <span className="v" id="s-format">{format || '—'}</span></div>
+            <div className="summary-row"><span className="k">Visibility</span> <span className="v" id="s-visibility">{visibility === 'private' ? 'Private (join code)' : 'Public'}</span></div>
             <div className="summary-row"><span className="k">Teams</span> <span className="v" id="s-teams">{maxTeams || '—'} Teams / {maxPlayers || '—'} Players</span></div>
             <div className="summary-row"><span className="k">Reg. Opens</span> <span className="v" id="s-reg">{regOpen || '—'}</span></div>
             <div style={{ marginTop: 24 }}>
@@ -464,22 +561,60 @@ export default function CreateCompetition() {
 
       {checkout && (
         <div id="org-checkout-modal" style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#0f172a', border: '1px solid #fb923c', borderRadius: 16, width: 'min(90vw,480px)', padding: 32, boxShadow: '0 20px 60px #000a', color: '#f1f5f9' }}>
+          {/* §2.3 — theme-consistent dialog (was orange); focus lands on the confirm action */}
+          <div role="dialog" aria-modal="true" aria-label="Publish competition confirmation" style={{ background: '#0f172a', border: '1px solid rgba(198,255,51,0.55)', borderRadius: 16, width: 'min(90vw,480px)', padding: 32, boxShadow: '0 20px 60px #000a', color: '#f1f5f9' }}>
             <h3 style={{ margin: '0 0 4px', fontSize: 20, color: '#f1f5f9' }}>💳 Organizer Platform Fee Checkout</h3>
             <p style={{ margin: '0 0 20px', fontSize: 13, color: '#94a3b8' }}>Review platform fee payment for "{checkout.comp.name}".</p>
             <div style={{ background: '#1e293b', borderRadius: 12, padding: 16, marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#cbd5e1' }}><span>Tournament Prize Pool:</span><strong style={{ color: '#c6ff33' }}>₹{checkout.prizePool.toLocaleString('en-IN')}</strong></div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#94a3b8', borderTop: '1px solid #334155', paddingTop: 8 }}><span>Fee Calculation:</span><strong style={{ color: '#f1f5f9' }}>{(() => { const c = NexusData && NexusData.getRevenueConfig ? NexusData.getRevenueConfig() : { percentage: 7, minCost: 50 }; return `${c.percentage}% Prize Pool Fee (Min. ₹${c.minCost})`; })()}</strong></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#94a3b8', borderTop: '1px solid #334155', paddingTop: 8 }}><span>Visibility:</span><strong style={{ color: '#f1f5f9' }}>{checkout.comp.visibility === 'private' ? 'Private (join code required)' : 'Public'}</strong></div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#94a3b8', borderTop: '1px solid #334155', paddingTop: 8 }}><span>Participation Fee Model:</span><strong style={{ color: '#f1f5f9' }}>{checkout.comp.entryFee}</strong></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, color: '#f1f5f9', borderTop: '2px dashed #fb923c', paddingTop: 10, marginTop: 2 }}><strong>Platform Fee Due by Organizer:</strong><strong style={{ color: '#fb923c', fontSize: 22 }}>₹{checkout.platformFee.toLocaleString('en-IN')}</strong></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, color: '#f1f5f9', borderTop: '2px dashed rgba(198,255,51,0.5)', paddingTop: 10, marginTop: 2 }}><strong>Platform Fee Due by Organizer:</strong><strong style={{ color: '#c6ff33', fontSize: 22 }}>₹{checkout.platformFee.toLocaleString('en-IN')}</strong></div>
             </div>
             <div style={{ display: 'flex', gap: 12 }}>
               <button onClick={() => setCheckout(null)} style={{ flex: 1, padding: 12, background: 'none', border: '1px solid #334155', color: '#94a3b8', borderRadius: 8, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
-              <button onClick={confirmCheckout} style={{ flex: 2, padding: 12, background: '#fb923c', border: 'none', color: '#fff', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}>✔ Pay Platform Fee (₹{checkout.platformFee.toLocaleString('en-IN')})</button>
+              <button onClick={confirmCheckout} disabled={publishing} style={{ flex: 2, padding: 12, background: publishing ? 'rgba(198,255,51,0.35)' : '#c6ff33', border: 'none', color: '#111', borderRadius: 8, cursor: publishing ? 'wait' : 'pointer', fontSize: 14, fontWeight: 700 }}>
+                {publishing ? 'Publishing…' : '✔ Pay Platform Fee & Publish (₹' + checkout.platformFee.toLocaleString('en-IN') + ')'}
+              </button>
             </div>
           </div>
         </div>
       )}
+
+      {published && (
+        <div id="publish-success-modal" style={{ position: 'fixed', inset: 0, zIndex: 100000, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div role="dialog" aria-modal="true" aria-label="Competition published" style={{ background: '#0f172a', border: '1px solid rgba(198,255,51,0.55)', borderRadius: 16, width: 'min(90vw,440px)', padding: 32, boxShadow: '0 20px 60px #000a', color: '#f1f5f9', textAlign: 'center' }}>
+            <div style={{ fontSize: 44, marginBottom: 8 }}>🏆</div>
+            <h3 style={{ margin: '0 0 6px', fontSize: 20, color: '#f1f5f9' }}>Competition Published!</h3>
+            <p style={{ margin: '0 0 16px', fontSize: 13.5, color: '#94a3b8' }}>"{published.comp.name}" is live.</p>
+            <p style={{ fontWeight: 800, letterSpacing: 2, color: '#c6ff33', marginBottom: 10 }}>PRIVATE JOIN CODE</p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', alignItems: 'center', marginBottom: 18 }}>
+              <code id="join-code-display" style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 10, padding: '12px 18px', fontSize: 18, letterSpacing: 3, color: '#fff' }}>{published.joinCode || 'GENERATED IN BACKEND'}</code>
+              <button
+                id="copy-join-code-btn"
+                type="button"
+                onClick={() => {
+                  const code = published.joinCode || '';
+                  const done = () => showToast('Join code copied to clipboard.', 'success');
+                  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code).then(done).catch(() => {});
+                  else {
+                    try {
+                      const ta = document.createElement('textarea');
+                      ta.value = code; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); done();
+                    } catch (e) { /* ignore */ }
+                  }
+                }}
+                style={{ padding: '12px 16px', background: 'none', border: '1px solid rgba(198,255,51,0.45)', color: '#c6ff33', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}
+              >Copy</button>
+            </div>
+            <p style={{ fontSize: 12.5, color: '#94a3b8', marginBottom: 18 }}>Share this code only with teams you want to join. Participants must enter it correctly — the backend validates it.</p>
+            <button onClick={() => { setPublished(null); navigate('/pages/my-activity.html'); }} style={{ width: '100%', padding: 12, background: '#c6ff33', border: 'none', color: '#111', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}>Done</button>
+          </div>
+        </div>
+      )}
+
+      {gate.gateModal}
     </>
   );
 }

@@ -19,7 +19,7 @@ export class DisputesService {
 
   // ─── Player Creates Dispute ───────────────────────────────────────────────────
   async createDispute(dto: CreateDisputeDto, reportedBy: string = 'anonymous'): Promise<IDispute> {
-    const { competitionId, matchId, teamId, targetType, targetUserOrTeam, reason, evidenceUrls } = dto;
+    const { competitionId, matchId, teamId, targetType, targetUserOrTeam, reason, evidenceUrls, category } = dto;
 
     const comp = await this.competitionRepository.findById(competitionId);
     const organizers =
@@ -45,6 +45,7 @@ export class DisputesService {
       targetUserOrTeam,
       reason,
       evidenceUrls,
+      category: category || undefined,
       status: initialStatus,
     });
   }

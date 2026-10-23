@@ -23,6 +23,7 @@ export class TeamRepository {
     competitionId: string,
     leaderId: string,
     members: string[] = [],
+    status: string = 'approved', // §4.1 — automatic approval, immediate eligibility
   ): Promise<TeamEntity> {
     const memberSet = new Set([leaderId, ...members]);
     const team = this.repo.create({
@@ -32,7 +33,7 @@ export class TeamRepository {
       leaderUsername: leaderId,
       createdBy: leaderId,
       memberUsernames: Array.from(memberSet),
-      status: 'pending',
+      status,
       warningsCount: 0,
     });
     return this.repo.save(team);
@@ -156,6 +157,10 @@ export class TeamRepository {
 
   async getInvitesByUser(toUsername: string): Promise<TeamInviteEntity[]> {
     return this.inviteRepo.find({ where: { toUsername }, order: { createdAt: 'DESC' } });
+  }
+
+  async findInviteById(id: string): Promise<TeamInviteEntity | null> {
+    return this.inviteRepo.findOne({ where: { id } });
   }
 
   async updateInvite(id: string, status: string): Promise<TeamInviteEntity> {
