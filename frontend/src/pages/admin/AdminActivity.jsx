@@ -13,7 +13,7 @@ import NexusData from '../../services/data.js';
 import NexusAPI from '../../services/api.js';
 import '../../styles/pages/admin/dashboard.css';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 const escapeHtml = (str) => String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 

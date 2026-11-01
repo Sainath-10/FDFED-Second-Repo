@@ -27,12 +27,12 @@ export class TeamsController {
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.TEAM_LEAD)
+  @Roles(UserRole.PARTICIPANT, UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.TEAM_LEAD)
   @ApiBearerAuth()
   @HttpCode(201)
   @ApiOperation({
     summary: 'Create a new team',
-    description: 'Create a new team for a competition (Admin, Super Admin, or Team Lead)',
+    description: 'Create a new team for a competition. A participant becomes the team lead after creation.',
   })
   @ApiResponse({
     status: 201,
@@ -45,7 +45,7 @@ export class TeamsController {
   })
   @ApiResponse({
     status: 403,
-    description: 'Forbidden - Team Lead or Admin role required',
+    description: 'Forbidden - Authentication/verification requirements were not met',
   })
   async createTeam(
     @Body() createTeamDto: CreateTeamDto,

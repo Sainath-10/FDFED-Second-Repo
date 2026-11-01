@@ -155,15 +155,28 @@ export class MatchesService {
    * §8.3 — regeneration safety. Completed/verified matches are never touched;
    * existing scheduled fixtures are only replaced when `confirmOverlap` is set.
    */
-  async generateSchedule(competitionId: string, actor: string, options: { confirmOverlap?: boolean; matchDurationMinutes?: number; intervalMinutes?: number; dailyWindow?: boolean } = {}): Promise<{ created: number; skipped: number; protectedCompleted: number; requiresConfirmation?: boolean }> {
+  async generateSchedule(
+    competitionId: string,
+    actor: string,
+    options: { confirmOverlap?: boolean; matchDurationMinutes?: number; intervalMinutes?: number; dailyWindow?: boolean } = {},
+    actorRole = '',
+  ): Promise<{ created: number; skipped: number; protectedCompleted: number; requiresConfirmation?: boolean }> {
     const competition = await this.competitionRepository.findById(competitionId);
     if (!competition) throw new NotFoundException(`Competition ${competitionId} not found`);
 
+    const normalizedActor = String(actor || '').toLowerCase();
+    const isOrganizer = String(competition.createdBy || '').toLowerCase() === normalizedActor
+      || (competition.organizers || []).some((name) => String(name).toLowerCase() === normalizedActor);
+    const isAdmin = ['admin', 'super_admin', 'comp_admin'].includes(String(actorRole || '').toLowerCase());
+    if (!isOrganizer && !isAdmin) {
+      throw new ForbiddenException('Only an organizer of this competition (or a competition admin) can generate fixtures.');
+    }
+
     const teams = await this.teamRepository.findByCompetition(competitionId);
     const eligible = teams.filter((t) => t.status !== 'rejected' && t.status !== 'banned' && t.status !== 'disbanded');
-    const teamNames = eligible.map((t) => t.name);
+    const teamIds = eligible.map((t) => t.id);
 
-    if (teamNames.length < 2) {
+    if (teamIds.length < 2) {
       throw new BadRequestException('At least 2 eligible registered teams are required to generate a schedule.');
     }
 
@@ -175,14 +188,13 @@ export class MatchesService {
     const format = this.resolveFormat(competition);
     let planned: { team1Id: string; team2Id: string; roundLabel?: string }[] = [];
     if (format === 'round_robin' || format === 'league') {
-      planned = roundRobinFixtures(teamNames).map((f) => ({ team1Id: f.team1Id, team2Id: f.team2Id, roundLabel: f.roundLabel }));
+      planned = roundRobinFixtures(teamIds).map((f) => ({ team1Id: f.team1Id, team2Id: f.team2Id, roundLabel: f.roundLabel }));
     } else {
-      const bracket = eliminationPairings(teamNames, { doubleElimination: /double/i.test(String(competition.format || '')) });
+      const bracket = eliminationPairings(teamIds, { doubleElimination: /double/i.test(String(competition.format || '')) });
       planned = bracket.firstRound.map((f) => ({ team1Id: f.team1Id, team2Id: f.team2Id, roundLabel: f.roundLabel }));
     }
 
     const teamNameById = new Map(eligible.map((t) => [t.id, t.name]));
-    const nameToId = new Map(eligible.map((t) => [t.id, t.id]));
 
     // Fixtures already covered by completed/scheduled matches will not be duplicated
     const covered = new Set<string>();
@@ -192,6 +204,8 @@ export class MatchesService {
       const n2 = m.team2Name || teamNameById.get(m.team2Id) || '';
       covered.add(key(n1, n2, m.round));
       covered.add(key(n2, n1, m.round));
+      covered.add(key(n1, n2, ''));
+      covered.add(key(n2, n1, ''));
     });
 
     const missing = planned.filter((p) => {
@@ -225,6 +239,8 @@ export class MatchesService {
         const n2 = m.team2Name || teamNameById.get(m.team2Id) || '';
         covered.add(key(n1, n2, m.round));
         covered.add(key(n2, n1, m.round));
+        covered.add(key(n1, n2, ''));
+        covered.add(key(n2, n1, ''));
       });
     }
 
@@ -244,7 +260,12 @@ export class MatchesService {
     const plannable = planned
       .filter((p) => p.team1Id && p.team2Id)
       .map((p) => ({ team1Id: p.team1Id, team2Id: p.team2Id, roundLabel: p.roundLabel }))
-      .filter((p) => !covered.has(key(teamNameById.get(p.team1Id as string), teamNameById.get(p.team2Id as string), p.roundLabel as string)));
+      .filter((p) => {
+        const team1Name = teamNameById.get(p.team1Id as string);
+        const team2Name = teamNameById.get(p.team2Id as string);
+        return !covered.has(key(team1Name, team2Name, p.roundLabel as string))
+          && !covered.has(key(team1Name, team2Name, ''));
+      });
 
     if (!plannable.length) return { created: 0, skipped: 0, protectedCompleted };
 

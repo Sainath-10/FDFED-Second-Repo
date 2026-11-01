@@ -124,6 +124,14 @@ export class TeamsService {
     // §4.1 — automatic approval: teams are eligible immediately after creation
     const team = await this.teamRepository.create(name.trim(), competitionId, leaderId, memberList, 'approved');
 
+    // Team creation is what grants team-lead status. Requiring that role before
+    // this point creates an impossible participant -> team-lead workflow.
+    // Preserve administrative roles if an admin creates a team.
+    const creator = user?.id ? await this.userRepository.findById(user.id) : null;
+    if (creator?.role === UserRole.PARTICIPANT) {
+      await this.userRepository.update(creator.id, { role: UserRole.TEAM_LEAD } as any);
+    }
+
     await this.auditLog.record('TEAM_CREATED', {
       actor: leaderId,
       entityType: 'team',

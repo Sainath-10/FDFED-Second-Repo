@@ -221,7 +221,9 @@ export async function createAccount(options) {
 
   let apiResult = null;
   if (AuthAPI) {
-    apiResult = await AuthAPI.register(email, username, password, 'participant');
+    // The backend assigns the safe participant role. Do not send a client-
+    // controlled role: RegisterDto intentionally rejects unknown properties.
+    apiResult = await AuthAPI.register(email, username, password);
     if (apiResult && !apiResult.ok) {
       const msg = String(apiResult.error || '').toLowerCase();
       const isNetworkError = msg.includes('network') || msg.includes('failed') || msg.includes('unavailable');

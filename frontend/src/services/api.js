@@ -9,14 +9,13 @@
  * - identical role normalization
  *
  * Base URL is configurable via VITE_API_URL (see frontend/.env.example).
- * The fallback is http://localhost:3001 so behaviour is
- * unchanged unless explicitly configured. NOTE: the NestJS backend defaults to
- * port 3000 — set VITE_API_URL to match the port your backend runs on.
+ * The fallback matches the NestJS backend default at http://localhost:3000.
+ * Set VITE_API_URL only when the API intentionally runs elsewhere.
  *
  * The object is also published as `window.NexusAPI` for code that expects that global.
  */
 
-export const API_URL = (import.meta.env?.VITE_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
+export const API_URL = (import.meta.env?.VITE_API_URL || 'http://localhost:3000').replace(/\/+$/, '');
 
 const TOKEN_KEY = 'nexus.auth.token';
 const USER_KEY = 'nexus.auth.user';
@@ -147,10 +146,10 @@ export async function makeRequest(endpoint, options = {}) {
 
 // ============ AUTH API ============
 export const AuthAPI = {
-  async register(email, username, password, role = 'participant') {
+  async register(email, username, password) {
     return makeRequest('/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ email, username, password, role }),
+      body: JSON.stringify({ email, username, password }),
     });
   },
 

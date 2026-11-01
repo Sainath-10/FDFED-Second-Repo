@@ -13,7 +13,7 @@ import { TeamsAPI } from '../../services/api.js';
 import { showToast } from '../../lib/toast.js';
 import '../../styles/pages/admin/dashboard.css';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const PAGE_SIZE = 10;
 
 const money = (value) => `Rs.${(Number(value) || 0).toLocaleString('en-IN')}`;

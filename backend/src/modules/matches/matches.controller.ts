@@ -51,8 +51,7 @@ export class MatchesController {
   }
 
   @Post('competition/:competitionId/generate-schedule')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.TEAM_LEAD, UserRole.COMP_ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Generate fixtures for the selected tournament format (§8). Safe regeneration: requires confirmOverlap=true when scheduled matches would change.' })
   async generateSchedule(
@@ -60,7 +59,12 @@ export class MatchesController {
     @Body() body: { confirmOverlap?: boolean; matchDurationMinutes?: number; intervalMinutes?: number },
     @Request() req?: any,
   ) {
-    return this.service.generateSchedule(competitionId, req?.user?.username || 'system', body || {});
+    return this.service.generateSchedule(
+      competitionId,
+      req?.user?.username || 'system',
+      body || {},
+      req?.user?.role || '',
+    );
   }
 
   @Get('competition/:competitionId/standings')

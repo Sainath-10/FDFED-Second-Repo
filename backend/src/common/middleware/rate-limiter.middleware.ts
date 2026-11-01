@@ -26,9 +26,17 @@ export class RateLimiterMiddleware implements NestMiddleware {
 
   use(req: Request, res: Response, next: NextFunction): void {
     const ip = req.ip || req.socket.remoteAddress || '127.0.0.1';
-    const isAuthRoute = req.originalUrl?.includes('/auth/login') || req.originalUrl?.includes('/auth/register');
+    // Scope ordinary traffic by method and endpoint. A single IP-wide bucket
+    // lets harmless page/status requests exhaust the allowance for unrelated
+    // actions such as requesting a verification OTP.
+    const pathname = String(req.originalUrl || req.url || '/')
+      .split('?')[0]
+      .replace(/\/+$/, '') || '/';
+    const isAuthRoute = pathname === '/auth/login' || pathname === '/auth/register';
     const limit = isAuthRoute ? 15 : this.maxRequests;
-    const clientKey = isAuthRoute ? `${ip}:auth` : ip;
+    const clientKey = isAuthRoute
+      ? `${ip}:auth`
+      : `${ip}:${String(req.method || 'GET').toUpperCase()}:${pathname}`;
     const now = Date.now();
 
     let client = this.clients.get(clientKey);

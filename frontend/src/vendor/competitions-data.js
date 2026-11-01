@@ -1270,7 +1270,7 @@ function getRevenueConfig() {
 
  // Async background fetch to sync from backend DB
   try {
-    fetch('http://localhost:3001/revenue/config')
+    fetch('http://localhost:3000/revenue/config')
       .then(res => res.ok ? res.json() : null)
       .then(data => {
         if (data && typeof data.percentage === 'number') {
@@ -1307,7 +1307,7 @@ function saveRevenueConfig(config) {
 
  // Sync to Backend Database
   try {
-    fetch('http://localhost:3001/revenue/config', {
+    fetch('http://localhost:3000/revenue/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ percentage, minCost })

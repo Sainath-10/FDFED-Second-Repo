@@ -43,7 +43,10 @@ import { CompetitionsService } from '../src/modules/competitions/competitions.se
 import { CompetitionsController } from '../src/modules/competitions/competitions.controller';
 import { ROLES_KEY } from '../src/common/decorators/roles.decorator';
 import { TeamsService } from '../src/modules/teams/teams.service';
+import { TeamsController } from '../src/modules/teams/teams.controller';
 import { MatchesService } from '../src/modules/matches/matches.service';
+import { RateLimiterMiddleware } from '../src/common/middleware/rate-limiter.middleware';
+import { UserRole } from '../src/common/interfaces';
 
 let passed = 0;
 let failed = 0;
@@ -77,6 +80,35 @@ const past = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
 const noopAudit = { record: async () => undefined };
 const notifications = { create: async () => undefined };
+
+// ─── HTTP middleware regressions ───────────────────────────────────────────
+async function middlewareTests() {
+  console.log('\nHTTP middleware');
+
+  await test('rate limits are isolated by method and endpoint', () => {
+    const limiter = new RateLimiterMiddleware();
+    const response = () => ({ setHeader: () => undefined }) as any;
+    const next = () => undefined;
+
+    // Exhaust GET /verification/status for this IP.
+    for (let i = 0; i < 100; i += 1) {
+      limiter.use({
+        ip: '127.0.0.1', method: 'GET', originalUrl: '/verification/status',
+        socket: {},
+      } as any, response(), next);
+    }
+    assert.throws(() => limiter.use({
+      ip: '127.0.0.1', method: 'GET', originalUrl: '/verification/status',
+      socket: {},
+    } as any, response(), next), /Rate limit exceeded/i);
+
+    // The unrelated OTP action must retain its own allowance.
+    assert.doesNotThrow(() => limiter.use({
+      ip: '127.0.0.1', method: 'POST', originalUrl: '/verification/aadhaar/request-otp',
+      socket: {},
+    } as any, response(), next));
+  });
+}
 
 // ─── Competition rules (§2.2, §3.1–§3.4) ─────────────────────────────────────
 async function competitionRuleTests() {
@@ -712,6 +744,7 @@ async function teamServiceTests() {
     competition?: any;
     team?: any;
     userState?: string;
+    userRole?: string;
     paidMembers?: string[];
     existingRefund?: any;
     teams?: any[];
@@ -728,9 +761,17 @@ async function teamServiceTests() {
     const saved: any[] = [];
     const mutations: any[] = [];
     const userRepository = {
-      findById: async () => ({ id: 'u1', username: 'alice', verificationStatus: opts.userState || 'verified' }),
+      findById: async () => ({
+        id: 'u1', username: 'alice',
+        role: opts.userRole || UserRole.PARTICIPANT,
+        verificationStatus: opts.userState || 'verified',
+      }),
       findByUsername: async (name: string) => ({ id: `u-${name}`, username: name, email: `${name}@nexus.gg` }),
       findAll: async () => [{ id: 'u1', username: 'alice' }, { id: 'u2', username: 'bob' }],
+      update: async (_id: string, updates: any) => {
+        mutations.push({ op: 'update-user', ...updates });
+        return { id: 'u1', username: 'alice', ...updates };
+      },
     };
     const teamRepository = {
       findById: async () => team,
@@ -776,6 +817,19 @@ async function teamServiceTests() {
     const created = mutations.find((m) => m.op === 'create');
     assert.ok(created);
     assert.equal(created.status, 'approved');
+  });
+
+  await test('participants may create a team and are promoted to team lead', async () => {
+    const createRoles = Reflect.getMetadata(ROLES_KEY, TeamsController.prototype.createTeam);
+    assert.ok(createRoles.includes(UserRole.PARTICIPANT));
+
+    const { service, mutations } = makeService({ userRole: UserRole.PARTICIPANT });
+    await service.createTeam(
+      { name: 'Bravo', competitionId: 'c1' } as any,
+      { id: 'u1', username: 'alice', role: UserRole.PARTICIPANT },
+    );
+    const promotion = mutations.find((m) => m.op === 'update-user');
+    assert.equal(promotion?.role, UserRole.TEAM_LEAD);
   });
 
   await test('private competitions require the correct join code for team creation', async () => {
@@ -860,6 +914,7 @@ async function matchServiceTests() {
   function makeService(opts: { competition?: any; matches?: any[]; teams?: any[] } = {}) {
     const competition = opts.competition || {
       id: 'c1', name: 'Cup', type: 'league', format: 'Round Robin', status: 'active',
+      createdBy: 'organizer', organizers: ['organizer'],
       startDate: new Date('2026-02-01T00:00:00Z'), endDate: new Date('2026-02-28T00:00:00Z'),
     };
     const matches = opts.matches || [];
@@ -996,6 +1051,22 @@ async function matchServiceTests() {
       .filter((m) => m.team1Name && m.team2Name)
       .map((m) => [m.team1Name, m.team2Name].sort().join('-'));
     assert.equal(new Set(pairs).size, pairs.length);
+    matches.filter((m) => m.id !== 'done').forEach((m) => {
+      assert.match(m.team1Id, /^t[A-D]$/);
+      assert.match(m.team2Id, /^t[A-D]$/);
+      assert.ok(m.team1Name && m.team2Name);
+    });
+  });
+
+  await test('only the competition organizer or an admin can generate fixtures', async () => {
+    const { service } = makeService();
+    await expectThrow(
+      () => service.generateSchedule('c1', 'unrelated-user', {}, UserRole.PARTICIPANT),
+      ForbiddenException,
+      'Only an organizer',
+    );
+    const adminResult = await service.generateSchedule('c1', 'competition-admin', {}, UserRole.COMP_ADMIN);
+    assert.ok(adminResult.created > 0);
   });
 
   await test('regeneration with scheduled fixtures requires explicit confirmation', async () => {
@@ -1011,6 +1082,7 @@ async function matchServiceTests() {
 async function main() {
   console.log('NEXUS ESPORTS — workflow test suite');
   await competitionRuleTests();
+  await middlewareTests();
   await tournamentTests();
   await verificationTests();
   await competitionServiceTests();

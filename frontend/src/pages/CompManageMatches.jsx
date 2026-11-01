@@ -52,8 +52,9 @@ export default function CompManageMatches() {
   // §8/§11 — the organizer table reflects the authoritative match service.
   useEffect(() => {
     let cancelled = false;
-    if (!id) return undefined;
-    MatchesAPI.getByCompetition(id)
+    const competitionId = comp?.dbId || id;
+    if (!competitionId) return undefined;
+    MatchesAPI.getByCompetition(competitionId)
       .then((res) => {
         if (cancelled) return;
         if (res.ok && Array.isArray(res.data)) {
@@ -66,7 +67,7 @@ export default function CompManageMatches() {
       })
       .catch(() => { /* keep local fallback */ });
     return () => { cancelled = true; };
-  }, [id, version]);
+  }, [id, version, comp?.dbId]);
 
   useEffect(() => {
     if (comp && NexusData.enforceNotEnded) {

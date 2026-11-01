@@ -51,7 +51,7 @@ DB_USER=postgres
 DB_PASSWORD=postgres
 DB_NAME=postgres
 DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5433/postgres
-PORT=3001
+PORT=3000
 JWT_SECRET=change_me
 JWT_EXPIRATION=7d
 NODE_ENV=development
@@ -60,13 +60,13 @@ NODE_ENV=development
 `frontend/.env` (optional):
 
 ```env
-VITE_API_URL=http://localhost:3001
+VITE_API_URL=http://localhost:3000
 ```
 
 ### 3.2 Run it (two terminals)
 
 ```bash
-# Terminal 1 — API  (http://localhost:3001, docs at http://localhost:3001/api)
+# Terminal 1 — API  (http://localhost:3000, docs at http://localhost:3000/api)
 cd backend
 npm run start:dev
 
@@ -88,8 +88,8 @@ npm run preview                                      # serve the built app local
 
 | Service | URL | Notes |
 |---|---|---|
-| Backend API | `http://localhost:3001` | `PORT` from `backend/.env`; code fallback is 3000 |
-| Swagger docs | `http://localhost:3001/api` | |
+| Backend API | `http://localhost:3000` | `PORT` from `backend/.env`; code fallback is 3000 |
+| Swagger docs | `http://localhost:3000/api` | |
 | Frontend (dev) | `http://localhost:5173` | `vite` dev server |
 | Frontend (preview) | `http://localhost:4173` | serves the production build |
 
