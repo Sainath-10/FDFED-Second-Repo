@@ -34,6 +34,8 @@ import { AdminActivityLogEntity } from './entities/admin-activity-log.entity';
 import { AuditLogEntity } from './entities/audit-log.entity';
 import { RefundRequestEntity } from './entities/refund-request.entity';
 import { WorkflowEnhancements1710000000000 } from './database/migrations/1710000000000-workflow-enhancements';
+import { MatchBrackets1793577600000 } from './database/migrations/1793577600000-match-brackets';
+import { MatchResultRules1793577601000 } from './database/migrations/1793577601000-match-result-rules';
 
 @Module({
   imports: [
@@ -79,7 +81,7 @@ import { WorkflowEnhancements1710000000000 } from './database/migrations/1710000
           // automatic synchronization. Set DB_SYNCHRONIZE=true only for a
           // throwaway local database.
           synchronize: config.get<string>('DB_SYNCHRONIZE') === 'true',
-          migrations: [WorkflowEnhancements1710000000000],
+          migrations: [WorkflowEnhancements1710000000000, MatchBrackets1793577600000, MatchResultRules1793577601000],
           migrationsRun: config.get<string>('DB_MIGRATIONS_RUN') !== 'false',
           logging: config.get<string>('NODE_ENV') === 'development' ? ['error', 'warn'] : false,
         };

@@ -555,6 +555,9 @@ export const PoliciesAPI = {
 
 // ============ MATCHES API ============
 export const MatchesAPI = {
+  async completeBracket(competitionId, seedOrder) {
+    return makeRequest(`/matches/competition/${competitionId}/complete-bracket`, { method: 'POST', body: JSON.stringify({ seedOrder }) });
+  },
   async getByCompetition(competitionId) {
     return makeRequest(`/matches/competition/${competitionId}`, { method: 'GET' });
   },

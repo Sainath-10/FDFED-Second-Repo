@@ -24,7 +24,7 @@ export class AuditLogEntity {
   @Column({ nullable: true })
   actor: string;
 
-  @Column({ name: 'entity_type', nullable: true })
+  @Column({ nullable: true })
   entityType: string;
 
   @Column({ nullable: true })

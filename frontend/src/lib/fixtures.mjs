@@ -13,7 +13,7 @@ export function normalizeFixture(match, index = 0) {
     score1: score ? Number(score[1]) : match.score1 ?? null,
     score2: score ? Number(score[2]) : match.score2 ?? null,
     timestamp: validDate ? date.getTime() : null,
-    date: validDate ? date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : match.date || 'Date to be confirmed',
+    date: match.status === 'bye' ? 'Automatic advancement · no match played' : validDate ? date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : match.date || 'Date to be confirmed',
     time: validDate ? date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : match.time || '',
   };
 }
@@ -37,15 +37,16 @@ export function roundOrder(label) {
 export function groupFixtures(matches) {
   const groups = new Map();
   matches.forEach((match) => {
-    if (!groups.has(match.round)) groups.set(match.round, []);
-    groups.get(match.round).push(match);
+    const key = match.bracket?.version === 2 ? match.bracket.round : match.round;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(match);
   });
-  return [...groups].sort(([a], [b]) => roundOrder(a) - roundOrder(b) || a.localeCompare(b, undefined, { numeric: true }))
-    .map(([name, fixtures]) => ({ name, matches: fixtures.sort((a, b) => (a.timestamp ?? Infinity) - (b.timestamp ?? Infinity)) }));
+  return [...groups].sort(([a], [b]) => (typeof a === 'number' ? a - b : roundOrder(a) - roundOrder(b) || a.localeCompare(b, undefined, { numeric: true })))
+    .map(([key, fixtures]) => ({ name: fixtures[0].round, index: typeof key === 'number' ? key : undefined, matches: fixtures.sort((a, b) => a.bracket?.version === 2 ? a.bracket.position - b.bracket.position : (a.timestamp ?? Infinity) - (b.timestamp ?? Infinity)) }));
 }
 
 export function isFixtureWinner(match, side) {
-  if (match.status !== 'completed') return false;
+  if (!['completed', 'bye'].includes(match.status)) return false;
   if (match.winnerId) return String(match.winnerId) === String(match[`team${side}Id`]);
   if (match.winnerName) return match.winnerName === match[`team${side}`];
   const own = match[`score${side}`];

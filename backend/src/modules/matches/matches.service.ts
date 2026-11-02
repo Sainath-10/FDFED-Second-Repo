@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { randomUUID } from 'node:crypto';
+import { buildBracket } from '../../common/tournament/bracket';
 import { MatchEntity } from '../../entities/match.entity';
 import { CompetitionRepository } from '../competitions/repositories/competition.repository';
 import { TeamRepository } from '../teams/repositories/team.repository';
@@ -13,7 +15,6 @@ import {
   iplPlayoffFixtures,
   scheduleFixtures,
   findScheduleConflicts,
-  roundLabel,
 } from '../../common/tournament/tournament.utils';
 
 const DEFAULT_MATCH_DURATION_MINUTES = 60;   // §8.2 — configurable via env MATCH_DURATION_MINUTES
@@ -21,6 +22,133 @@ const DEFAULT_INTERVAL_MINUTES = 30;         // configurable via env MATCH_INTER
 
 @Injectable()
 export class MatchesService {
+  private locked = false;
+
+  // Serialize fixture writes across API processes and commit each change atomically.
+  private async lockedWrite<T>(competitionId: string, work: (service: MatchesService) => Promise<T>): Promise<T> {
+    if (this.locked || !this.repo.manager) return work(this);
+    return this.repo.manager.transaction(async (manager) => {
+      await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [competitionId]);
+      const service = new MatchesService(manager.getRepository(MatchEntity), this.competitionRepository, this.teamRepository, this.notificationsService, this.auditLog);
+      service.locked = true;
+      return work(service);
+    });
+  }
+
+  async assertOrganizer(competitionId: string, actor: string, role = '') {
+    const competition = await this.competitionRepository.findById(competitionId);
+    if (!competition) throw new NotFoundException('Competition not found');
+    const username = String(actor || '').toLowerCase();
+    const organizer = [competition.createdBy, ...(competition.organizers || [])].some((name) => String(name || '').toLowerCase() === username);
+    if (!organizer && !['admin', 'super_admin', 'comp_admin'].includes(role)) {
+      throw new ForbiddenException('Only an organizer of this competition (or a competition admin) can edit fixtures.');
+    }
+    if (competition.status === 'completed') throw new BadRequestException('This competition has already ended.');
+    return competition;
+  }
+
+  async assertRosterCanChange(competitionId: string): Promise<void> {
+    const matches = await this.findByCompetition(competitionId);
+    if (matches.some((match) => ['completed', 'ongoing', 'live'].includes(match.status))) {
+      throw new BadRequestException('Team registration is locked because this bracket has already started.');
+    }
+  }
+
+  async syncRosterAfterRegistration(competitionId: string): Promise<{ rebuilt: boolean; created: number }> {
+    if (!this.locked && this.repo.manager) return this.lockedWrite(competitionId, (service) => service.syncRosterAfterRegistration(competitionId));
+    const existing = await this.findByCompetition(competitionId);
+    if (!existing.length) return { rebuilt: false, created: 0 };
+    await this.assertRosterCanChange(competitionId);
+    const competition = await this.competitionRepository.findById(competitionId);
+    if (!competition || this.resolveFormat(competition) !== 'elimination' || /double/i.test(competition.format || '')) return { rebuilt: false, created: 0 };
+    const eligible = (await this.teamRepository.findByCompetition(competitionId)).filter((team) => !['rejected', 'banned', 'disbanded'].includes(team.status));
+    const eligibleIds = new Set(eligible.map((team) => team.id));
+    const persisted = existing.filter((match) => match.bracket?.version === 2 && match.bracket.round === 1)
+      .flatMap((match) => match.bracket.slots || []).filter((slot) => slot.teamId && eligibleIds.has(slot.teamId))
+      .sort((a, b) => a.seed - b.seed).map((slot) => slot.teamId);
+    const seedOrder = [...new Set([...persisted, ...eligible.map((team) => team.id)])];
+    await this.repo.delete({ competitionId });
+    const result = await this.completeBracket(competitionId, 'system:team-registration', 'admin', seedOrder);
+    return { rebuilt: true, created: result.created };
+  }
+
+  /** Persist the complete seeded topology, including bye positions and winner destinations. */
+  async completeBracket(competitionId: string, actor: string, role = '', seedOrder?: string[]): Promise<{ created: number; skipped: number; protectedCompleted: number }> {
+    if (!this.locked && this.repo.manager) return this.lockedWrite(competitionId, (service) => service.completeBracket(competitionId, actor, role, seedOrder));
+    const competition = await this.assertOrganizer(competitionId, actor, role);
+    if (this.resolveFormat(competition) !== 'elimination' || /double/i.test(competition.format || '')) throw new BadRequestException('Full bracket completion is available for single elimination.');
+    const teams = (await this.teamRepository.findByCompetition(competitionId)).filter((t) => !['rejected', 'banned', 'disbanded'].includes(t.status));
+    if (teams.length < 2) throw new BadRequestException('At least 2 eligible registered teams are required.');
+    const existing = await this.findByCompetition(competitionId);
+    const persistedSeeds = existing.filter((m) => m.bracket?.version === 2 && m.bracket.round === 1)
+      .flatMap((m) => m.bracket.slots).filter((slot) => slot.teamId).sort((a, b) => a.seed - b.seed).map((slot) => slot.teamId);
+    const registered = new Set(teams.map((t) => t.id));
+    const sameRoster = persistedSeeds.length === teams.length && persistedSeeds.every((id) => registered.has(id));
+    const ordered = seedOrder || (sameRoster ? persistedSeeds : teams.map((t) => t.id));
+    if (!Array.isArray(ordered) || ordered.length !== teams.length || new Set(ordered).size !== teams.length || ordered.some((id) => !registered.has(id))) throw new BadRequestException('Seed order must list every eligible registered team exactly once, strongest first.');
+    const plan = buildBracket(ordered);
+    if (existing.length === plan.length && existing.every((m) => m.bracket?.version === 2) && sameRoster && ordered.every((id, i) => id === persistedSeeds[i])) {
+      return { created: 0, skipped: existing.filter((m) => m.status !== 'bye' && !m.scheduledAt).length, protectedCompleted: existing.filter((m) => m.status === 'completed').length };
+    }
+    if (existing.some((m) => ['completed', 'ongoing', 'live'].includes(m.status))) throw new BadRequestException('A started bracket cannot be reseeded or rebuilt. Existing results have been preserved.');
+    const names = new Map(teams.map((t) => [t.id, t.name]));
+    const used = new Set<string>();
+    const adopted = new Map<string, MatchEntity>();
+    // Keep IDs and dates where possible, but never reuse a played position as a bye.
+    for (const node of plan) {
+      const [a, b] = node.sides;
+      const isBye = a.bye || b.bye;
+      const old = existing.find((m) => !used.has(m.id) && m.bracket?.version === 2 && m.bracket.key === node.key && (m.status === 'bye') === !!isBye)
+        || (!isBye && existing.find((m) => !used.has(m.id) && a.teamId && b.teamId && ((m.team1Id === a.teamId && m.team2Id === b.teamId) || (m.team1Id === b.teamId && m.team2Id === a.teamId))))
+        || (!isBye && existing.find((m) => !used.has(m.id) && m.round === node.round && m.bracket?.key === node.key));
+      if (old) { used.add(old.id); adopted.set(node.key, old); }
+    }
+    if (existing.some((m) => !used.has(m.id))) throw new BadRequestException('Existing fixtures do not match the registered teams and bracket seeds. No fixtures were changed.');
+    const ids = new Map(plan.map((node) => [node.key, adopted.get(node.key)?.id || randomUUID()]));
+    const built = new Map<string, MatchEntity>();
+    const writes: MatchEntity[] = [];
+    const duration = this.matchDurationMinutes();
+    let cursor = +new Date(competition.startDate);
+    const end = +new Date(competition.endDate);
+    for (const node of plan) {
+      const old = adopted.get(node.key);
+      const slots = node.sides.map((side) => {
+        const source = side.source ? built.get(side.source) : null;
+        const winningSlot = source?.bracket.slots.find((slot) => slot.teamId && slot.teamId === source.winnerId);
+        return { teamId: side.teamId || source?.winnerId || null, seed: side.seed || winningSlot?.seed || null, ...(side.source ? { sourceMatchId: ids.get(side.source) } : {}), ...(side.bye ? { bye: true } : {}) };
+      }) as MatchEntity['bracket']['slots'];
+      const isBye = slots.some((slot) => slot.bye);
+      const winner = isBye ? slots.find((slot) => slot.teamId) : null;
+      const label = (index: number) => slots[index].teamId ? names.get(slots[index].teamId) : slots[index].bye ? 'Bye' : `Winner of ${built.get(node.sides[index].source).round} ${built.get(node.sides[index].source).bracket.position}`;
+      const match = this.repo.create({
+        ...old, id: ids.get(node.key), competitionId,
+        team1Id: slots[0].teamId, team2Id: slots[1].teamId, team1Name: label(0), team2Name: label(1),
+        winnerId: winner?.teamId || null, winnerName: winner ? names.get(winner.teamId) : null, score: null,
+        status: isBye ? 'bye' : slots.every((slot) => slot.teamId) ? 'ready' : 'pending',
+        round: node.round, createdBy: old?.createdBy || actor, durationMinutes: old?.durationMinutes || duration,
+        resultRule: 'standard', resultDetails: null,
+        bracket: { version: 2, key: node.key, round: node.roundIndex, position: node.position, bracketSize: node.bracketSize, roundCount: node.roundCount, slots,
+          nextMatchId: node.destination ? ids.get(node.destination.key) : null, nextSlot: node.destination?.slot || null,
+          source1: slots[0].sourceMatchId, source2: slots[1].sourceMatchId },
+      });
+      if (isBye) match.scheduledAt = null;
+      else if (!old?.scheduledAt) {
+        const occupied = [...existing, ...writes].filter((m) => m.scheduledAt && m.status !== 'bye').sort((a, b) => +new Date(a.scheduledAt) - +new Date(b.scheduledAt));
+        for (const other of occupied) {
+          const start = +new Date(other.scheduledAt), finish = start + (other.durationMinutes || duration) * 60_000;
+          if (cursor < finish && cursor + duration * 60_000 > start) cursor = finish + this.intervalMinutes() * 60_000;
+        }
+        match.scheduledAt = Number.isFinite(cursor) && cursor + duration * 60_000 <= end ? new Date(cursor) : null;
+      }
+      if (match.scheduledAt) cursor = Math.max(cursor, +new Date(match.scheduledAt) + (match.durationMinutes + this.intervalMinutes()) * 60_000);
+      built.set(node.key, match); writes.push(match);
+    }
+    for (const match of writes) await this.repo.save(match);
+    const created = writes.length - existing.length;
+    await this.auditLog.record('BRACKET_GENERATED', { actor, entityType: 'competition', entityId: competitionId, details: `Seeded ${teams.length} teams into ${plan[0].bracketSize} slots; ${writes.filter((m) => m.status === 'bye').length} automatic byes.`, metadata: { seeds: ordered } });
+    return { created, skipped: writes.filter((m) => m.status !== 'bye' && !m.scheduledAt).length, protectedCompleted: 0 };
+  }
+
   constructor(
     @InjectRepository(MatchEntity)
     private readonly repo: Repository<MatchEntity>,
@@ -52,6 +180,7 @@ export class MatchesService {
     createdBy?: string;
   }, actor?: string): Promise<MatchEntity> {
     if (!data.competitionId) throw new BadRequestException('competitionId is required.');
+    if (!this.locked && this.repo.manager) return this.lockedWrite(data.competitionId, (service) => service.create(data, actor));
 
     // §11 — validate manual scheduling against competition window + conflicts
     if (data.scheduledAt) {
@@ -67,7 +196,7 @@ export class MatchesService {
       if (conflicts.length) throw new BadRequestException(conflicts.join(' '));
     }
 
-    const match = this.repo.create({ ...data, status: 'scheduled' });
+    const match = this.repo.create({ ...data, durationMinutes: this.matchDurationMinutes(), status: 'scheduled' });
     const saved = await this.repo.save(match);
     await this.auditLog.record('MATCH_SCHEDULED', {
       actor: actor || data.createdBy || 'system',
@@ -118,10 +247,12 @@ export class MatchesService {
    */
   async updateSchedule(id: string, updates: { scheduledAt?: Date; round?: string; notes?: string }, actor: string): Promise<MatchEntity> {
     const match = await this.findById(id);
-    if ((match as any).winnerId) {
+    if (!this.locked && this.repo.manager) return this.lockedWrite(match.competitionId, (service) => service.updateSchedule(id, updates, actor));
+    if (match.status === 'bye' || match.status === 'completed' || match.status === 'ongoing' || (match as any).winnerId) {
       throw new ForbiddenException('Verified/completed results cannot be modified through scheduling.');
     }
     if (updates.scheduledAt) {
+      updates = { ...updates, scheduledAt: new Date(updates.scheduledAt) };
       const comp = await this.competitionRepository.findById(match.competitionId);
       if (!comp) throw new NotFoundException('Competition not found');
       const existing = await this.repo.find({ where: { competitionId: match.competitionId } });
@@ -129,13 +260,20 @@ export class MatchesService {
         { team1Id: match.team1Id, team2Id: match.team2Id, scheduledAt: updates.scheduledAt, matchId: id, competitionId: match.competitionId },
         existing as any,
         { start: new Date(comp.startDate), end: new Date(comp.endDate) },
-        this.matchDurationMinutes(),
+        match.durationMinutes || this.matchDurationMinutes(),
       );
+      const at = +updates.scheduledAt;
+      for (const other of existing) {
+        if (!other.scheduledAt) continue;
+        if ([match.bracket?.source1, match.bracket?.source2].includes(other.id) && at < +new Date(other.scheduledAt) + (other.durationMinutes || this.matchDurationMinutes()) * 60_000) conflicts.push('This match must start after its feeder matches finish.');
+        if ([other.bracket?.source1, other.bracket?.source2].includes(id) && at + (match.durationMinutes || this.matchDurationMinutes()) * 60_000 > +new Date(other.scheduledAt)) conflicts.push('This match must finish before the next bracket match starts.');
+      }
       if (conflicts.length) throw new BadRequestException(conflicts.join(' '));
     }
     const safe: Partial<MatchEntity> = {};
     if (updates.scheduledAt) safe.scheduledAt = updates.scheduledAt;
     if (updates.round) safe.round = updates.round;
+    if (match.bracket && updates.round && updates.round !== match.round) throw new BadRequestException('A bracket match cannot be moved to another round.');
     if (updates.notes !== undefined) (safe as any).notes = updates.notes;
 
     await this.repo.update(id, safe);
@@ -158,9 +296,10 @@ export class MatchesService {
   async generateSchedule(
     competitionId: string,
     actor: string,
-    options: { confirmOverlap?: boolean; matchDurationMinutes?: number; intervalMinutes?: number; dailyWindow?: boolean } = {},
+    options: { confirmOverlap?: boolean; matchDurationMinutes?: number; intervalMinutes?: number; dailyWindow?: boolean; seedOrder?: string[] } = {},
     actorRole = '',
   ): Promise<{ created: number; skipped: number; protectedCompleted: number; requiresConfirmation?: boolean }> {
+    if (!this.locked && this.repo.manager) return this.lockedWrite(competitionId, (service) => service.generateSchedule(competitionId, actor, options, actorRole));
     const competition = await this.competitionRepository.findById(competitionId);
     if (!competition) throw new NotFoundException(`Competition ${competitionId} not found`);
 
@@ -186,6 +325,7 @@ export class MatchesService {
 
     // Detect whether regenerating would change existing scheduled fixtures
     const format = this.resolveFormat(competition);
+    if (format === 'elimination' && !/double/i.test(competition.format || '')) return this.completeBracket(competitionId, actor, actorRole, options.seedOrder);
     let planned: { team1Id: string; team2Id: string; roundLabel?: string }[] = [];
     if (format === 'round_robin' || format === 'league') {
       planned = roundRobinFixtures(teamIds).map((f) => ({ team1Id: f.team1Id, team2Id: f.team2Id, roundLabel: f.roundLabel }));
@@ -289,6 +429,7 @@ export class MatchesService {
         team2Name: team2?.name || teamNameById.get(s.fixture.team2Id) || '',
         status: 'scheduled',
         scheduledAt: s.scheduledAt,
+        durationMinutes: duration,
         round: s.fixture.roundLabel,
         createdBy: actor,
       });
@@ -325,10 +466,14 @@ export class MatchesService {
    */
   async recordResult(id: string, winnerId: string, winnerName: string, score: string, actor: string): Promise<MatchEntity> {
     const match = await this.findById(id);
-    if ((match as any).winnerId) {
+    if (!this.locked && this.repo.manager) return this.lockedWrite(match.competitionId, (service) => service.recordResult(id, winnerId, winnerName, score, actor));
+    if (match.status === 'completed' || (match as any).winnerId) {
       throw new BadRequestException('A verified result already exists for this match. Duplicate submissions are rejected.');
     }
+    if (!match.team1Id || !match.team2Id) throw new BadRequestException('Both participating teams must be decided before entering a result.');
     if (!score || !String(score).trim()) throw new BadRequestException('A score is required to record a result.');
+    const scores = /^(\d+)\s*[-:]\s*(\d+)$/.exec(String(score).trim());
+    if (!scores || !scores.slice(1).every((value) => Number.isSafeInteger(Number(value)))) throw new BadRequestException('Scores must be non-negative whole numbers, for example 2-1.');
 
     // §10 — draws are valid in league formats; knockout matches must have a winner.
     const competition = await this.competitionRepository.findById(match.competitionId);
@@ -346,13 +491,19 @@ export class MatchesService {
       if (!candidates.includes(String(winnerId)) && !candidates.includes(String(winnerName))) {
         throw new BadRequestException('Only a participating team of this match can be declared the winner.');
       }
-      resolvedName = String(winnerName);
+      if (winnerId !== match.team1Id && winnerId !== match.team2Id) throw new BadRequestException('Only a participating team of this match can be declared the winner.');
+      resolvedName = winnerId === match.team1Id ? match.team1Name : match.team2Name;
     }
+    const side = Number(scores[1]) > Number(scores[2]) ? 1 : Number(scores[2]) > Number(scores[1]) ? 2 : 0;
+    if ((!side && !noWinner && isLeague) || (side && (winnerId !== match[`team${side}Id`] || winnerName !== match[`team${side}Name`]))) throw new BadRequestException('Winner must match the submitted scores and participating team.');
+    if (!isLeague && match.bracket?.version !== 2) throw new BadRequestException('Generate the full seeded bracket before recording knockout results.');
 
     await this.repo.update(id, {
       winnerId: noWinner ? null : winnerId,
       winnerName: noWinner ? null : resolvedName,
       score,
+      resultRule: 'standard',
+      resultDetails: !side && !noWinner ? { rule: 'standard', hostWinnerId: winnerId } : null,
       status: 'completed',
     });
     const updated = await this.findById(id);
@@ -412,48 +563,23 @@ export class MatchesService {
     };
 
     if (!league) {
-      // elimination bracket: create next-round match with winner vs winner of sibling
-      const all = await this.repo.find({ where: { competitionId: match.competitionId } });
-      const thisRoundNum = roundNumber(match.round);
-      const thisLabel = match.round || '';
-      if (isFinalLabel(thisLabel, all)) {
-        return finishTournament(match.winnerName || null);
+      const destination = match.bracket?.nextMatchId;
+      if (!destination) {
+        if (match.bracket?.version !== 2 || match.bracket.round !== match.bracket.roundCount) throw new BadRequestException('The bracket has no valid winner destination.');
+        await finishTournament(match.winnerName);
+        return;
       }
-      // find a sibling completed match in the same round that shares no team with this match
-      const siblings = all.filter(
-        (m) => (m as any).id !== (match as any).id && m.round === match.round && m.status === 'completed' && (m as any).winnerId,
-      );
-      if (siblings.length === 0) return; // waiting on sibling result
-      const partner = siblings.find((s) => !sharesTeam(s, match));
-      if (!partner) return;
-      const nextRoundLabel = roundLabel(thisRoundNum + 1, Math.max(3, thisRoundNum + 2), /double/i.test(String(competition.format || '')));
-      const wA = match.winnerName;
-      const wB = partner.winnerName;
-      // avoid duplicates: same two winners already playing in any round
-      const dup = all.some((m) => (m.team1Name === wA && m.team2Name === wB) || (m.team1Name === wB && m.team2Name === wA));
-      if (dup) return;
-
-      // resolve winner team ids by name for reliable advancement
-      const teams = await this.teamRepository.findByCompetition(match.competitionId);
-      const idOf = (name) => (teams.find((t) => t.name?.toLowerCase() === String(name).toLowerCase())?.id ?? undefined);
-      const next = this.repo.create({
-        competitionId: match.competitionId,
-        team1Id: idOf(wA),
-        team2Id: idOf(wB),
-        team1Name: wA,
-        team2Name: wB,
-        status: 'scheduled',
-        round: nextRoundLabel,
-        createdBy: actor,
+      const next = await this.findById(destination);
+      const side = match.bracket.nextSlot;
+      if (![1, 2].includes(side) || next.competitionId !== match.competitionId || next.bracket?.slots?.[side - 1]?.sourceMatchId !== match.id) throw new BadRequestException('The stored winner destination is invalid.');
+      if (next.status === 'completed') throw new BadRequestException('The destination match is already completed.');
+      const winningSlot = match.bracket.slots.find((slot) => slot.teamId === match.winnerId);
+      const slots = next.bracket.slots.map((slot, index) => index === side - 1 ? { ...slot, teamId: match.winnerId, seed: winningSlot.seed } : { ...slot }) as MatchEntity['bracket']['slots'];
+      await this.repo.update(next.id, {
+        [`team${side}Id`]: match.winnerId, [`team${side}Name`]: match.winnerName,
+        bracket: { ...next.bracket, slots }, status: slots.every((slot) => slot.teamId) ? 'ready' : 'pending',
       });
-      const savedNext = await this.repo.save(next);
-      await this.auditLog.record('BRACKET_ADVANCED', {
-        actor,
-        entityType: 'match',
-        entityId: (savedNext as any).id,
-        details: `${wA} and ${wB} advanced to ${nextRoundLabel}.`,
-      });
-      await this.notifyTeams(savedNext as any, '🏆 Bracket Advanced', `${wA} and ${wB} advanced to ${nextRoundLabel}.`);
+      await this.auditLog.record('BRACKET_ADVANCED', { actor, entityType: 'match', entityId: next.id, details: `${match.winnerName} advances to round ${next.bracket.round}, position ${next.bracket.position}, slot ${side}.` });
       return;
     }
 
@@ -507,6 +633,7 @@ export class MatchesService {
 
   async delete(id: string, actor: string): Promise<void> {
     const match = await this.findById(id);
+    if (match.bracket?.version === 2) throw new ForbiddenException('Individual bracket positions cannot be deleted.');
     if (match.status === 'completed') {
       throw new ForbiddenException('Completed/verified matches cannot be deleted — match history and results must be preserved.');
     }
@@ -517,29 +644,6 @@ export class MatchesService {
   async deleteByCompetition(competitionId: string): Promise<void> {
     await this.repo.delete({ competitionId, status: 'completed' as any });
   }
-}
-
-function sharesTeam(a: any, b: any): boolean {
-  const aTeams = [a.team1Name, a.team2Name].filter(Boolean);
-  const bTeams = [b.team1Name, b.team2Name].filter(Boolean);
-  return aTeams.some((t) => bTeams.includes(t));
-}
-
-let cachedTeamIds: { id: string; name: string }[] = [];
-
-function roundNumber(label: string): number {
-  const m = /round\s+(\d+)/i.exec(label || '');
-  return m ? parseInt(m[1], 10) : 1;
-}
-
-function isFinalLabel(label: string, all: MatchEntity[]): boolean {
-  const l = String(label || '').toLowerCase();
-  if (l.includes('final')) return true;
-  // Simple heuristic: this match has the only non-completed opponent count of 1 team short (end of bracket)
-  const withSameRound = all.filter((m) => m.round === label);
-  return Boolean(
-    withSameRound.length === 1 && withSameRound[0].team1Id && withSameRound[0].team2Id,
-  );
 }
 
 /** League detection for §8/§10: a league/playoff competition (IPL-style playoffs). */
