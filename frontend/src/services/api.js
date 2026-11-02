@@ -374,10 +374,10 @@ export const TeamsAPI = {
   },
 
   /** §4.2 — disband with a mandatory reason (backend validates + records refunds). */
-  async disband(id, reason) {
+  async disband(id, reason, memberUsernames = []) {
     return makeRequest(`/teams/${id}/disband`, {
       method: 'POST',
-      body: JSON.stringify({ reason }),
+      body: JSON.stringify({ reason, memberUsernames }),
     });
   },
 
@@ -412,11 +412,15 @@ export const TeamsAPI = {
     return makeRequest(`/teams/${teamId}/join-requests`, { method: 'GET' });
   },
 
-  async updateJoinRequest(reqId, status, reviewedBy) {
+  async updateJoinRequest(reqId, status, reviewedBy, feeAlreadyPaid = false) {
     return makeRequest(`/teams/join-requests/${reqId}`, {
       method: 'PATCH',
-      body: JSON.stringify({ status, reviewedBy }),
+      body: JSON.stringify({ status, reviewedBy, feeAlreadyPaid }),
     });
+  },
+
+  async payJoinRequest(reqId) {
+    return makeRequest(`/teams/join-requests/${reqId}/pay`, { method: 'POST' });
   },
 
   async createInvite(teamId, competitionId, toUsername, fromUsername) {
@@ -428,6 +432,18 @@ export const TeamsAPI = {
 
   async getInvites(username) {
     return makeRequest(`/teams/invites/${username}`, { method: 'GET' });
+  },
+
+  async getTeamInvites(teamId) {
+    return makeRequest(`/teams/${teamId}/invites`, { method: 'GET' });
+  },
+
+  async revokeInvite(teamId, inviteId) {
+    return makeRequest(`/teams/${teamId}/invites/${inviteId}`, { method: 'DELETE' });
+  },
+
+  async getAvailablePlayers(teamId, query = '') {
+    return makeRequest(`/teams/${teamId}/available-players?q=${encodeURIComponent(query)}`, { method: 'GET' });
   },
 
   async updateInvite(inviteId, status) {
@@ -627,6 +643,19 @@ export const AdminAPI = {
   },
 };
 
+export const RevenueAPI = {
+  async getConfig() {
+    return makeRequest('/revenue/config', { method: 'GET' });
+  },
+
+  async saveConfig(config) {
+    return makeRequest('/revenue/config', {
+      method: 'POST',
+      body: JSON.stringify(config),
+    });
+  },
+};
+
 // Same shape as the `window.NexusAPI`.
 const NexusAPI = {
   Auth: AuthAPI,
@@ -637,6 +666,7 @@ const NexusAPI = {
   Policies: PoliciesAPI,
   Matches: MatchesAPI,
   Admin: AdminAPI,
+  Revenue: RevenueAPI,
   getToken,
   setToken,
   removeToken,

@@ -42,7 +42,11 @@ export default function TeamRoster() {
   const hasRoom = members.length < maxPlayers;
   const captain = team.leader || team.createdBy || 'Captain';
   const addHref = `/pages/team/add-players.html?compId=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(team.id)}`;
-  const reportHref = `/pages/report-dispute.html?compId=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(team.id)}`;
+  const reportHref = `/pages/submit-report.html?compId=${encodeURIComponent(comp.id)}`;
+  const reportPlayerHref = (username) => `${reportHref}&against=${encodeURIComponent(username)}`;
+  const isMe = (username) => username.toLowerCase() === String((session && session.username) || '').toLowerCase();
+  // §6 — once the competition is running, reporting is the only roster action left.
+  const canReportNow = isStarted && !isEnded;
 
   // §6.1 — removal requires a meaningful reason (modal), backend is authoritative
   const [removeTarget, setRemoveTarget] = useState(null);
@@ -51,6 +55,11 @@ export default function TeamRoster() {
 
   function askRemovePlayer(username) {
     if (!canManage || rosterLocked) return;
+    const record = members.find((m) => (m.username || '').toLowerCase() === username.toLowerCase());
+    if (record && Number(record.feePaid) > 0) {
+      showToast(`${username} has paid the entry fee and cannot be removed. You can raise a report instead.`, 'error');
+      return;
+    }
     setRemoveTarget(username);
     setRemoveReason('');
   }
@@ -61,10 +70,10 @@ export default function TeamRoster() {
     if (reason.length < 5) { showToast('Please provide a meaningful removal reason (min 5 characters).', 'error'); return; }
     if (removing) return;
     setRemoving(true);
-    let noted = '';
+    let backendNotified = false;
     try {
-      const res = await TeamsAPI.removeMember(team.id, removeTarget, reason);
-      if (res.ok) noted = '';
+      const res = await TeamsAPI.removeMember(team.dbId || team.id, removeTarget, reason);
+      if (res.ok) backendNotified = true;
       else if (!/backend|network|Failed to fetch|is the backend/i.test(String(res.error || ''))) {
         setRemoving(false);
         showToast(res.error || 'Unable to remove player.', 'error'); // e.g. paid-participant block from the backend
@@ -72,7 +81,7 @@ export default function TeamRoster() {
       }
     } catch (err) { /* offline — fall back to local workflow below */ }
 
-    const result = NexusTeamWorkflow.removePlayer({ compId: comp.id, teamId: team.id, username: removeTarget, reason });
+    const result = NexusTeamWorkflow.removePlayer({ compId: comp.id, teamId: team.id, username: removeTarget, reason, backendNotified });
     setRemoving(false);
     if (!result.ok) { showToast(result.error || 'Unable to remove player.', 'error'); setRemoveTarget(null); return; }
     showToast(`${removeTarget} removed from ${team.name}. The participant has been notified.`, 'error');
@@ -124,9 +133,13 @@ export default function TeamRoster() {
                     <div className="p-role">Captain</div>
                     <div className="p-stats">Username: {username}</div>
                     <div className="captain-pill-wrapper"><span className="captain-pill">Captain</span></div>
+                    {canReportNow && !isMe(username) && (
+                      <div className="captain-pill-wrapper"><Link to={reportPlayerHref(username)} className="btn-table-secondary">Report</Link></div>
+                    )}
                   </div>
                 );
               }
+              const paidEntryFee = Number(member.feePaid) > 0;
               return (
                 <div className="player-card" key={username}>
                   <div className="player-avatar-placeholder">{initial}</div>
@@ -134,8 +147,12 @@ export default function TeamRoster() {
                   <div className="p-role">Player</div>
                   <div className="p-stats">Username: {username}</div>
                   <div className="captain-pill-wrapper">
-                    {canManage && !rosterLocked && (
+                    {canManage && !rosterLocked && !paidEntryFee && (
                       <button className="btn-table-danger btn-remove-alt" onClick={() => askRemovePlayer(username)}>Remove</button>
+                    )}
+                    {!isEnded && paidEntryFee && <span className="status-pill approved status-pill-sm">Paid</span>}
+                    {((canManage && !rosterLocked && paidEntryFee) || canReportNow) && !isMe(username) && (
+                      <Link to={reportPlayerHref(username)} className="btn-table-secondary">Report</Link>
                     )}
                   </div>
                 </div>

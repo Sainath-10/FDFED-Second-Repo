@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { isUUID } from 'class-validator';
 import { TeamEntity } from '../../../entities/team.entity';
 import { TeamJoinRequestEntity } from '../../../entities/team-join-request.entity';
 import { TeamInviteEntity } from '../../../entities/team-invite.entity';
@@ -40,6 +41,8 @@ export class TeamRepository {
   }
 
   async findById(id: string): Promise<TeamEntity | null> {
+    // A malformed id can't match a row; Postgres would reject it with a raw SQL error.
+    if (!isUUID(id)) return null;
     return this.repo.findOne({ where: { id } });
   }
 
@@ -140,7 +143,12 @@ export class TeamRepository {
   }
 
   async findJoinRequestById(id: string): Promise<TeamJoinRequestEntity | null> {
+    if (!isUUID(id)) return null;
     return this.joinRepo.findOne({ where: { id } });
+  }
+
+  async hasPaidJoinRequest(competitionId: string, fromUsername: string): Promise<boolean> {
+    return this.joinRepo.exists({ where: { competitionId, fromUsername, status: 'paid' } });
   }
 
   async updateJoinRequest(id: string, status: string, reviewedBy: string): Promise<TeamJoinRequestEntity> {
@@ -159,7 +167,12 @@ export class TeamRepository {
     return this.inviteRepo.find({ where: { toUsername }, order: { createdAt: 'DESC' } });
   }
 
+  async getInvitesByTeam(teamId: string): Promise<TeamInviteEntity[]> {
+    return this.inviteRepo.find({ where: { teamId }, order: { createdAt: 'DESC' } });
+  }
+
   async findInviteById(id: string): Promise<TeamInviteEntity | null> {
+    if (!isUUID(id)) return null;
     return this.inviteRepo.findOne({ where: { id } });
   }
 

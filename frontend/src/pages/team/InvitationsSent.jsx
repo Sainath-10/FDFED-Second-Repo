@@ -38,9 +38,9 @@ export default function InvitationsSent() {
   const pendingRequests = requests.filter((r) => r.status === 'pending').length;
   const inviteMoreHref = `/pages/team/add-players.html?compId=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(team.id)}`;
 
-  function revoke(inviteId, username) {
+  async function revoke(inviteId, username) {
     if (!window.confirm(`Revoke invitation to ${username}?`)) return;
-    const result = NexusTeamWorkflow.revokeInvite({ compId: comp.id, teamId: team.id, inviteId });
+    const result = await NexusTeamWorkflow.revokeInvite({ compId: comp.id, teamId: team.id, inviteId });
     if (!result.ok) { showToast(result.error || 'Failed to revoke invite.', 'error'); return; }
     showToast(`Invitation to ${username} revoked.`, 'error');
     refresh();

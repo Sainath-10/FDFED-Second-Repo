@@ -5,10 +5,11 @@
  * send-invite, invite-by-username, roster-status sidebar, and the ended-competition
  * lock (banner + all controls disabled).
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useTeamContext, hasCompetitionStarted } from '../../hooks/useTeamContext.js';
 import NexusTeamWorkflow from '../../services/teamWorkflow.js';
+import { TeamsAPI } from '../../services/api.js';
 import TeamTabs from '../../components/TeamTabs.jsx';
 import { showToast } from '../../lib/toast.js';
 import '../../styles/pages/team/add-players.css';
@@ -17,6 +18,23 @@ export default function AddPlayers() {
   const { ctx, refresh, canManage: hookCanManage, isEnded: hookIsEnded } = useTeamContext();
   const [query, setQuery] = useState('');
   const [direct, setDirect] = useState('');
+  const [players, setPlayers] = useState([]);
+  const [searchStatus, setSearchStatus] = useState('No available players found.');
+  const [playersVersion, setPlayersVersion] = useState(0);
+  const [sendingTo, setSendingTo] = useState('');
+
+  const backendTeamId = ctx && ctx.team ? (ctx.team.dbId || ctx.team.id) : null;
+  useEffect(() => {
+    if (!backendTeamId) return undefined;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const res = await TeamsAPI.getAvailablePlayers(backendTeamId, query.trim());
+      if (cancelled) return;
+      setPlayers(res.ok && Array.isArray(res.data) ? res.data : []);
+      setSearchStatus(res.ok ? 'No available players found.' : (res.error || 'Unable to load players.'));
+    }, 250);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [backendTeamId, query, playersVersion]);
 
   useEffect(() => {
     if (!ctx || !ctx.comp || !ctx.team) return;
@@ -37,7 +55,6 @@ export default function AddPlayers() {
     return <Navigate to={`/pages/team/team-roster.html?compId=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(team.id)}`} replace />;
   }
 
-  const players = NexusTeamWorkflow.getAvailablePlayers(comp.id, team.id) || [];
   const members = NexusTeamWorkflow.getTeamRoster(comp.id, team.id) || [];
   const invites = NexusTeamWorkflow.getInvites(comp.id, team.id) || [];
   const requests = NexusTeamWorkflow.getJoinRequests(comp.id, team.id) || [];
@@ -47,22 +64,20 @@ export default function AddPlayers() {
   const isFull = members.length >= maxPlayers;
   const rosterLocked = isEnded || isStarted;
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return players;
-    return players.filter((p) => String(p.username || '').toLowerCase().includes(q));
-  }, [players, query]);
-
   const pendingInvites = invites.filter((i) => i.status === 'pending').length;
   const pendingRequests = requests.filter((r) => r.status === 'pending').length;
 
-  function sendInvite(name) {
+  async function sendInvite(name) {
     if (!name) return;
     if (isFull) { showToast('Team is full — no slots remaining.', 'error'); return; }
     if (isStarted) { showToast('The competition has started — team members can no longer be added.', 'error'); return; }
-    const result = NexusTeamWorkflow.sendInvite({ compId: comp.id, teamId: team.id, toUsername: name, roleOffered: 'Player' });
+    setSendingTo(name);
+    const result = await NexusTeamWorkflow.sendInvite({ compId: comp.id, teamId: team.id, toUsername: name, roleOffered: 'Player' });
+    setSendingTo('');
     if (!result.ok) { showToast(result.error || 'Failed to send invite.', 'error'); return; }
     showToast(`Invitation sent to ${name}.`);
+    setPlayers((list) => list.map((p) => (p.username === name ? { ...p, invited: true } : p)));
+    setPlayersVersion((v) => v + 1);
     refresh();
   }
 
@@ -110,10 +125,10 @@ export default function AddPlayers() {
             </div>
 
             <div id="player-results" className="results-stack">
-              {filtered.length === 0 ? (
-                <div className="role-user-item"><div className="role-user-info"><div className="role-user-name">No available players found.</div></div></div>
+              {players.length === 0 ? (
+                <div className="role-user-item"><div className="role-user-info"><div className="role-user-name">{searchStatus}</div></div></div>
               ) : (
-                filtered.map((player) => {
+                players.map((player) => {
                   const username = player.username || 'U';
                   const initial = username.charAt(0).toUpperCase();
                   return (
@@ -123,8 +138,17 @@ export default function AddPlayers() {
                         <div className="role-user-name">{username}</div>
                         <div className="player-meta-info">Registered user</div>
                       </div>
-                      <span className="status-pill approved status-pill-sm">Available</span>
-                      <button className="btn-table-primary" onClick={() => sendInvite(username)} disabled={rosterLocked || isFull}>{isFull ? 'Team Full' : 'Send Invite'}</button>
+                      {player.invited ? (
+                        <>
+                          <span className="status-pill pending status-pill-sm">Invited</span>
+                          <button className="btn-table-secondary" style={{ cursor: 'default' }} disabled>Invite Sent</button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="status-pill approved status-pill-sm">Available</span>
+                          <button className="btn-table-primary" onClick={() => sendInvite(username)} disabled={rosterLocked || isFull || sendingTo === username}>{isFull ? 'Team Full' : (sendingTo === username ? 'Sending…' : 'Send Invite')}</button>
+                        </>
+                      )}
                     </div>
                   );
                 })

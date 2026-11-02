@@ -244,6 +244,7 @@ function mapApiCompetition(c) {
     createdAt: c.createdAt,
     createdBy: c.createdBy,
     organizerId: c.createdBy,
+    visibility: c.visibility || 'public',
     organizers: Array.isArray(c.organizers) ? c.organizers : [c.createdBy].filter(Boolean),
     approvalStatus: c.approvalStatus || 'approved',
     badge: c.badge || (c.status === 'active' ? 'Active' : c.status === 'draft' ? 'Draft' : 'Completed'),
@@ -360,6 +361,19 @@ function getCompetitionById(id) {
   return loadCompetitions().find(c => c.id === id) || null;
 }
 
+function canSyncCompetitionEdit(comp) {
+  let session = null;
+  try {
+    session = JSON.parse(localStorage.getItem('nexus.auth.session') || 'null');
+  } catch (e) {}
+  if (!session) return false;
+  const role = String(session.role || '').toLowerCase();
+  if (role !== 'regular' && role !== 'participant' && role !== 'team_lead') return true;
+  const me = String(session.username || '').toLowerCase();
+  return [comp.createdBy, comp.organizerId].concat(comp.organizers || [])
+    .some(name => String(name || '').toLowerCase() === me);
+}
+
 function updateCompetition(updated) {
   const all = loadCompetitions();
   const idx = all.findIndex(c => c.id === updated.id);
@@ -369,7 +383,7 @@ function updateCompetition(updated) {
   saveCompetitions(all);
 
  // Sync to PostgreSQL backend
-  if (window.NexusAPI && window.NexusAPI.Competitions && updated.id) {
+  if (window.NexusAPI && window.NexusAPI.Competitions && updated.id && canSyncCompetitionEdit(updated)) {
     window.NexusAPI.Competitions.update(updated.id, {
       name: updated.name,
       description: updated.description,
@@ -435,45 +449,6 @@ function addCompetition(comp) {
   forgetDeletedCompetitionId(comp.id);
   all.unshift(comp);
   saveCompetitions(all);
-
- // Sync create to PostgreSQL backend
-  if (window.NexusAPI && window.NexusAPI.Competitions) {
-    window.NexusAPI.Competitions.create({
-      name: comp.name,
-      description: comp.description || 'No description provided.',
-      startDate: comp.startDate || new Date().toISOString(),
-      endDate: comp.endDate || new Date(Date.now() + 14 * 86400000).toISOString(),
-      coOrganizers: comp.organizers || [],
-      game: comp.game,
-      type: comp.type,
-      location: comp.location || 'Online',
-      prizePool: comp.prizePool,
-      prize: comp.prize,
-      format: comp.format,
-      season: comp.season,
-      maxTeams: comp.maxTeams,
-      maxPlayersPerTeam: comp.maxPlayersPerTeam,
-      img: comp.img,
-      badge: comp.badge,
-      badgeClass: comp.badgeClass,
-      feeType: comp.feeType,
-      entryFeeAmount: comp.entryFeeAmount,
-      entryFee: comp.entryFee,
-      platformFee: comp.platformFee,
-      organizerPaid: comp.organizerPaid,
-      approvalStatus: comp.approvalStatus,
-    }).then(res => {
-      if (res && res.ok && res.data && res.data.id && res.data.id !== comp.id) {
- // Update local competition id with the real PostgreSQL UUID
-        const currentAll = loadCompetitions();
-        const found = currentAll.find(c => c.id === comp.id);
-        if (found) {
-          found.dbId = res.data.id;
-          saveCompetitions(currentAll);
-        }
-      }
-    }).catch(() => {});
-  }
 }
 
 function addCoOrganizerToComp(compId, organizerUsername) {
@@ -1255,7 +1230,31 @@ function isTeamBannedInComp(teamName, compIdOrData) {
 
 const REVENUE_CONFIG_KEY = 'nexus.revenue_config';
 
+let revenueConfigSyncStarted = false;
+let revenueConfigVersion = 0;
+
+// Refreshes the cached config from the backend at most once per page load, so
+// render-time fee calculations never issue a request of their own.
+function syncRevenueConfig() {
+  const api = window.NexusAPI;
+  if (revenueConfigSyncStarted || !api || !api.Revenue || !api.getToken()) return;
+  revenueConfigSyncStarted = true;
+  const version = revenueConfigVersion;
+  api.Revenue.getConfig().then(res => {
+    const data = res && res.ok ? res.data : null;
+    // A save made while this read was in flight is newer; keep it.
+    if (version === revenueConfigVersion && data && typeof data.percentage === 'number') {
+      localStorage.setItem(REVENUE_CONFIG_KEY, JSON.stringify({
+        percentage: data.percentage,
+        minCost: data.minCost,
+        updatedAt: data.updatedAt
+      }));
+    }
+  }).catch(() => {});
+}
+
 function getRevenueConfig() {
+  syncRevenueConfig();
   try {
     const raw = localStorage.getItem(REVENUE_CONFIG_KEY);
     if (raw) {
@@ -1268,25 +1267,10 @@ function getRevenueConfig() {
     }
   } catch (e) {}
 
- // Async background fetch to sync from backend DB
-  try {
-    fetch('http://localhost:3000/revenue/config')
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        if (data && typeof data.percentage === 'number') {
-          localStorage.setItem(REVENUE_CONFIG_KEY, JSON.stringify({
-            percentage: data.percentage,
-            minCost: data.minCost,
-            updatedAt: data.updatedAt
-          }));
-        }
-      }).catch(() => {});
-  } catch(e) {}
-
   return { percentage: 7, minCost: 50, updatedAt: null };
 }
 
-function saveRevenueConfig(config) {
+async function saveRevenueConfig(config) {
   const percentage = parseFloat(config.percentage);
   const minCost = parseFloat(config.minCost);
 
@@ -1297,22 +1281,23 @@ function saveRevenueConfig(config) {
     return { ok: false, error: 'Minimum Cost to host a Competition must be strictly less than 100' };
   }
 
+  // The backend is the source of truth: only cache what it accepted.
+  revenueConfigVersion += 1;
+  const api = window.NexusAPI;
+  const res = api && api.Revenue
+    ? await api.Revenue.saveConfig({ percentage, minCost })
+    : { ok: false, error: 'Revenue service is unavailable.' };
+  if (!res.ok) {
+    return { ok: false, error: res.error || 'Failed to save revenue configuration.' };
+  }
+
   const cleanConfig = {
     percentage: percentage,
     minCost: minCost,
-    updatedAt: new Date().toISOString()
+    updatedAt: (res.data && res.data.updatedAt) || new Date().toISOString()
   };
 
   localStorage.setItem(REVENUE_CONFIG_KEY, JSON.stringify(cleanConfig));
-
- // Sync to Backend Database
-  try {
-    fetch('http://localhost:3000/revenue/config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ percentage, minCost })
-    }).catch(() => {});
-  } catch (e) {}
 
   return { ok: true, config: cleanConfig };
 }

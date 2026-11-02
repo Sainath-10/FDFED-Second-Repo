@@ -13,9 +13,8 @@ export class RevenueController {
   constructor(private readonly revenueService: RevenueService) {}
 
   @Get('config')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.REVENUE_ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
-  @ApiOperation({ summary: 'Get revenue configuration (Admin only)' })
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get revenue configuration (any authenticated user)' })
   async getConfig() {
     return await this.revenueService.getConfig();
   }

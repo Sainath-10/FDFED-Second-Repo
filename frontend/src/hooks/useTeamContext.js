@@ -24,7 +24,7 @@ export function hasCompetitionStarted(comp, now = new Date()) {
  * Resolves the active team context (via the team workflow service) for the team
  * pages, and exposes a `refresh()` to re-resolve after mutations.
  */
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import NexusTeamWorkflow from '../services/teamWorkflow.js';
 
 export function useTeamContext() {
@@ -36,6 +36,18 @@ export function useTeamContext() {
   }, [version]);
 
   const refresh = useCallback(() => setVersion((v) => v + 1), []);
+
+  // Roster and invites change on other devices, so refresh them from the backend.
+  const compId = ctx && ctx.comp ? ctx.comp.id : null;
+  const teamId = ctx && ctx.team ? ctx.team.id : null;
+  useEffect(() => {
+    if (!compId || !teamId || !NexusTeamWorkflow || typeof NexusTeamWorkflow.syncTeamFromBackend !== 'function') return undefined;
+    let cancelled = false;
+    NexusTeamWorkflow.syncTeamFromBackend(compId, teamId)
+      .then((changed) => { if (changed && !cancelled) refresh(); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [compId, teamId, refresh]);
 
   const canManage = useMemo(() => {
     if (!ctx || !ctx.team || !ctx.session) return false;

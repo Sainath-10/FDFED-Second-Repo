@@ -58,7 +58,7 @@ export default function useJoinCodeGate(comp) {
       return;
     }
     setDialog((d) => (d ? { ...d, busy: true, error: '' } : d));
-    const res = await CompetitionsAPI.joinValidate(comp.id, code);
+    const res = await CompetitionsAPI.joinValidate(comp.dbId || comp.id, code);
     if (res.ok) {
       writeCached(comp.id, code);
       finish(code);

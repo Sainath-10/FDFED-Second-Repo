@@ -7,15 +7,16 @@
  * active team context), copy-to-clipboard, the per-team checkout modal, and the
  * 1.5s redirect to my-activity on success.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import NexusData from '../services/data.js';
 import NexusTeamWorkflow from '../services/teamWorkflow.js';
-import { TeamsAPI } from '../services/api.js';
+import { CompetitionsAPI, TeamsAPI } from '../services/api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import useVerificationGate from '../hooks/useVerificationGate.jsx';
 import useJoinCodeGate from '../hooks/useJoinCodeGate.jsx';
 import { showToast } from '../lib/toast.js';
+import { AVATAR_ACCEPT, fileToAvatarDataUrl } from '../lib/imageAvatar.js';
 import '../styles/pages/create-team.css';
 
 const LOGOS = [
@@ -27,6 +28,8 @@ const LOGOS = [
   { id: 'diamond', svg: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h12l4 6-10 12L2 9z"></path><path d="M11 3 8 9l3 12"></path><path d="M13 3l3 6-3 12"></path><path d="M2.2 9h19.6"></path></svg>' },
 ];
 
+const UPLOADED_LOGO = 'upload';
+
 const UPLOAD_SVG = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>';
 
 export default function CreateTeam() {
@@ -37,6 +40,8 @@ export default function CreateTeam() {
   const [name, setName] = useState('');
   const [tag, setTag] = useState('');
   const [activeLogo, setActiveLogo] = useState('shield');
+  const [uploadedLogo, setUploadedLogo] = useState('');
+  const logoInputRef = useRef(null);
   const [checkout, setCheckout] = useState(null); // { comp, teamName, feeAmount }
 
   function getCompIdFromPage() {
@@ -64,10 +69,78 @@ export default function CreateTeam() {
 
   // §12.4 / §2.4 — direct create-team.html URLs are gated too.
   const gateCompId = getCompIdFromPage();
-  const gateComp = gateCompId && NexusData ? NexusData.getCompetitionById(gateCompId) : null;
+  const localComp = gateCompId && NexusData ? NexusData.getCompetitionById(gateCompId) : null;
+  const [serverComp, setServerComp] = useState(null);
+  const [accessChecked, setAccessChecked] = useState(false);
+  const [unlocked, setUnlocked] = useState(false);
+  const accessStartedRef = useRef(false);
+  // The backend decides visibility; the local copy can be stale or missing it.
+  const gateComp = localComp || serverComp
+    ? { ...serverComp, ...localComp, visibility: serverComp?.visibility || localComp?.visibility }
+    : null;
   const gate = useVerificationGate('create a team for a competition');
   const joinCodeGate = useJoinCodeGate(gateComp);
+
+  const backendCompId = localComp?.dbId || gateCompId;
+  useEffect(() => {
+    if (!backendCompId) { setAccessChecked(true); return undefined; }
+    let cancelled = false;
+    CompetitionsAPI.getById(backendCompId)
+      .then((res) => {
+        if (cancelled || !res.ok || !res.data) return;
+        // Team creation reads the local copy, which a new browser may not have yet.
+        if (!NexusData.getCompetitionById(res.data.id)) {
+          NexusData.updateCompetition(NexusData.mapApiCompetition(res.data));
+        }
+        setServerComp(res.data);
+      })
+      .catch(() => { /* backend still enforces the code when the team is created */ })
+      .finally(() => { if (!cancelled) setAccessChecked(true); });
+    return () => { cancelled = true; };
+  }, [backendCompId]);
+
+  // §2.4 — a private competition's join code comes before the team form. The code
+  // check needs a verified account, so verification is resolved first.
+  useEffect(() => {
+    if (!accessChecked || accessStartedRef.current) return;
+    accessStartedRef.current = true;
+    if (!gateComp || gateComp.visibility !== 'private') { setUnlocked(true); return; }
+    if (!session) { navigate('/pages/login.html'); return; }
+    const leave = () => navigate('/pages/competitions.html');
+    const requestCode = async () => {
+      const code = await joinCodeGate.requireCode();
+      if (code === null) leave();
+      else setUnlocked(true);
+    };
+    gate.check().then((verified) => {
+      if (verified) requestCode();
+      else gate.openGate(requestCode, leave);
+    });
+  }, [accessChecked]);
   const [inviteLink, setInviteLink] = useState(() => buildInviteLink(getCompIdFromPage(), context && context.teamId ? context.teamId : ''));
+
+  function selectedLogo() {
+    if (activeLogo === UPLOADED_LOGO && uploadedLogo) return uploadedLogo;
+    return (LOGOS.find((l) => l.id === activeLogo) || LOGOS[0]).svg;
+  }
+
+  function onUploadTile() {
+    // An earlier upload can be reselected; clicking it again picks a new file.
+    if (uploadedLogo && activeLogo !== UPLOADED_LOGO) setActiveLogo(UPLOADED_LOGO);
+    else if (logoInputRef.current) logoInputRef.current.click();
+  }
+
+  async function onLogoFile(event) {
+    const file = event.target.files && event.target.files[0];
+    event.target.value = ''; // lets the same file be chosen again
+    if (!file) return;
+    try {
+      setUploadedLogo(await fileToAvatarDataUrl(file));
+      setActiveLogo(UPLOADED_LOGO);
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
 
   function copyInviteLink() {
     navigator.clipboard.writeText(inviteLink).then(() => showToast('Invite link copied to clipboard!'));
@@ -117,7 +190,7 @@ export default function CreateTeam() {
     const teamTag = tag.trim();
     if (!teamName || !teamTag) { showToast('Please fill in both Team Name and Team Tag!', 'error'); return; }
 
-    const logoSvg = (LOGOS.find((l) => l.id === activeLogo) || LOGOS[0]).svg;
+    const logoSvg = selectedLogo();
 
     if (!NexusTeamWorkflow || typeof NexusTeamWorkflow.createTeam !== 'function') {
       showToast('Team service is unavailable.', 'error');
@@ -139,6 +212,31 @@ export default function CreateTeam() {
         await submitTeam(compId, teamName, teamTag, logoSvg, joinCode || '');
       }
     });
+  }
+
+  if (!unlocked) {
+    return (
+      <main className="create-team-page">
+        <Link to="/pages/competitions.html" className="back-btn">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            <path d="M12 8H4M4 8L8 12M4 8L8 4" />
+          </svg>
+          Back to Competitions
+        </Link>
+
+        <div className="header-center">
+          <h1 className="page-title-neon">Create Your Team</h1>
+          <p className="page-subtitle-alt">
+            {accessChecked && gateComp?.visibility === 'private'
+              ? 'This is a private competition. Enter the join code from the organizer to continue.'
+              : 'Checking competition access…'}
+          </p>
+        </div>
+
+        {gate.gateModal}
+        {joinCodeGate.modal}
+      </main>
+    );
   }
 
   return (
@@ -176,11 +274,25 @@ export default function CreateTeam() {
             {LOGOS.map((l) => (
               <div key={l.id} className={`logo-option${activeLogo === l.id ? ' active' : ''}`} data-logo={l.id} onClick={() => setActiveLogo(l.id)} dangerouslySetInnerHTML={{ __html: l.svg }} />
             ))}
-            <div className="logo-option upload-btn">
-              <div className="upload-content">
-                <span dangerouslySetInnerHTML={{ __html: UPLOAD_SVG }} />
-                <span>UPLOAD</span>
-              </div>
+            <div
+              className={`logo-option upload-btn${activeLogo === UPLOADED_LOGO ? ' active' : ''}`}
+              id="logo-upload"
+              role="button"
+              tabIndex={0}
+              aria-label={uploadedLogo ? 'Uploaded team logo. Activate to select or replace it.' : 'Upload a team logo'}
+              title={uploadedLogo ? 'Click to select, or click again to replace' : 'PNG, JPG, WEBP or GIF, up to 5MB'}
+              onClick={onUploadTile}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onUploadTile(); } }}
+            >
+              {uploadedLogo ? (
+                <img src={uploadedLogo} alt="Uploaded team logo" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
+              ) : (
+                <div className="upload-content">
+                  <span dangerouslySetInnerHTML={{ __html: UPLOAD_SVG }} />
+                  <span>UPLOAD</span>
+                </div>
+              )}
+              <input ref={logoInputRef} type="file" accept={AVATAR_ACCEPT} onChange={onLogoFile} style={{ display: 'none' }} />
             </div>
           </div>
         </div>
@@ -229,7 +341,7 @@ export default function CreateTeam() {
               <button
                 onClick={() => {
                   const compId = getCompIdFromPage();
-                  const logoSvg = (LOGOS.find((l) => l.id === activeLogo) || LOGOS[0]).svg;
+                  const logoSvg = selectedLogo();
                   const pending = checkout;
                   setCheckout(null);
                   submitTeam(compId, pending.teamName, tag.trim(), logoSvg, pending.joinCode || '');

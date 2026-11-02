@@ -27,8 +27,8 @@ export const FALLBACK_PATH = '/';
 export const ROLE_ROUTES = {
   regular: '/pages/profile.html',
   participant: '/pages/profile.html',
-  team_lead: '/pages/team/team-roster.html',
-  teamlead: '/pages/team/team-roster.html',
+  team_lead: '/pages/profile.html',
+  teamlead: '/pages/profile.html',
   admin: '/pages/admin/dashboard.html',
   comp_admin: '/pages/admin/dashboard.html',
   dispute_admin: '/pages/admin/disputes.html',

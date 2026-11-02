@@ -151,6 +151,16 @@ export function getSession() {
   }
 }
 
+/** Browser state that belongs to one account and must not carry over to the next. */
+function clearAccountScopedState() {
+  removeStorage('nexus.team.activeContext');
+  try {
+    Object.keys(sessionStorage)
+      .filter((key) => key.startsWith('nexus.verifiedJoinCode.') || key.startsWith('nexus.joinCode.'))
+      .forEach((key) => sessionStorage.removeItem(key));
+  } catch (err) { /* sessionStorage unavailable — nothing cached */ }
+}
+
 export function setSession(session) {
   writeStorage(SESSION_KEY, JSON.stringify(session));
 }
@@ -159,6 +169,7 @@ export function clearSession() {
   if (AuthAPI && AuthAPI.logout) {
     AuthAPI.logout();
   }
+  clearAccountScopedState();
   removeStorage(SESSION_KEY);
 }
 
@@ -338,6 +349,7 @@ export async function login(options) {
       lastLoginAt: Date.now(),
       loggedInAt: Date.now(),
     };
+    clearAccountScopedState();
     setSession(sessionObj);
 
     const localRedirect = getRoleProfilePath(local.role, opts.roleRoutes) || opts.fallbackPath || '../index.html';
@@ -382,6 +394,7 @@ export async function login(options) {
     lastLoginAt: Date.now(),
     loggedInAt: Date.now(),
   };
+  clearAccountScopedState();
   setSession(sessionObj);
 
   const redirectPath = getRoleProfilePath(userRole, opts.roleRoutes) || opts.fallbackPath || '../index.html';

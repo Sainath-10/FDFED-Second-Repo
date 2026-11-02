@@ -1,3 +1,4 @@
+import './common/timezone';
 import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
@@ -13,21 +14,21 @@ async function bootstrap() {
   // Global Exception / Error Handling Filter
   app.useGlobalFilters(new GlobalExceptionFilter(fileLogger));
 
-  // Enable CORS — restrict to configured origins. Development defaults cover
-  // both localhost and 127.0.0.1 (different browser origins).
-  const configuredOrigins = String(process.env.FRONTEND_URL || '')
+  // Enable CORS — restrict to configured origins. Without any, development allows
+  // localhost and 127.0.0.1 on any port, because Vite moves to the next free port
+  // when 5173 is taken. Production only ever allows configured origins.
+  const allowedOrigins = String(process.env.FRONTEND_URL || '')
     .split(',')
     .map((value) => value.trim())
     .filter(Boolean);
-  const developmentOrigins = ['http://localhost:5173', 'http://127.0.0.1:5173'];
-  const allowedOrigins = configuredOrigins.length
-    ? configuredOrigins
-    : (process.env.NODE_ENV === 'production' ? [] : developmentOrigins);
+  const allowLocalDevOrigins = !allowedOrigins.length && process.env.NODE_ENV !== 'production';
+  const localDevOrigin = /^http:\/\/(localhost|127\.0\.0\.1):\d+$/;
 
   app.enableCors({
     origin: (origin, callback) => {
       // Same-origin/non-browser requests have no Origin header.
       if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+      if (allowLocalDevOrigins && localDevOrigin.test(origin)) return callback(null, true);
       return callback(new Error('Origin not allowed by CORS'));
     },
     credentials: true,

@@ -1,4 +1,4 @@
-import { IsString, IsArray, MinLength, IsOptional } from 'class-validator';
+import { IsString, IsArray, MinLength, IsOptional, ArrayMaxSize } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateTeamDto {
@@ -38,6 +38,13 @@ export class DisbandTeamDto {
   @IsString()
   @MinLength(10)
   reason: string;
+
+  @ApiProperty({ description: 'Roster known to the client; only used to address notifications, never refunds', required: false, type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @IsString({ each: true })
+  memberUsernames?: string[];
 }
 
 export class RemoveMemberDto {

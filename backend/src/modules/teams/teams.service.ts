@@ -66,13 +66,14 @@ export class TeamsService {
   /** Authoritative persisted payment record check (§6.1). */
   private async participantHasPaid(competitionId: string, username: string): Promise<boolean> {
     if (!competitionId || !username) return false;
-    return this.revenueRepo.exists({
+    const inRevenueRecords = await this.revenueRepo.exists({
       where: {
         competitionId,
         status: 'CONFIRMED',
         organizerName: username,
       },
     });
+    return inRevenueRecords || this.teamRepository.hasPaidJoinRequest(competitionId, username);
   }
 
   async createTeam(createTeamDto: CreateTeamDto, user: any): Promise<ITeam> {
@@ -289,9 +290,10 @@ export class TeamsService {
     this.notificationsService.create({
       toUsername: member,
       type: 'team-member-removed',
+      status: 'rejected',
       title: '🚪 Removed from Team',
-      body: `You were removed from team "${team.name}" ${competition ? `in "${competition.name}"` : ''}. Reason: ${meaningfulReason}`,
-      meta: { compId: team.competitionId, teamId },
+      body: `You were removed from team "${team.name}"${competition ? ` in "${competition.name}"` : ''}. Reason: ${meaningfulReason}`,
+      meta: { compId: team.competitionId, teamId, reason: meaningfulReason },
     }).catch(() => {});
 
     return updated;
@@ -312,7 +314,7 @@ export class TeamsService {
    * notifies organizer + members, and records traceable (pending) refund
    * requests for eligible paid participants. Refund processing is idempotent.
    */
-  async disbandTeam(teamId: string, reason: string, user: any): Promise<{ team: ITeam; refunds: { username: string; amount: number | null; status: string }[] }> {
+  async disbandTeam(teamId: string, reason: string, user: any, reportedMembers: string[] = []): Promise<{ team: ITeam; refunds: { username: string; amount: number | null; status: string }[] }> {
     const team = await this.verifyTeamOwnership(teamId, user);
     const competition = await this.competitionRepository.findById(team.competitionId);
 
@@ -345,20 +347,32 @@ export class TeamsService {
       this.notificationsService.create({
         toUsername: String(org),
         type: 'team-disbanded',
+        status: 'rejected',
         title: '⚠️ Team Disbanded',
         body: `Team "${team.name}" disbanded${competition ? ` from "${competition.name}"` : ''}. Reason: ${meaningfulReason}`,
         meta: { compId: competition?.id, teamId, reason: meaningfulReason },
       }).catch(() => {});
     });
 
-    // Notify affected participants
-    members.forEach((m) => {
+    // Notify affected participants. Rosters are still partly client-managed, so
+    // the client's list is merged in once each username is confirmed to exist.
+    const recipients = new Map(members.map((m) => [String(m).toLowerCase(), String(m)]));
+    const excluded = [team.leaderId, user?.username].map((u) => String(u || '').toLowerCase());
+    for (const reported of reportedMembers) {
+      const username = String(reported || '').trim().replace(/^@/, '');
+      const key = username.toLowerCase();
+      if (!username || recipients.has(key) || excluded.includes(key)) continue;
+      const account = await this.userRepository.findByUsername(username);
+      if (account) recipients.set(key, account.username);
+    }
+    recipients.forEach((m) => {
       this.notificationsService.create({
         toUsername: m,
         type: 'team-disbanded',
-        title: '⚠️ Your Team Disbanded',
-        body: `Team "${team.name}" ${competition ? `in "${competition.name}"` : ''} has been disbanded by the team lead. Refunds, if any were collected, are being initiated and may take a few days depending on payment processing. Reason: ${meaningfulReason}`,
-        meta: { compId: competition?.id, teamId },
+        status: 'rejected',
+        title: '⚠️ Your Team Was Disbanded',
+        body: `Your team "${team.name}"${competition ? ` in "${competition.name}"` : ''} was disbanded by the team lead. Reason: ${meaningfulReason}. Refunds, if any were collected, are being initiated and may take a few days depending on payment processing.`,
+        meta: { compId: competition?.id, teamId, reason: meaningfulReason },
       }).catch(() => {});
     });
 
@@ -484,62 +498,168 @@ export class TeamsService {
     const rosterSize = (team.memberUsernames || []).length;
     await this.assertCapacity(team.competitionId, team as any, rosterSize + 1);
 
-    return this.teamRepository.createJoinRequest(teamId, team.competitionId, fromUsername, message);
+    const existing = await this.teamRepository.getJoinRequestsByTeam(teamId);
+    if (existing.some((r) => ['pending', 'awaiting_payment'].includes(r.status) && String(r.fromUsername).toLowerCase() === fromUsername.toLowerCase())) {
+      throw new BadRequestException('You already sent a join request to this team.');
+    }
+
+    const request = await this.teamRepository.createJoinRequest(teamId, team.competitionId, fromUsername, message);
+    this.notificationsService.create({
+      toUsername: team.leaderId,
+      type: 'team-join-request',
+      status: 'pending',
+      title: `New join request for ${team.name}`,
+      body: `@${fromUsername} requested to join your team.`,
+      meta: { compId: team.competitionId, teamId, requestId: request.id },
+    }).catch(() => {});
+    return request;
   }
 
   async getJoinRequestsByTeam(teamId: string) {
     return this.teamRepository.getJoinRequestsByTeam(teamId);
   }
 
-  async updateJoinRequest(id: string, status: string, user: any) {
+  /** The fee each player owes to join in this competition; 0 when players don't pay individually. */
+  private playerFeeDue(competition: any): number {
+    const amount = Number(competition?.entryFeeAmount) || 0;
+    return competition?.feeType === 'per_player' && amount > 0 ? amount : 0;
+  }
+
+  private async assertRosterOpen(team: any, competition: any) {
+    if (team.status === 'disbanded') {
+      throw new BadRequestException('This team has been disbanded.');
+    }
+    // §6.2 — rosters are frozen once the competition starts; §5.1 — capacity holds
+    // under concurrent approvals. Checked before anything is saved.
+    if (competition && isCompetitionStarted(competition)) {
+      throw new ForbiddenException('The competition has started: rosters are locked.');
+    }
+    await this.assertCapacity(team.competitionId, team, (team.memberUsernames || []).length + 1);
+  }
+
+  private async addRequesterToRoster(req: any, team: any, actor: string) {
+    if (!(team.memberUsernames || []).includes(req.fromUsername)) {
+      await this.teamRepository.addMember(req.teamId, req.fromUsername);
+    }
+    const after = await this.teamRepository.findById(req.teamId);
+    await this.auditLog.record('JOIN_REQUEST_APPROVED', {
+      actor,
+      entityType: 'team',
+      entityId: req.teamId,
+      details: `@${req.fromUsername} added via join request. Roster: ${(after.memberUsernames || []).length}.`,
+    });
+    return after;
+  }
+
+  /**
+   * Team lead's decision. Where each player pays, accepting does not add the player:
+   * the request waits for payment, and paying is what puts them on the roster.
+   */
+  async updateJoinRequest(id: string, status: string, user: any, feeAlreadyPaid = false) {
     const req = await this.teamRepository.findJoinRequestById(id);
     if (!req) {
       throw new NotFoundException(`Join request with ID ${id} not found`);
     }
     await this.verifyTeamOwnership(req.teamId, user);
-    const reviewer = user?.username || user?.id || 'captain';
-    const updated = await this.teamRepository.updateJoinRequest(id, status, reviewer);
-
-    // §5.1 — approval must respect capacity even under concurrent approvals
-    if (String(status).toLowerCase() === 'approved') {
-      const team = await this.teamRepository.findById(req.teamId);
-      const rosterSize = (team.memberUsernames || []).length;
-      await this.assertCapacity(team.competitionId, team, rosterSize + 1);
-      if (req.fromUsername && !(team.memberUsernames || []).includes(req.fromUsername)) {
-        await this.teamRepository.addMember(req.teamId, req.fromUsername);
-        const after = await this.teamRepository.findById(req.teamId);
-        await this.auditLog.record('JOIN_REQUEST_APPROVED', {
-          actor: reviewer,
-          entityType: 'team',
-          entityId: req.teamId,
-          details: `@${req.fromUsername} added via join-request approval. Roster: ${(after.memberUsernames || []).length}.`,
-        });
-        this.notificationsService.create({
-          toUsername: req.fromUsername,
-          type: 'join-request-approved',
-          status: 'approved',
-          title: '✅ Join Request Approved',
-          body: `Your request to join "${team.name}" was approved.`,
-          meta: { compId: team.competitionId, teamId: team.id },
-        }).catch(() => {});
-      }
-    } else {
-      this.notificationsService.create({
-        toUsername: (req as any).fromUsername,
-        type: 'join-request-updated',
-        status: String(status),
-        title: `Join Request ${status}`,
-        body: `Your request to join a team was ${status}.`,
-        meta: {},
-      }).catch(() => {});
+    const decision = String(status || '').toLowerCase();
+    const approving = decision === 'approved' || decision === 'accepted';
+    if (!approving && decision !== 'rejected' && decision !== 'declined') {
+      throw new BadRequestException('Status must be accepted or declined.');
     }
-    return updated;
+    if (req.status !== 'pending') {
+      throw new BadRequestException('This request was already handled.');
+    }
+
+    const reviewer = user?.username || user?.id || 'captain';
+    const team = await this.teamRepository.findById(req.teamId);
+    if (!team) throw new NotFoundException(`Team with ID ${req.teamId} not found`);
+
+    if (!approving) {
+      const declined = await this.teamRepository.updateJoinRequest(id, 'rejected', reviewer);
+      this.notificationsService.create({
+        toUsername: req.fromUsername,
+        type: 'join-request-updated',
+        status: 'rejected',
+        title: 'Join request declined',
+        body: `Your request to join "${team.name}" was declined.`,
+        meta: { compId: team.competitionId, teamId: team.id, requestId: id },
+      }).catch(() => {});
+      return declined;
+    }
+
+    const competition = await this.competitionRepository.findById(team.competitionId);
+    await this.assertRosterOpen(team, competition);
+    await this.assertNotOnAnotherTeam(team, req.fromUsername, `@${req.fromUsername} is already in another team for this competition.`);
+
+    const fee = this.playerFeeDue(competition);
+    if (fee > 0 && !feeAlreadyPaid) {
+      const awaiting = await this.teamRepository.updateJoinRequest(id, 'awaiting_payment', reviewer);
+      this.notificationsService.create({
+        toUsername: req.fromUsername,
+        type: 'team-join-payment',
+        status: 'pending',
+        title: '✅ Join request accepted: payment needed',
+        body: `The lead of "${team.name}" accepted your request. Pay the ₹${fee} entry fee to join the team.`,
+        meta: { compId: team.competitionId, teamId: team.id, requestId: id, amount: fee, teamName: team.name },
+      }).catch(() => {});
+      return { ...awaiting, amount: fee };
+    }
+
+    const updated = await this.teamRepository.updateJoinRequest(id, fee > 0 ? 'paid' : 'approved', reviewer);
+    const after = await this.addRequesterToRoster(req, team, reviewer);
+    this.notificationsService.create({
+      toUsername: req.fromUsername,
+      type: 'join-request-approved',
+      status: 'approved',
+      title: '✅ Join Request Approved',
+      body: `Your request to join "${team.name}" was approved.`,
+      meta: { compId: team.competitionId, teamId: team.id, requestId: id },
+    }).catch(() => {});
+    return { ...updated, team: after };
+  }
+
+  /** The player pays after being accepted, which is what puts them on the roster. */
+  async payJoinRequest(id: string, user: any) {
+    const req = await this.teamRepository.findJoinRequestById(id);
+    if (!req) throw new NotFoundException(`Join request with ID ${id} not found`);
+    const username = String(user?.username || '');
+    if (username.toLowerCase() !== String(req.fromUsername).toLowerCase()) {
+      throw new ForbiddenException('This join request is not assigned to your account.');
+    }
+    if (req.status === 'paid') {
+      throw new BadRequestException('This fee has already been paid.');
+    }
+    if (req.status !== 'awaiting_payment') {
+      throw new BadRequestException('The team lead has to accept your request before you can pay.');
+    }
+    await this.assertVerified(user, 'pay the entry fee');
+
+    const team = await this.teamRepository.findById(req.teamId);
+    if (!team) throw new NotFoundException(`Team with ID ${req.teamId} not found`);
+    const competition = await this.competitionRepository.findById(team.competitionId);
+    await this.assertRosterOpen(team, competition);
+    await this.assertNotOnAnotherTeam(team, req.fromUsername, 'You are already in another team for this competition.');
+
+    const amount = this.playerFeeDue(competition);
+    const updated = await this.teamRepository.updateJoinRequest(id, 'paid', username);
+    const after = await this.addRequesterToRoster(req, team, username);
+    this.notificationsService.create({
+      toUsername: team.leaderId,
+      type: 'team-join-paid',
+      status: 'approved',
+      title: 'Player paid and joined',
+      body: `@${req.fromUsername} paid the ₹${amount} entry fee and joined "${team.name}".`,
+      meta: { compId: team.competitionId, teamId: team.id, requestId: id },
+    }).catch(() => {});
+    return { ...updated, team: after, amount };
   }
 
   async createInvite(teamId: string, competitionId: string, toUsername: string, fromUsername: string, user: any) {
     await this.assertVerified(user, 'invite a player to a team');
-    const team = await this.teamRepository.findById(teamId);
-    if (!team) throw new NotFoundException(`Team with ID ${teamId} not found`);
+    const team = await this.verifyTeamOwnership(teamId, user);
+    if (team.status === 'disbanded') {
+      throw new BadRequestException('This team has been disbanded.');
+    }
 
     const competition = await this.competitionRepository.findById(competitionId || team.competitionId);
     if (competition && isCompetitionStarted(competition as any)) {
@@ -549,28 +669,128 @@ export class TeamsService {
     const rosterSize = (team.memberUsernames || []).length;
     await this.assertCapacity(team.competitionId, team, rosterSize + 1);
 
-    const invite = await this.teamRepository.createInvite(teamId, team.competitionId, toUsername, fromUsername);
+    const target = await this.userRepository.findByUsername(String(toUsername || '').trim().replace(/^@/, ''));
+    if (!target) throw new BadRequestException('User not found. Enter a registered username.');
+    if (!this.isInvitableAccount(target)) {
+      throw new BadRequestException('Invitations can only be sent to regular users.');
+    }
+    const targetKey = String(target.username).toLowerCase();
+    if (targetKey === String(user?.username || '').toLowerCase()) {
+      throw new BadRequestException('You cannot invite yourself.');
+    }
+    if ((team.memberUsernames || []).some((m) => String(m).toLowerCase() === targetKey)) {
+      throw new BadRequestException(`${target.username} is already in this team.`);
+    }
+    const existing = await this.teamRepository.getInvitesByTeam(teamId);
+    if (existing.some((i) => i.status === 'pending' && String(i.toUsername).toLowerCase() === targetKey)) {
+      throw new BadRequestException('Pending invite already exists for this user.');
+    }
+    await this.assertNotOnAnotherTeam(team, target.username, `${target.username} is already in another team for this competition.`);
+
+    const invite = await this.teamRepository.createInvite(teamId, team.competitionId, target.username, fromUsername);
     this.notificationsService.create({
-      toUsername: toUsername,
+      toUsername: target.username,
       type: 'team-invite',
+      status: 'pending',
       title: '📨 Team Invitation',
       body: `@${fromUsername} invited you to join team "${team.name}"${competition ? ` in "${competition.name}"` : ''}.`,
-      meta: { compId: team.competitionId, teamId },
+      meta: { compId: team.competitionId, teamId, inviteId: invite.id },
     }).catch(() => {});
     return invite;
   }
 
-  async getInvitesByUser(toUsername: string) {
+  async getInvitesByUser(toUsername: string, user?: any) {
+    const isSelf = String(user?.username || '').toLowerCase() === String(toUsername || '').toLowerCase();
+    if (!isSelf && user?.role !== UserRole.ADMIN && user?.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Cannot access invitations of another user');
+    }
     return this.teamRepository.getInvitesByUser(toUsername);
+  }
+
+  async getInvitesByTeam(teamId: string, user: any) {
+    await this.verifyTeamOwnership(teamId, user);
+    const invites = await this.teamRepository.getInvitesByTeam(teamId);
+    return invites.filter((i) => i.status !== 'revoked');
+  }
+
+  /** Accounts the team lead can invite, flagging those already invited: never admins or anyone on a team here. */
+  async getAvailablePlayers(teamId: string, query: string, user: any) {
+    const team = await this.verifyTeamOwnership(teamId, user);
+    const competition = await this.competitionRepository.findById(team.competitionId);
+    const taken = new Set<string>(
+      [competition?.createdBy, ...(competition?.organizers || [])].map((u) => String(u || '').toLowerCase()),
+    );
+    const teams = await this.teamRepository.findByCompetition(team.competitionId);
+    teams
+      .filter((t) => String(t.id) === String(teamId) || this.isActiveTeam(t))
+      .forEach((t) => (t.memberUsernames || []).forEach((m) => taken.add(String(m).toLowerCase())));
+    const invites = await this.teamRepository.getInvitesByTeam(teamId);
+    const invited = new Set<string>(
+      invites.filter((i) => i.status === 'pending').map((i) => String(i.toUsername).toLowerCase()),
+    );
+
+    const q = String(query || '').trim().toLowerCase();
+    const users = await this.userRepository.findAll();
+    return users
+      .filter((u) => this.isInvitableAccount(u))
+      .map((u) => String(u.username))
+      .filter((name) => !taken.has(name.toLowerCase()) && (!q || name.toLowerCase().includes(q)))
+      .sort((a, b) => a.localeCompare(b))
+      .slice(0, 50)
+      .map((username) => ({ username, displayName: username, invited: invited.has(username.toLowerCase()) }));
+  }
+
+  async revokeInvite(teamId: string, inviteId: string, user: any) {
+    await this.verifyTeamOwnership(teamId, user);
+    const invite = await this.teamRepository.findInviteById(inviteId);
+    if (!invite || String(invite.teamId) !== String(teamId)) {
+      throw new NotFoundException('Invitation not found.');
+    }
+    if (invite.status !== 'pending') {
+      throw new BadRequestException('This invitation was already handled.');
+    }
+    return this.teamRepository.updateInvite(inviteId, 'revoked');
+  }
+
+  private isInvitableAccount(account: any): boolean {
+    const role = String(account?.role || '').toLowerCase();
+    return !account?.banned && (role === UserRole.PARTICIPANT || role === UserRole.TEAM_LEAD);
+  }
+
+  private isActiveTeam(team: any): boolean {
+    return !['rejected', 'disbanded'].includes(String(team?.status || '').toLowerCase());
+  }
+
+  private async assertNotOnAnotherTeam(team: any, username: string, message: string) {
+    const key = String(username).toLowerCase();
+    const teams = await this.teamRepository.findByCompetition(team.competitionId);
+    const onAnother = teams.some((t) =>
+      String(t.id) !== String(team.id)
+      && this.isActiveTeam(t)
+      && (t.memberUsernames || []).some((m) => String(m).toLowerCase() === key));
+    if (onAnother) throw new BadRequestException(message);
   }
 
   async updateInvite(id: string, status: string, user?: any) {
     const invite = await this.teamRepository.findInviteById(id);
     if (!invite) throw new NotFoundException(`Invite with ID ${id} not found`);
+    if (String(user?.username || '').toLowerCase() !== String(invite.toUsername).toLowerCase()) {
+      throw new ForbiddenException('This invitation is not assigned to your account.');
+    }
+    if (invite.status === 'revoked') {
+      throw new BadRequestException('This invitation was revoked by the team lead.');
+    }
+    if (invite.status !== 'pending') {
+      throw new BadRequestException('This invitation was already handled.');
+    }
+    const decision = String(status || '').toLowerCase();
+    if (decision !== 'accepted' && decision !== 'declined') {
+      throw new BadRequestException('Status must be accepted or declined.');
+    }
 
-    if (String(status).toLowerCase() === 'accepted') {
+    let team = await this.teamRepository.findById(invite.teamId);
+    if (decision === 'accepted') {
       await this.assertVerified(user, 'accept a team invitation');
-      const team = await this.teamRepository.findById(invite.teamId);
       if (!team) throw new NotFoundException(`Team with ID ${invite.teamId} not found`);
       if (team.status === 'disbanded') {
         throw new BadRequestException('This team has been disbanded; the invitation is no longer valid.');
@@ -581,6 +801,7 @@ export class TeamsService {
       }
       const rosterSize = (team.memberUsernames || []).length;
       await this.assertCapacity(team.competitionId, team, rosterSize + 1);
+      await this.assertNotOnAnotherTeam(team, invite.toUsername, 'You are already in another team for this competition.');
       if (!(team.memberUsernames || []).includes(invite.toUsername)) {
         await this.teamRepository.addMember(invite.teamId, invite.toUsername);
         await this.auditLog.record('TEAM_INVITE_ACCEPTED', {
@@ -590,8 +811,20 @@ export class TeamsService {
           details: `@${invite.toUsername} joined "${team.name}" by accepting an invite. Roster: ${rosterSize + 1}.`,
         });
       }
+      team = await this.teamRepository.findById(invite.teamId);
     }
 
-    return this.teamRepository.updateInvite(id, status);
+    const updated = await this.teamRepository.updateInvite(id, decision);
+    if (team?.leaderId) {
+      this.notificationsService.create({
+        toUsername: team.leaderId,
+        type: 'team-invite-result',
+        status: decision === 'accepted' ? 'approved' : 'rejected',
+        title: `Invitation ${decision}`,
+        body: `@${invite.toUsername} ${decision} your invitation to join "${team.name}".`,
+        meta: { compId: team.competitionId, teamId: invite.teamId, inviteId: id },
+      }).catch(() => {});
+    }
+    return { ...updated, team: decision === 'accepted' ? team : undefined };
   }
 }

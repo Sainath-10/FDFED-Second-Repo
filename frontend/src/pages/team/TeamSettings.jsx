@@ -78,8 +78,9 @@ export default function TeamSettings() {
     // Backend first: records the reason, notifies organizer + participants,
     // creates pending refund requests for eligible paid participants (idempotent).
     let offline = false;
+    const memberUsernames = (team.members || []).map((m) => m && m.username).filter(Boolean);
     try {
-      const res = await TeamsAPI.disband(team.id, reason);
+      const res = await TeamsAPI.disband(team.dbId || team.id, reason, memberUsernames);
       if (!res.ok && !/backend|network|Failed to fetch|is the backend/i.test(String(res.error || ''))) {
         setDisbanding(false);
         showToast(res.error || 'Unable to disband the team.', 'error');
@@ -94,10 +95,20 @@ export default function TeamSettings() {
       found.teams = found.teams.filter((t) => String(t.id) !== String(team.id));
       if (NexusData.updateCompetition) NexusData.updateCompetition(found);
     }
-    if (NexusTeamWorkflow && typeof NexusTeamWorkflow.disbandTeam === 'function') {
-      try { NexusTeamWorkflow.disbandTeam({ compId: comp.id, teamId: team.id, reason }); } catch (e) { /* ignore */ }
+    // The backend notifies members when it is reachable; offline, this browser's copy is all there is.
+    if (offline) {
+      memberUsernames
+        .filter((m) => m.toLowerCase() !== String(session.username || '').toLowerCase())
+        .forEach((m) => NexusTeamWorkflow.pushNotification({
+          toUsername: m,
+          type: 'team-disbanded',
+          status: 'rejected',
+          title: '⚠️ Your Team Was Disbanded',
+          body: `Your team "${team.name}" in "${comp.name}" was disbanded by the team lead. Reason: ${reason}.`,
+          meta: { compId: comp.id, teamId: team.id, reason },
+        }));
     }
-    try { localStorage.removeItem('nexus.team.context'); } catch (e) { /* ignore */ }
+    try { localStorage.removeItem('nexus.team.activeContext'); } catch (e) { /* ignore */ }
     setDisbanding(false);
     setDisbandOpen(false);
     showToast(offline ? 'Team disbanded locally (backend offline). Refund records will be created when the API returns.' : 'Team disbanded. Refunds for eligible paid participants may take a few days to process.', 'error');

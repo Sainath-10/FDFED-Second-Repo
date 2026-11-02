@@ -4,7 +4,7 @@
  * the competition
  * context header, the create-team CTA (context-aware), the approved-team list with
  * per-team join states (Your Team / Team Full / In Another Team / Requested /
- * Request to Join), the pending-requests section, the per-player checkout modal,
+ * Request to Join), the pending-requests section, the per-player checkout after acceptance,
  * ?teamId= direct-join, and the ended-competition lock.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -16,6 +16,7 @@ import useVerificationGate from '../hooks/useVerificationGate.jsx';
 import useJoinCodeGate from '../hooks/useJoinCodeGate.jsx';
 import { TeamsAPI } from '../services/api.js';
 import { showToast } from '../lib/toast.js';
+import PlayerFeeModal from '../components/PlayerFeeModal.jsx';
 import '../styles/pages/join-teams.css';
 
 function renderTeamAvatar(avatar, name) {
@@ -46,7 +47,8 @@ export default function JoinTeams() {
   const preferredTeamId = params.get('teamId');
 
   const [version, setVersion] = useState(0);
-  const [checkout, setCheckout] = useState(null); // { comp, feeAmount }
+  const [checkout, setCheckout] = useState(null); // { teamId, teamName, requestId, feeAmount }
+  const [paying, setPaying] = useState(false);
   const listRef = useRef(null);
 
   const comp = useMemo(
@@ -92,6 +94,7 @@ export default function JoinTeams() {
 
     const current = NexusData.getCompetitionById(comp.id);
     const team = (current.teams || []).find((t) => t.id === teamId);
+    let backendId = null;
     if (team && team.dbId && session) {
       try {
         const res = await TeamsAPI.createJoinRequest(
@@ -105,12 +108,14 @@ export default function JoinTeams() {
           showToast(res.error || 'Unable to send join request.', 'error');
           return;
         }
+        backendId = (res && res.data && res.data.id) || null;
       } catch (err) { /* backend unavailable — local workflow below */ }
     }
 
-    const result = NexusTeamWorkflow.submitJoinRequest({ compId: current.id, teamId, joinCode: code || '' });
+    const result = NexusTeamWorkflow.submitJoinRequest({ compId: current.id, teamId, joinCode: code || '', backendId });
     if (!result.ok) { showToast(result.error || 'Request failed.', 'error'); return; }
-    showToast('Join request sent successfully!');
+    const fee = current.feeType === 'per_player' ? Number(current.entryFeeAmount) || 0 : 0;
+    showToast(fee > 0 ? `Join request sent! If the team lead accepts, pay ₹${fee} to join.` : 'Join request sent successfully!');
     setVersion((v) => v + 1);
   }
 
@@ -121,15 +126,18 @@ export default function JoinTeams() {
       return;
     }
     // §12.4 — verification is enforced before the request is created.
-    gate.run(async () => {
-      const feeType = comp.feeType || 'free';
-      const entryFeeAmount = comp.entryFeeAmount || 0;
-      if (feeType === 'per_player' && entryFeeAmount > 0) {
-        setCheckout({ comp, feeAmount: entryFeeAmount, pendingTeamId: teamId });
-      } else {
-        await proceedJoinTeam(teamId);
-      }
-    });
+    gate.run(() => proceedJoinTeam(teamId));
+  }
+
+  async function confirmPayment() {
+    if (!checkout || paying) return;
+    setPaying(true);
+    const result = await NexusTeamWorkflow.payJoinRequest({ compId: comp.id, teamId: checkout.teamId, requestId: checkout.requestId });
+    setPaying(false);
+    if (!result.ok) { showToast(result.error || 'Payment could not be completed.', 'error'); return; }
+    showToast(`Payment received. You have joined ${checkout.teamName}!`);
+    setCheckout(null);
+    setVersion((v) => v + 1);
   }
 
  // ?teamId= — direct join (once, when a comp is available).
@@ -188,8 +196,8 @@ export default function JoinTeams() {
   const mine = [];
   (comp.teams || []).forEach((team) => {
     (team.joinRequests || []).forEach((req) => {
-      if ((req.username || '').toLowerCase() === userKey && req.status === 'pending') {
-        mine.push({ teamName: team.name, teamAvatar: team.avatar, request: req });
+      if ((req.username || '').toLowerCase() === userKey && (req.status === 'pending' || req.status === 'awaiting_payment')) {
+        mine.push({ teamId: team.id, teamName: team.name, teamAvatar: team.avatar, request: req });
       }
     });
   });
@@ -241,7 +249,7 @@ export default function JoinTeams() {
             const openSlots = Math.max(0, maxPerTeam - members);
             const isFull = members >= maxPerTeam;
             const isCaptain = userKey && (team.createdBy || '').toLowerCase() === userKey;
-            const hasPending = userKey && (team.joinRequests || []).some((req) => (req.username || '').toLowerCase() === userKey && req.status === 'pending');
+            const hasPending = userKey && (team.joinRequests || []).some((req) => (req.username || '').toLowerCase() === userKey && (req.status === 'pending' || req.status === 'awaiting_payment'));
             const userInAnotherTeam = !!myTeamId && team.id !== myTeamId;
 
             let joinBtn;
@@ -297,7 +305,16 @@ export default function JoinTeams() {
                     <div className="pending-time">Sent {entry.request.requestedAt ? new Date(entry.request.requestedAt).toLocaleString() : 'just now'}</div>
                   </div>
                 </div>
-                <button className="btn-cancel-request" disabled>Pending</button>
+                {entry.request.status === 'awaiting_payment' ? (
+                  <button
+                    className="btn-join"
+                    onClick={() => setCheckout({ teamId: entry.teamId, teamName: entry.teamName, requestId: entry.request.backendId || entry.request.id, feeAmount: Number(comp.entryFeeAmount) || 0 })}
+                  >
+                    Accepted: Pay ₹{(Number(comp.entryFeeAmount) || 0).toLocaleString('en-IN')}
+                  </button>
+                ) : (
+                  <button className="btn-cancel-request" disabled>Pending</button>
+                )}
               </div>
             ))}
           </div>
@@ -305,35 +322,14 @@ export default function JoinTeams() {
       )}
 
       {checkout && (
-        <div id="player-checkout-modal" style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#0f172a', border: '1px solid #60a5fa', borderRadius: 16, width: 'min(90vw,460px)', padding: 32, boxShadow: '0 20px 60px #000a', color: '#f1f5f9' }}>
-            <h3 style={{ margin: '0 0 4px', fontSize: 20, color: '#f1f5f9' }}>👤 Player Participation Fee</h3>
-            <p style={{ margin: '0 0 20px', fontSize: 13, color: '#94a3b8' }}>Player Entry Fee for "{checkout.comp.name}".</p>
-            <div style={{ background: '#1e293b', borderRadius: 12, padding: 16, marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#cbd5e1' }}>
-                <span>Participation Fee Model:</span>
-                <span style={{ color: '#60a5fa', fontWeight: 600 }}>Per Player (Individual Entry)</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, color: '#f1f5f9', borderTop: '1px dashed rgba(96,165,250,0.3)', paddingTop: 10, marginTop: 2 }}>
-                <strong>Total Player Entry Fee:</strong>
-                <strong style={{ color: '#60a5fa', fontSize: 20 }}>₹{checkout.feeAmount.toLocaleString('en-IN')}</strong>
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 12 }}>
-              <button onClick={() => setCheckout(null)} style={{ flex: 1, padding: 12, background: 'none', border: '1px solid #334155', color: '#94a3b8', borderRadius: 8, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
-              <button
-                onClick={() => {
-                  const pendingTeam = checkout.pendingTeamId;
-                  setCheckout(null);
-                  proceedJoinTeam(pendingTeam);
-                }}
-                style={{ flex: 2, padding: 12, background: '#60a5fa', border: 'none', color: '#fff', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}
-              >
-                ✔ Pay ₹{checkout.feeAmount.toLocaleString('en-IN')} &amp; Send Request
-              </button>
-            </div>
-          </div>
-        </div>
+        <PlayerFeeModal
+          compName={comp.name}
+          teamName={checkout.teamName}
+          feeAmount={checkout.feeAmount}
+          busy={paying}
+          onCancel={() => setCheckout(null)}
+          onConfirm={confirmPayment}
+        />
       )}
 
       {gate.gateModal}

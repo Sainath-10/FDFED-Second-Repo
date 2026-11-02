@@ -6,10 +6,11 @@
  * filtering, accept/reject actions for pending invites/join-requests, counts and
  * "Mark All Read".
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import NexusTeamWorkflow from '../services/teamWorkflow.js';
 import { showToast } from '../lib/toast.js';
+import PlayerFeeModal from '../components/PlayerFeeModal.jsx';
 import '../styles/pages/notifications.css';
 
 const TABS = [
@@ -29,6 +30,15 @@ export default function Notifications() {
   const [activeFilter, setActiveFilter] = useState('all');
   const [query, setQuery] = useState('');
   const [version, setVersion] = useState(0);
+  const [payingFor, setPayingFor] = useState(null);
+  const [paying, setPaying] = useState(false);
+
+  useEffect(() => {
+    if (!session || !NexusTeamWorkflow || typeof NexusTeamWorkflow.syncServerNotifications !== 'function') return;
+    NexusTeamWorkflow.syncServerNotifications(session.username).then((added) => {
+      if (added) setVersion((v) => v + 1);
+    });
+  }, [session?.username]);
 
   const items = useMemo(() => {
     if (!session || !NexusTeamWorkflow || typeof NexusTeamWorkflow.getNotificationsForUser !== 'function') return [];
@@ -62,7 +72,24 @@ export default function Notifications() {
     showToast('All notifications marked as read.');
   }
 
-  function processAction(notificationId, action) {
+  async function confirmPayment() {
+    if (!payingFor || paying) return;
+    const meta = payingFor.meta || {};
+    setPaying(true);
+    const result = await NexusTeamWorkflow.payJoinRequest({ compId: meta.compId, teamId: meta.teamId, requestId: meta.requestId });
+    setPaying(false);
+    if (!result.ok) { showToast(result.error || 'Payment could not be completed.', 'error'); return; }
+    NexusTeamWorkflow.updateNotification(payingFor.id, {
+      status: 'approved',
+      read: true,
+      body: `${payingFor.body || ''} (Paid. You have joined the team.)`,
+    }, session.username);
+    showToast('Payment received. You have joined the team!');
+    setPayingFor(null);
+    setVersion((v) => v + 1);
+  }
+
+  async function processAction(notificationId, action) {
     if (!session || !NexusTeamWorkflow) { showToast('Please log in first.', 'error'); return; }
     const item = NexusTeamWorkflow.getNotificationById(notificationId, session.username);
     if (!item) { showToast('Notification not found.', 'error'); return; }
@@ -70,9 +97,9 @@ export default function Notifications() {
     const meta = item.meta || {};
     let result = { ok: false, error: 'Unsupported action.' };
     if (item.type === 'team-join-request') {
-      result = NexusTeamWorkflow.decideJoinRequest({ compId: meta.compId, teamId: meta.teamId, requestId: meta.requestId, action });
+      result = await NexusTeamWorkflow.decideJoinRequest({ compId: meta.compId, teamId: meta.teamId, requestId: meta.requestId, action });
     } else if (item.type === 'team-invite') {
-      result = NexusTeamWorkflow.decideInvite({ compId: meta.compId, teamId: meta.teamId, inviteId: meta.inviteId, action });
+      result = await NexusTeamWorkflow.decideInvite({ compId: meta.compId, teamId: meta.teamId, inviteId: meta.inviteId, action });
     } else if (item.type === 'co-organizer-invite') {
       result = NexusTeamWorkflow.decideCoOrganizerInvite({ compId: meta.compId, action });
     }
@@ -91,7 +118,7 @@ export default function Notifications() {
     setVersion((v) => v + 1);
   }
 
-  const pendingTypes = ['team-join-request', 'team-invite', 'co-organizer-invite'];
+  const pendingTypes = ['team-join-request', 'team-join-payment', 'team-invite', 'co-organizer-invite'];
 
   return (
     <main className="main-content">
@@ -127,7 +154,10 @@ export default function Notifications() {
             const isJoinRequest = type === 'team-join-request';
             const isCoOrgInvite = type === 'co-organizer-invite';
             const showActions = sc === 'pending' && pendingTypes.includes(type);
-            const positiveLabel = isJoinRequest ? 'Accept Player' : (isCoOrgInvite ? 'Accept Co-Organizer' : 'Accept Invite');
+            const isPayment = type === 'team-join-payment';
+            const positiveLabel = isPayment
+              ? `Pay ₹${Number(item.meta?.amount || 0).toLocaleString('en-IN')} & Join`
+              : (isJoinRequest ? 'Accept Player' : (isCoOrgInvite ? 'Accept Co-Organizer' : 'Accept Invite'));
             const negativeLabel = isJoinRequest ? 'Reject Player' : (isCoOrgInvite ? 'Decline Co-Organizer' : 'Reject Invite');
 
             return (
@@ -149,8 +179,8 @@ export default function Notifications() {
                   <p className="notif-body-text">{item.body || ''}</p>
                   {showActions && (
                     <div className="notif-actions-row">
-                      <button className="btn-notif-accept" onClick={() => processAction(item.id, 'accepted')}>{positiveLabel}</button>
-                      <button className="btn-notif-reject" onClick={() => processAction(item.id, 'declined')}>{negativeLabel}</button>
+                      <button className="btn-notif-accept" onClick={() => (isPayment ? setPayingFor(item) : processAction(item.id, 'accepted'))}>{positiveLabel}</button>
+                      {!isPayment && <button className="btn-notif-reject" onClick={() => processAction(item.id, 'declined')}>{negativeLabel}</button>}
                     </div>
                   )}
                 </div>
@@ -167,6 +197,15 @@ export default function Notifications() {
           </div>
         )}
       </div>
+      {payingFor && (
+        <PlayerFeeModal
+          teamName={payingFor.meta?.teamName}
+          feeAmount={payingFor.meta?.amount}
+          busy={paying}
+          onCancel={() => setPayingFor(null)}
+          onConfirm={confirmPayment}
+        />
+      )}
     </main>
   );
 }

@@ -27,13 +27,13 @@ export default function InvitePlayer() {
 
   const backHref = withTeamContext('/pages/team/add-players.html', ctx && ctx.context);
 
-  function onSubmit(event) {
+  async function onSubmit(event) {
     event.preventDefault();
     const u = username.trim();
     if (!u) { showToast('Please enter a username!', 'error'); return; }
     if (!ctx || !ctx.comp || !ctx.team) { showToast('Team context not found.', 'error'); return; }
 
-    const result = NexusTeamWorkflow.sendInvite({
+    const result = await NexusTeamWorkflow.sendInvite({
       compId: ctx.comp.id,
       teamId: ctx.team.id,
       toUsername: u,

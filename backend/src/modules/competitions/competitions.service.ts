@@ -180,7 +180,11 @@ export class CompetitionsService {
     // §2.4 — never expose a private competition's join code on the public
     // detail endpoint. The organizer-only /competitions/:id/join-code route
     // is the single authorized reveal path.
-    const { joinCode, ...publicCompetition } = comp as any;
+    return this.withoutJoinCode(comp);
+  }
+
+  private withoutJoinCode(comp: any): ICompetition {
+    const { joinCode, ...publicCompetition } = comp;
     return publicCompetition as ICompetition;
   }
 
@@ -232,15 +236,18 @@ export class CompetitionsService {
   }
 
   async getAllCompetitions(): Promise<ICompetition[]> {
-    return this.competitionRepository.findAll();
+    const competitions = await this.competitionRepository.findAll();
+    return competitions.map((comp) => this.withoutJoinCode(comp));
   }
 
   async getCompetitionsByUser(userId: string): Promise<ICompetition[]> {
-    return this.competitionRepository.findByCreator(userId);
+    const competitions = await this.competitionRepository.findByCreator(userId);
+    return competitions.map((comp) => this.withoutJoinCode(comp));
   }
 
   async getCompetitionsByOrganizer(userId: string): Promise<ICompetition[]> {
-    return this.competitionRepository.findByOrganizer(userId);
+    const competitions = await this.competitionRepository.findByOrganizer(userId);
+    return competitions.map((comp) => this.withoutJoinCode(comp));
   }
 
   async addCoOrganizer(id: string, organizerId: string, requesterUsername: string): Promise<ICompetition> {
@@ -491,7 +498,8 @@ export class CompetitionsService {
   }
 
   async getActiveCompetitions(): Promise<ICompetition[]> {
-    return this.competitionRepository.findByStatus('active');
+    const competitions = await this.competitionRepository.findByStatus('active');
+    return competitions.map((comp) => this.withoutJoinCode(comp));
   }
 
   async setApproval(id: string, decision: string, adminUsername: string): Promise<ICompetition> {

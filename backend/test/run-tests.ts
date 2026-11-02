@@ -380,6 +380,9 @@ async function competitionServiceTests() {
     const competitionRepository = {
       findById: async () => comp,
       findAll: async () => [comp],
+      findByStatus: async () => [comp],
+      findByCreator: async () => [comp],
+      findByOrganizer: async () => [comp],
       create: async (name: string, description: string, startDate: Date, endDate: Date, createdBy: string, coOrganizers: string[], extras: any) => ({
         id: 'c1', name, description, startDate, endDate, createdBy,
         organizers: [createdBy, ...coOrganizers], ...extras,
@@ -483,6 +486,21 @@ async function competitionServiceTests() {
     const service = makeService({ id: 'c1', name: 'Private Cup', visibility: 'private', joinCode: 'SECRET42' });
     const comp: any = await service.getCompetitionById('c1');
     assert.equal(comp.joinCode, undefined);
+  });
+
+  await test('competition lists never expose the join code', async () => {
+    const service = makeService({ id: 'c1', name: 'Private Cup', visibility: 'private', joinCode: 'SECRET42' });
+    const lists = await Promise.all([
+      service.getAllCompetitions(),
+      service.getActiveCompetitions(),
+      service.getCompetitionsByUser('alice'),
+      service.getCompetitionsByOrganizer('alice'),
+    ]);
+    lists.forEach((list: any[]) => {
+      assert.equal(list.length, 1);
+      assert.equal(list[0].joinCode, undefined);
+      assert.equal(list[0].visibility, 'private');
+    });
   });
 
   await test('joining enforces verification and private join codes', async () => {
@@ -760,14 +778,27 @@ async function teamServiceTests() {
     };
     const saved: any[] = [];
     const mutations: any[] = [];
+    const invites: any[] = [];
+    const joinRequest: any = { id: 'req-1', teamId: 't1', competitionId: 'c1', fromUsername: 'carol', status: 'pending' };
     const userRepository = {
       findById: async () => ({
         id: 'u1', username: 'alice',
         role: opts.userRole || UserRole.PARTICIPANT,
         verificationStatus: opts.userState || 'verified',
       }),
-      findByUsername: async (name: string) => ({ id: `u-${name}`, username: name, email: `${name}@nexus.gg` }),
-      findAll: async () => [{ id: 'u1', username: 'alice' }, { id: 'u2', username: 'bob' }],
+      findByUsername: async (name: string) => (name === 'ghost' ? null : ({
+        id: `u-${name}`, username: name, email: `${name}@nexus.gg`,
+        role: name === 'boss' ? UserRole.ADMIN : UserRole.PARTICIPANT,
+      })),
+      findAll: async () => [
+        { id: 'u1', username: 'alice', role: UserRole.TEAM_LEAD },
+        { id: 'u2', username: 'bob', role: UserRole.PARTICIPANT },
+        { id: 'u3', username: 'carol', role: UserRole.PARTICIPANT },
+        { id: 'u4', username: 'dave', role: UserRole.TEAM_LEAD },
+        { id: 'u5', username: 'erin', role: UserRole.PARTICIPANT, banned: true },
+        { id: 'u6', username: 'boss', role: UserRole.ADMIN },
+        { id: 'u7', username: 'organizer', role: UserRole.PARTICIPANT },
+      ],
       update: async (_id: string, updates: any) => {
         mutations.push({ op: 'update-user', ...updates });
         return { id: 'u1', username: 'alice', ...updates };
@@ -784,6 +815,23 @@ async function teamServiceTests() {
       update: async (_id: string, updates: any) => { Object.assign(team, updates); return team; },
       addMember: async (_id: string, member: string) => { team.memberUsernames.push(member); return team; },
       removeMember: async (_id: string, member: string) => { team.memberUsernames = team.memberUsernames.filter((m: string) => m !== member); return team; },
+      getInvitesByTeam: async () => invites,
+      findJoinRequestById: async () => joinRequest,
+      getJoinRequestsByTeam: async () => [],
+      hasPaidJoinRequest: async () => joinRequest.status === 'paid',
+      updateJoinRequest: async (_id: string, status: string) => { mutations.push({ op: 'join-request', status }); joinRequest.status = status; return { ...joinRequest }; },
+      getInvitesByUser: async (name: string) => invites.filter((i) => i.toUsername === name),
+      findInviteById: async (id: string) => invites.find((i) => i.id === id) || null,
+      createInvite: async (teamId: string, competitionId: string, toUsername: string, fromUsername: string) => {
+        const invite = { id: `inv-${invites.length + 1}`, teamId, competitionId, toUsername, fromUsername, status: 'pending' };
+        invites.push(invite);
+        return invite;
+      },
+      updateInvite: async (id: string, status: string) => {
+        const invite = invites.find((i) => i.id === id);
+        invite.status = status;
+        return invite;
+      },
       setStatus: async (_id: string, status: string) => { mutations.push({ op: 'setStatus', status }); return { ...team, status }; },
     };
     const competitionRepository = { findById: async () => competition };
@@ -803,7 +851,7 @@ async function teamServiceTests() {
       refundRepo as any,
       revenueRepo as any,
     );
-    return { service, team, competition, saved, mutations };
+    return { service, team, competition, saved, mutations, invites, joinRequest };
   }
 
   await test('unverified users cannot create teams', async () => {
@@ -852,6 +900,72 @@ async function teamServiceTests() {
     await expectThrow(() => service.addMember('t1', { memberId: 'dave' } as any, { username: 'alice' }), BadRequestException, 'Team is full');
   });
 
+  await test('join requests cannot be approved once the competition has started', async () => {
+    const competition = {
+      id: 'c1', name: 'Cup', createdBy: 'organizer', organizers: ['organizer'], visibility: 'public',
+      maxTeams: 8, maxPlayersPerTeam: 5, startDate: past, endDate: new Date(future.getTime() + 86_400_000),
+    };
+    const { service, team, mutations } = makeService({ competition });
+    await expectThrow(() => service.updateJoinRequest('req-1', 'approved', { id: 'u1', username: 'alice' }), ForbiddenException, 'rosters are locked');
+    assert.ok(!team.memberUsernames.includes('carol'));
+    assert.ok(!mutations.some((m: any) => m.op === 'join-request'));
+  });
+
+  const paidCompetition = () => ({
+    id: 'c1', name: 'Cup', createdBy: 'organizer', organizers: ['organizer'], visibility: 'public',
+    maxTeams: 8, maxPlayersPerTeam: 5, startDate: future, endDate: new Date(future.getTime() + 86_400_000),
+    feeType: 'per_player', entryFeeAmount: 100,
+  });
+  const alice = { id: 'u1', username: 'alice' };
+  const carolPlayer = { id: 'u3', username: 'carol' };
+
+  await test('where players pay: lead accepts first, and paying is what joins the team', async () => {
+    const { service, team, joinRequest } = makeService({ competition: paidCompetition() });
+    await expectThrow(() => service.payJoinRequest('req-1', carolPlayer), BadRequestException, 'accept your request before');
+    const accepted: any = await service.updateJoinRequest('req-1', 'accepted', alice);
+    assert.equal(accepted.status, 'awaiting_payment');
+    assert.equal(accepted.amount, 100);
+    assert.ok(!team.memberUsernames.includes('carol'));
+    await expectThrow(() => service.payJoinRequest('req-1', { id: 'u4', username: 'dave' }), ForbiddenException, 'not assigned');
+    const paid: any = await service.payJoinRequest('req-1', carolPlayer);
+    assert.equal(paid.status, 'paid');
+    assert.ok(team.memberUsernames.includes('carol'));
+    assert.equal(joinRequest.status, 'paid');
+    await expectThrow(() => service.payJoinRequest('req-1', carolPlayer), BadRequestException, 'already been paid');
+    await expectThrow(() => service.removeMember('t1', 'carol', 'Repeated no-shows', alice), ForbiddenException, 'has paid');
+  });
+
+  await test('where the fee is not per player, accepting joins the team straight away', async () => {
+    const { service, team } = makeService();
+    const accepted: any = await service.updateJoinRequest('req-1', 'accepted', alice);
+    assert.equal(accepted.status, 'approved');
+    assert.ok(team.memberUsernames.includes('carol'));
+  });
+
+  await test('fees cannot be paid once the competition has started', async () => {
+    const { service, team, joinRequest } = makeService({ competition: { ...paidCompetition(), startDate: past } });
+    joinRequest.status = 'awaiting_payment';
+    await expectThrow(() => service.payJoinRequest('req-1', carolPlayer), ForbiddenException, 'rosters are locked');
+    assert.ok(!team.memberUsernames.includes('carol'));
+  });
+
+  await test('a removed player is told the reason', async () => {
+    const sent: any[] = [];
+    const original = notifications.create;
+    notifications.create = (async (data: any) => { sent.push(data); }) as any;
+    try {
+      const { service } = makeService();
+      await service.removeMember('t1', 'bob', 'Repeated no-shows', { username: 'alice' });
+      const notice = sent.find((n) => n.type === 'team-member-removed');
+      assert.equal(notice.toUsername, 'bob');
+      assert.equal(notice.status, 'rejected');
+      assert.ok(notice.body.includes('Reason: Repeated no-shows'));
+      assert.equal(notice.meta.reason, 'Repeated no-shows');
+    } finally {
+      notifications.create = original;
+    }
+  });
+
   await test('removal requires a reason and blocks paid participants', async () => {
     const { service } = makeService({ paidMembers: ['bob'] });
     await expectThrow(
@@ -886,6 +1000,85 @@ async function teamServiceTests() {
     const service = makeService({ competition: notStarted }).service;
     await expectThrow(() => service.disbandTeam('t1', 'short', { username: 'alice' }), BadRequestException, 'meaningful disband reason');
     await expectThrow(() => startedService.disbandTeam('t1', 'Team is inactive and cannot continue', { username: 'alice' }), ForbiddenException, 'not allowed after the competition has started');
+  });
+
+  await test('disband notifies members with the reason; the client roster never drives refunds', async () => {
+    const sent: any[] = [];
+    const original = notifications.create;
+    notifications.create = (async (data: any) => { sent.push(data); }) as any;
+    try {
+      const { service, saved } = makeService({ paidMembers: ['bob', 'carol'] });
+      await service.disbandTeam('t1', 'Team is inactive and cannot continue', { username: 'alice' }, ['carol', 'ALICE', 'BOB']);
+      const toMembers = sent.filter((n) => n.title.includes('Your Team'));
+      assert.deepEqual(toMembers.map((n) => n.toUsername).sort(), ['bob', 'carol']);
+      assert.ok(toMembers.every((n) => n.body.includes('Reason: Team is inactive and cannot continue')));
+      assert.deepEqual(saved.map((r) => r.username), ['bob']);
+    } finally {
+      notifications.create = original;
+    }
+  });
+
+  const lead = { id: 'u1', username: 'alice' };
+  const carol = { id: 'u3', username: 'carol' };
+
+  await test('available players come from the backend and exclude teammates, admins and banned users', async () => {
+    const { service } = makeService();
+    const all = await service.getAvailablePlayers('t1', '', lead);
+    assert.deepEqual(all.map((p: any) => p.username), ['carol', 'dave']);
+    assert.ok(all.every((p: any) => !('email' in p)));
+    const searched = await service.getAvailablePlayers('t1', 'CAR', lead);
+    assert.deepEqual(searched.map((p: any) => p.username), ['carol']);
+    await service.createInvite('t1', 'c1', 'carol', 'alice', lead);
+    const after = await service.getAvailablePlayers('t1', '', lead);
+    assert.deepEqual(after.map((p: any) => [p.username, p.invited]), [['carol', true], ['dave', false]]);
+    await expectThrow(() => service.getAvailablePlayers('t1', '', carol), ForbiddenException, '');
+  });
+
+  await test('only the team lead can invite, and only valid targets', async () => {
+    const { service } = makeService();
+    await expectThrow(() => service.createInvite('t1', 'c1', 'dave', 'carol', carol), ForbiddenException, '');
+    await expectThrow(() => service.createInvite('t1', 'c1', 'ghost', 'alice', lead), BadRequestException, 'User not found');
+    await expectThrow(() => service.createInvite('t1', 'c1', 'boss', 'alice', lead), BadRequestException, 'regular users');
+    await expectThrow(() => service.createInvite('t1', 'c1', 'bob', 'alice', lead), BadRequestException, 'already in this team');
+    await service.createInvite('t1', 'c1', 'carol', 'alice', lead);
+    await expectThrow(() => service.createInvite('t1', 'c1', 'carol', 'alice', lead), BadRequestException, 'Pending invite');
+  });
+
+  await test('players on another team in the competition cannot be invited or accept', async () => {
+    const other = { id: 't2', name: 'Bravo', competitionId: 'c1', leaderId: 'dave', memberUsernames: ['dave', 'carol'], status: 'approved' };
+    const team = { id: 't1', name: 'Alpha', competitionId: 'c1', leaderId: 'alice', createdBy: 'alice', leaderUsername: 'alice', memberUsernames: ['alice', 'bob'], status: 'approved' };
+    const { service, invites } = makeService({ team, teams: [team, other] });
+    await expectThrow(() => service.createInvite('t1', 'c1', 'carol', 'alice', lead), BadRequestException, 'another team');
+    invites.push({ id: 'inv-9', teamId: 't1', competitionId: 'c1', toUsername: 'carol', fromUsername: 'alice', status: 'pending' });
+    await expectThrow(() => service.updateInvite('inv-9', 'accepted', carol), BadRequestException, 'another team');
+  });
+
+  await test('invites can only be answered by the invitee, once', async () => {
+    const { service, team } = makeService();
+    const invite = await service.createInvite('t1', 'c1', 'carol', 'alice', lead);
+    await expectThrow(() => service.updateInvite(invite.id, 'accepted', { id: 'u4', username: 'dave' }), ForbiddenException, 'not assigned');
+    await expectThrow(() => service.updateInvite(invite.id, 'maybe', carol), BadRequestException, 'accepted or declined');
+    const accepted = await service.updateInvite(invite.id, 'accepted', carol);
+    assert.equal(accepted.status, 'accepted');
+    assert.ok(team.memberUsernames.includes('carol'));
+    assert.ok(accepted.team.memberUsernames.includes('carol'));
+    await expectThrow(() => service.updateInvite(invite.id, 'declined', carol), BadRequestException, 'already handled');
+  });
+
+  await test('revoked invites disappear for the lead and cannot be accepted', async () => {
+    const { service, team } = makeService();
+    const invite = await service.createInvite('t1', 'c1', 'carol', 'alice', lead);
+    await expectThrow(() => service.revokeInvite('t1', invite.id, carol), ForbiddenException, '');
+    await service.revokeInvite('t1', invite.id, lead);
+    assert.equal((await service.getInvitesByTeam('t1', lead)).length, 0);
+    await expectThrow(() => service.updateInvite(invite.id, 'accepted', carol), BadRequestException, 'revoked');
+    assert.ok(!team.memberUsernames.includes('carol'));
+  });
+
+  await test('users can only read their own invitations', async () => {
+    const { service } = makeService();
+    assert.deepEqual(await service.getInvitesByUser('carol', carol), []);
+    await expectThrow(() => service.getInvitesByUser('carol', { id: 'u4', username: 'dave' }), ForbiddenException, 'another user');
   });
 
   await test('disband records a pending refund for paid participants exactly once', async () => {

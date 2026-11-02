@@ -23,7 +23,7 @@ export default function AdminRevenueConfig() {
   const [error, setError] = useState('');
   const [config, setConfig] = useState(initial);
 
-  function submit(e) {
+  async function submit(e) {
     e.preventDefault();
     setError('');
     const pct = parseFloat(percentage);
@@ -37,7 +37,7 @@ export default function AdminRevenueConfig() {
     const prevConfig = (NexusData && NexusData.getRevenueConfig) ? NexusData.getRevenueConfig() : { percentage: 7, minCost: 50 };
 
     if (NexusData && typeof NexusData.saveRevenueConfig === 'function') {
-      const res = NexusData.saveRevenueConfig({ percentage: pct, minCost: cost });
+      const res = await NexusData.saveRevenueConfig({ percentage: pct, minCost: cost });
       if (!res.ok) { setError(`⚠️ ${res.error || 'Failed to save revenue configuration.'}`); return; }
     }
 

@@ -13,7 +13,7 @@ import NexusData from '../services/data.js';
 import NexusTeamWorkflow from '../services/teamWorkflow.js';
 import useVerificationGate from '../hooks/useVerificationGate.jsx';
 import useJoinCodeGate from '../hooks/useJoinCodeGate.jsx';
-import { DisputesAPI, MatchesAPI } from '../services/api.js';
+import { DisputesAPI, MatchesAPI, TeamsAPI } from '../services/api.js';
 import { showToast } from '../lib/toast.js';
 import { assetUrl } from '../lib/assets.js';
 import '../styles/pages/comp-info.css';
@@ -104,10 +104,22 @@ export default function CompInfo() {
   const [dReason, setDReason] = useState('');
   const [dEvidence, setDEvidence] = useState('');
   const [disputeSubmitting, setDisputeSubmitting] = useState(false);
+  const [serverTeams, setServerTeams] = useState(null);
 
   // §12.4 / §2.4 — shared gates: simulated verification before joining or
   // creating a team, and the organizer's code for private competitions.
   const gate = useVerificationGate('join or create a team in a competition');
+
+  // Rosters change on other devices, so the Teams tab reads them from the backend.
+  const backendCompId = comp ? (comp.dbId || comp.id) : null;
+  useEffect(() => {
+    if (!backendCompId) return undefined;
+    let cancelled = false;
+    TeamsAPI.getByCompetition(backendCompId).then((res) => {
+      if (!cancelled && res.ok && Array.isArray(res.data)) setServerTeams(res.data);
+    });
+    return () => { cancelled = true; };
+  }, [backendCompId]);
   const joinCodeGate = useJoinCodeGate(comp);
 
   // §9/§10 — bracket and standings use persisted match records, not local cache.
@@ -161,6 +173,28 @@ export default function CompInfo() {
     ? NexusTeamWorkflow.findUserTeamInCompetition(comp.id)
     : null;
   const isTeamLeader = !!(myTeam && myTeam.team && normalize(myTeam.team.createdBy) === userKey);
+
+  // Team cards with player names: the backend roster plus players only this browser knows about.
+  const teamRosters = approvedTeams
+    .map((t) => {
+      const server = (serverTeams || []).find((b) => b.id === t.dbId || b.id === t.id || b.name === t.name);
+      const lead = normalize((server && server.leaderId) || t.createdBy || t.leaderUsername);
+      const names = [...((server && server.memberUsernames) || []), ...(t.members || []).map((m) => m.username)];
+      const seen = new Set();
+      const members = names
+        .filter((name) => {
+          const key = normalize(name);
+          if (!name || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .map((username) => ({ username, isLead: normalize(username) === lead }))
+        .sort((a, b) => Number(b.isLead) - Number(a.isLead));
+      return { key: t.id || t.name, name: t.name || 'Unknown Team', status: server && server.status, members };
+    })
+    .filter((t) => t.status !== 'disbanded');
+  // §6 — only people playing in this competition see rosters and report buttons.
+  const isCompetitionParticipant = !!userKey && teamRosters.some((t) => t.members.some((m) => normalize(m.username) === userKey));
   const teamStatus = myTeam && myTeam.team ? String(myTeam.team.status || '').toLowerCase() : '';
 
   function onShare() {
@@ -463,9 +497,29 @@ export default function CompInfo() {
             <div className={`tab-panel${tab === 'teams' ? ' active' : ''}`} id="tab-teams">
               <div className="comp-info-block">
                 <h2 id="teams-heading">Registered Teams ({approvedTeams.length} / {comp.maxTeams || '—'})</h2>
-                <div className="teams-grid" id="comp-teams-grid">
+                <div className="teams-grid" id="comp-teams-grid" style={isCompetitionParticipant ? { gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' } : undefined}>
                   {approvedTeams.length === 0 ? (
                     <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>No teams have been accepted yet.</p>
+                  ) : isCompetitionParticipant ? (
+                    teamRosters.map((t) => (
+                      <div className="team-card team-roster-card" key={t.key} style={{ textAlign: 'left', height: 'auto' }}>
+                        <div className="name">{t.name}</div>
+                        <div className="players">{t.members.length} Player{t.members.length === 1 ? '' : 's'}</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+                          {t.members.map((m) => (
+                            <div key={m.username} className="team-roster-player" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 14, color: '#fff' }}>
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {m.username}
+                                {m.isLead && <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>(Lead)</span>}
+                              </span>
+                              {normalize(m.username) !== userKey && (
+                                <Link to={`/pages/submit-report.html?compId=${encodeURIComponent(comp.id)}&against=${encodeURIComponent(m.username)}`} className="btn-table-secondary">Report</Link>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))
                   ) : (
                     approvedTeams.map((t) => (
                       <div className="team-card" key={t.id || t.name}>

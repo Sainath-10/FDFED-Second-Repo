@@ -20,7 +20,7 @@ export class TeamJoinRequestEntity {
   fromUsername: string;
 
   @Column({ default: 'pending' })
-  status: string; // pending | accepted | rejected
+  status: string; // pending | awaiting_payment (accepted, fee due) | paid | approved | rejected
 
   @Column({ nullable: true, type: 'text' })
   message: string;

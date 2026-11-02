@@ -26,7 +26,7 @@ export default function SubmitReport() {
   const [reportType, setReportType] = useState(REPORT_TYPES[0]);
   const [competition, setCompetition] = useState(COMPETITIONS[0]);
   const [matchRound, setMatchRound] = useState('');
-  const [against, setAgainst] = useState('');
+  const [against, setAgainst] = useState(() => params.get('against') || '');
   const [description, setDescription] = useState('');
   const [files, setFiles] = useState([]);
   const [ended, setEnded] = useState(false);

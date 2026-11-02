@@ -11,7 +11,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import NexusData from '../services/data.js';
 import NexusTeamWorkflow from '../services/teamWorkflow.js';
-import { CompetitionsAPI, MatchesAPI, DisputesAPI } from '../services/api.js';
+import { CompetitionsAPI, MatchesAPI, DisputesAPI, TeamsAPI } from '../services/api.js';
 import { showToast } from '../lib/toast.js';
 import '../styles/pages/comp-participant.css';
 
@@ -145,6 +145,22 @@ export default function CompParticipant() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [compId]);
 
+  // The participant count follows the live team rosters.
+  const [backendTeams, setBackendTeams] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    if (!compId) return undefined;
+
+    async function loadTeams() {
+      const res = await TeamsAPI.getByCompetition(compId);
+      if (!cancelled && res.ok && Array.isArray(res.data)) setBackendTeams(res.data);
+    }
+
+    loadTeams();
+    const timer = setInterval(loadTeams, 10000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [compId]);
+
   // §7/§9/§10 — schedule, bracket and standings come from the authoritative
   // match service (verified results only), not from a stale local cache.
   useEffect(() => {
@@ -176,7 +192,24 @@ export default function CompParticipant() {
   const compDates = comp0.dates || (comp0.startDate
     ? `${fmtShortDate(comp0.startDate)}${comp0.endDate ? ` – ${fmtShortDate(comp0.endDate)}` : ''}`
     : 'TBD');
-  const compParticipants = comp0.participants || comp0.registeredTeams || 0;
+  // Distinct players on active teams. The backend roster is the truth; players who
+  // joined through a path it doesn't record yet are counted from this browser's copy.
+  const compParticipants = (() => {
+    const isActive = (team) => !['rejected', 'disbanded', 'banned'].includes(normalize(team && team.status));
+    const players = new Set();
+    (backendTeams || []).filter(isActive).forEach((team) => {
+      (team.memberUsernames || []).forEach((name) => players.add(normalize(name)));
+    });
+    (comp0.teams || []).filter(isActive).forEach((team) => {
+      const server = (backendTeams || []).find((b) => b.id === team.dbId || b.id === team.id);
+      if (server && !isActive(server)) return;
+      (team.members || [])
+        .filter((member) => !server || member.localOnly)
+        .forEach((member) => players.add(normalize(member.username)));
+    });
+    players.delete('');
+    return players.size;
+  })();
   const compPrizeFormatted = fmtPrize(compPrize);
   const compDesc = comp0.description || `${compName} is a competitive ${compGame} ${isLeague ? 'league' : 'tournament'}. Teams battle across ${isLeague ? 'a structured league format with standings' : 'a knockout bracket'} competing for ${compPrizeFormatted.toLowerCase() === 'no prize pool' ? 'victory' : `the ${compPrizeFormatted}`}.`;
 

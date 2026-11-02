@@ -26,12 +26,16 @@ export default function JoinRequests() {
     return <Navigate to={`/pages/team/team-roster.html?compId=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(team.id)}`} replace />;
   }
 
-  const pending = (NexusTeamWorkflow.getJoinRequests(comp.id, team.id) || []).filter((r) => r.status === 'pending');
+  const allRequests = NexusTeamWorkflow.getJoinRequests(comp.id, team.id) || [];
+  const pending = allRequests.filter((r) => r.status === 'pending');
+  const awaitingPayment = allRequests.filter((r) => r.status === 'awaiting_payment');
+  const playerFee = comp.feeType === 'per_player' ? Number(comp.entryFeeAmount) || 0 : 0;
 
-  function handleRequest(requestId, username, action) {
-    const result = NexusTeamWorkflow.decideJoinRequest({ compId: comp.id, teamId: team.id, requestId, action });
+  async function handleRequest(requestId, username, action) {
+    const result = await NexusTeamWorkflow.decideJoinRequest({ compId: comp.id, teamId: team.id, requestId, action });
     if (!result.ok) { showToast(result.error || 'Failed to update request.', 'error'); return; }
-    if (action === 'accepted') showToast(`${username} accepted to ${team.name}!`);
+    if (action === 'accepted' && result.feeDue) showToast(`${username} accepted. They join ${team.name} once they pay the ₹${result.feeDue} entry fee.`);
+    else if (action === 'accepted') showToast(`${username} accepted to ${team.name}!`);
     else showToast(`${username}'s request declined.`, 'error');
     refresh();
   }
@@ -61,6 +65,11 @@ export default function JoinRequests() {
                   <div className="request-name">{req.displayName || req.username}</div>
                   <div className="request-meta">Username: {req.username}</div>
                   <div className="request-time">Requested: {when}</div>
+                  {Number(req.feePaid) > 0 ? (
+                    <div className="request-meta request-fee-note" style={{ color: '#4ade80', fontWeight: 700 }}>✔ Participant has paid the ₹{Number(req.feePaid).toLocaleString('en-IN')} entry fee</div>
+                  ) : playerFee > 0 && (
+                    <div className="request-meta request-fee-note" style={{ color: '#fbbf24', fontWeight: 700 }}>Entry fee not paid yet: they pay ₹{playerFee.toLocaleString('en-IN')} after you accept</div>
+                  )}
                 </div>
                 <div className="request-slot-info">{req.message ? `Message: "${req.message}"` : 'No message provided'}</div>
                 <div className="request-actions-row">
@@ -71,6 +80,17 @@ export default function JoinRequests() {
             );
           })
         )}
+        {awaitingPayment.map((req) => (
+          <div className="request-card request-card-alt" id={req.id} key={req.id}>
+            <div className="request-avatar-md">{(req.displayName || req.username || 'U').charAt(0).toUpperCase()}</div>
+            <div className="request-info-wrapper">
+              <div className="request-name">{req.displayName || req.username}</div>
+              <div className="request-meta">Username: {req.username}</div>
+              <div className="request-meta request-fee-note" style={{ color: '#fbbf24', fontWeight: 700 }}>You accepted: waiting for them to pay ₹{playerFee.toLocaleString('en-IN')} to join</div>
+            </div>
+            <span className="status-pill pending status-pill-sm">Awaiting Payment</span>
+          </div>
+        ))}
       </div>
     </main>
   );

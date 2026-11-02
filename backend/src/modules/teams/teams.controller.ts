@@ -141,7 +141,7 @@ export class TeamsController {
     @Body() dto: DisbandTeamDto,
     @CurrentUser() user?: any,
   ) {
-    return this.teamsService.disbandTeam(id, dto.reason, user);
+    return this.teamsService.disbandTeam(id, dto.reason, user, dto.memberUsernames);
   }
 
   @Get('refund-requests')
@@ -282,10 +282,50 @@ export class TeamsController {
   @ApiOperation({ summary: 'Accept or reject join request' })
   async updateJoinRequest(
     @Param('reqId') reqId: string,
-    @Body() body: { status: string; reviewedBy?: string },
+    @Body() body: { status: string; reviewedBy?: string; feeAlreadyPaid?: boolean },
     @CurrentUser() user?: any,
   ) {
-    return this.teamsService.updateJoinRequest(reqId, body.status, user);
+    return this.teamsService.updateJoinRequest(reqId, body.status, user, body.feeAlreadyPaid === true);
+  }
+
+  @Post('join-requests/:reqId/pay')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Player pays the entry fee after the team lead accepted their join request' })
+  async payJoinRequest(@Param('reqId') reqId: string, @CurrentUser() user?: any) {
+    return this.teamsService.payJoinRequest(reqId, user);
+  }
+
+  @Get(':id/available-players')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Search players the team lead can invite' })
+  async getAvailablePlayers(
+    @Param('id') teamId: string,
+    @Query('q') query: string,
+    @CurrentUser() user?: any,
+  ) {
+    return this.teamsService.getAvailablePlayers(teamId, query, user);
+  }
+
+  @Get(':id/invites')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List invitations sent by a team' })
+  async getTeamInvites(@Param('id') teamId: string, @CurrentUser() user?: any) {
+    return this.teamsService.getInvitesByTeam(teamId, user);
+  }
+
+  @Delete(':id/invites/:inviteId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Revoke a pending team invitation' })
+  async revokeInvite(
+    @Param('id') teamId: string,
+    @Param('inviteId') inviteId: string,
+    @CurrentUser() user?: any,
+  ) {
+    return this.teamsService.revokeInvite(teamId, inviteId, user);
   }
 
   @Post(':id/invites')
@@ -305,8 +345,8 @@ export class TeamsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get invites for a user' })
-  async getInvites(@Param('username') username: string) {
-    return this.teamsService.getInvitesByUser(username);
+  async getInvites(@Param('username') username: string, @CurrentUser() user?: any) {
+    return this.teamsService.getInvitesByUser(username, user);
   }
 
   @Patch('invites/:inviteId')

@@ -23,7 +23,7 @@ export class TeamInviteEntity {
   fromUsername: string;
 
   @Column({ default: 'pending' })
-  status: string; // pending | accepted | rejected
+  status: string; // pending | accepted | declined | revoked
 
   @CreateDateColumn()
   createdAt: Date;

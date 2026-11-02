@@ -1,6 +1,5 @@
 (function (window) {
   const SESSION_KEY = 'nexus.auth.session';
-  const ACCOUNTS_KEY = 'nexus.auth.accounts';
   const NOTIFICATIONS_KEY = 'nexus.notifications.items';
   const TEAM_CONTEXT_KEY = 'nexus.team.activeContext';
   const COMPETITIONS_KEY = 'nexus_competitions';
@@ -124,7 +123,7 @@
  // Resolve join requests
         if (item.meta.requestId && Array.isArray(team.joinRequests)) {
           const req = team.joinRequests.find(r => r && r.id === item.meta.requestId);
-          if (req && req.status && req.status !== 'pending') {
+          if (req && req.status && !['pending', 'awaiting_payment', 'paid'].includes(req.status)) {
             const reqStatus = req.status === 'accepted' ? 'approved' : 'rejected';
             item.status = reqStatus;
             item.title = 'Join request ' + (reqStatus === 'approved' ? 'accepted' : 'declined');
@@ -148,6 +147,71 @@
     }
 
     return notifications;
+  }
+
+  // Copies this user's backend-issued team notices into the local store, so they
+  // arrive on any device, and closes invite notices that were handled elsewhere.
+  // Resolves true if anything changed.
+  const SERVER_NOTIFICATION_TYPES = ['team-disbanded', 'team-member-removed', 'team-invite', 'team-invite-result', 'team-join-request', 'team-join-payment', 'team-join-paid', 'join-request-approved', 'join-request-updated'];
+  // Final outcomes: older records were saved as pending, but nothing is awaiting an answer.
+  const CLOSED_NOTIFICATION_TYPES = ['team-disbanded', 'team-member-removed'];
+  const INVITE_STATUS_TO_NOTIFICATION = { accepted: 'approved', declined: 'rejected', revoked: 'rejected' };
+
+  async function syncServerNotifications(username) {
+    const api = window.NexusAPI;
+    if (!username || !api || !api.Notifications) return false;
+    try {
+      const [notifRes, inviteRes] = await Promise.all([
+        api.Notifications.getForUser(username),
+        api.Teams.getInvites(username)
+      ]);
+      const incoming = notifRes && notifRes.ok && Array.isArray(notifRes.data)
+        ? notifRes.data.filter(item => SERVER_NOTIFICATION_TYPES.includes(item.type))
+        : [];
+      // Older removal notices made in this browser have no reason; the backend's copy replaces them.
+      const removals = incoming.filter(item => item.type === 'team-member-removed').map(item => String(item.body || ''));
+      const stored = loadNotifications();
+      const all = stored.filter(item => !(
+        item.type === 'team-roster-update'
+        && normalize(item.toUsername) === normalize(username)
+        && !(item.meta && item.meta.reason)
+        && removals.some(body => body.includes('"' + String(item.title || '').replace('Removed from ', '') + '"'))
+      ));
+      const known = new Set(all.map(item => item.id));
+      const merged = incoming
+        .filter(item => !known.has(item.id))
+        .map(item => (CLOSED_NOTIFICATION_TYPES.includes(item.type) ? { ...item, status: 'rejected' } : item))
+        .concat(all);
+      let changed = merged.length !== stored.length;
+
+      // Copies saved earlier can hold a wrong time; the backend's is authoritative.
+      const serverTimes = new Map(incoming.map(item => [item.id, item.createdAt]));
+      merged.forEach(item => {
+        const serverTime = serverTimes.get(item.id);
+        if (serverTime && serverTime !== item.createdAt) {
+          item.createdAt = serverTime;
+          changed = true;
+        }
+      });
+
+      const invites = inviteRes && inviteRes.ok && Array.isArray(inviteRes.data) ? inviteRes.data : [];
+      invites.forEach(invite => {
+        const status = INVITE_STATUS_TO_NOTIFICATION[invite.status];
+        if (!status) return;
+        merged.forEach(item => {
+          if (item.type === 'team-invite' && item.status === 'pending' && item.meta && item.meta.inviteId === invite.id) {
+            item.status = status;
+            item.body = (item.body || '') + ' (This invitation was ' + invite.status + '.)';
+            changed = true;
+          }
+        });
+      });
+
+      if (changed) saveNotifications(merged);
+      return changed;
+    } catch (e) {
+      return false;
+    }
   }
 
   function getNotificationById(notificationId, username) {
@@ -206,39 +270,6 @@
     if (changed) {
       saveNotifications(all);
     }
-  }
-
-  function getAllAccounts() {
-    const defaults = [
-      { username: 'regular@nexus.gg', role: 'regular' },
-      { username: 'admin@nexus.gg', role: 'admin' },
-      { username: 'superadmin@nexus.gg', role: 'super-admin' }
-    ];
-
-    const stored = parseJson(localStorage.getItem(ACCOUNTS_KEY), []);
-    const merged = [].concat(defaults, stored || []);
-    const seen = new Set();
-
-    return merged.filter(account => {
-      const username = String(account && account.username || '').trim();
-      if (!username) return false;
-      const key = normalize(username);
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  }
-
-  function isRegularAccount(account) {
-    if (!account) return false;
-    const role = normalize(account.role || 'regular');
-    return role === 'regular' || role === 'participant';
-  }
-
-  function findAccountByUsername(username) {
-    const userKey = normalize(username);
-    if (!userKey) return null;
-    return getAllAccounts().find(account => normalize(account.username) === userKey) || null;
   }
 
   function getCompetitionById(compId) {
@@ -318,7 +349,7 @@
 
   function findTeam(comp, teamId) {
     if (!comp || !Array.isArray(comp.teams)) return null;
-    const team = comp.teams.find(item => item.id === teamId);
+    const team = comp.teams.find(item => item.id === teamId || (item.dbId && item.dbId === teamId));
     return team ? ensureTeamShape(team, comp.id) : null;
   }
 
@@ -545,84 +576,129 @@
     return { ok: true, team, competition: comp };
   }
 
-  function sendInvite(options) {
+  function findCompetitionByAnyId(compId) {
+    const direct = getCompetitionById(compId);
+    if (direct) return direct;
+    const all = (window.NexusData && typeof window.NexusData.loadCompetitions === 'function')
+      ? window.NexusData.loadCompetitions()
+      : [];
+    return (all || []).find(comp => comp && comp.dbId === compId) || null;
+  }
+
+  const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  function playerFeeDue(comp) {
+    const amount = Number(comp && comp.entryFeeAmount) || 0;
+    return comp && comp.feeType === 'per_player' && amount > 0 ? amount : 0;
+  }
+
+  // Finds the local copies of a competition and team, creating them from the backend
+  // when this browser has never seen them.
+  async function ensureLocalTeam(compId, teamId, serverTeam) {
+    let comp = findCompetitionByAnyId(compId);
+    if (!comp && serverTeam && window.NexusData) {
+      const compRes = await window.NexusAPI.Competitions.getById(compId);
+      if (compRes.ok && compRes.data) {
+        window.NexusData.updateCompetition(window.NexusData.mapApiCompetition(compRes.data));
+        comp = findCompetitionByAnyId(compId);
+      }
+    }
+    if (!comp) return { comp: null, team: null };
+    ensureCompetitionTeams(comp);
+    let team = findTeam(comp, teamId);
+    if (!team && serverTeam) {
+      const leader = serverTeam.leaderId;
+      team = ensureTeamShape({
+        id: serverTeam.id,
+        dbId: serverTeam.id,
+        backendSynced: true,
+        name: serverTeam.name,
+        tag: '',
+        avatar: 'SHIELD',
+        status: serverTeam.status,
+        createdBy: serverTeam.createdBy || leader,
+        leader,
+        leaderUsername: leader,
+        created: serverTeam.createdAt,
+        members: [{ username: leader, displayName: leader, role: 'captain', joinedAt: serverTeam.createdAt }],
+        invites: [],
+        joinRequests: []
+      }, comp.id);
+      comp.teams.unshift(team);
+    }
+    return { comp, team };
+  }
+
+  function setMemberFee(team, username, amount) {
+    const member = team.members.find(item => normalize(item.username) === normalize(username));
+    if (member) {
+      member.feePaid = amount;
+      member.paymentStatus = amount > 0 ? 'paid' : 'free';
+    }
+  }
+
+  function backendTeamId(team) {
+    return (team && (team.dbId || team.id)) || null;
+  }
+
+  function toLocalInvite(serverInvite, existing) {
+    return {
+      id: serverInvite.id,
+      toUsername: serverInvite.toUsername,
+      roleOffered: (existing && existing.roleOffered) || 'Player',
+      message: (existing && existing.message) || '',
+      sentBy: serverInvite.fromUsername,
+      sentAt: serverInvite.createdAt,
+      status: serverInvite.status
+    };
+  }
+
+  // Adds backend roster entries the local copy is missing. Local-only members are
+  // kept because other join paths still only record them in this browser.
+  function mergeBackendRoster(team, serverTeam) {
+    const known = new Set(team.members.map(member => normalize(member.username)));
+    let changed = false;
+    (serverTeam.memberUsernames || []).forEach(username => {
+      if (!username || known.has(normalize(username))) return;
+      known.add(normalize(username));
+      team.members.push({ username, displayName: username, role: 'player', joinedAt: isoNow() });
+      changed = true;
+    });
+    team.players = team.members.length;
+    return changed;
+  }
+
+  async function sendInvite(options) {
     const opts = options || {};
     const session = getSession();
     if (!session) return { ok: false, error: 'Please log in first.' };
 
     const comp = getCompetitionById(opts.compId);
     if (!comp) return { ok: false, error: 'Competition not found.' };
-    if (hasCompetitionStarted(comp)) {
-      return { ok: false, error: 'The competition has started: players can no longer be invited.' };
-    }
     ensureCompetitionTeams(comp);
 
     const team = findTeam(comp, opts.teamId);
     if (!team) return { ok: false, error: 'Team not found.' };
-    if (team.members.length >= maxPlayers(comp)) {
-      return { ok: false, error: 'Team is already full (' + team.members.length + ' / ' + maxPlayers(comp) + ').' };
-    }
     if (!userCanManageTeam(team, session)) return { ok: false, error: 'Only team captain can send invites.' };
 
     const toUsername = String(opts.toUsername || '').trim();
     if (!toUsername) return { ok: false, error: 'Username is required.' };
 
-    const targetAccount = findAccountByUsername(toUsername);
-    if (!targetAccount) {
-      return { ok: false, error: 'User not found. Enter a registered username.' };
-    }
+    // The backend validates the invite and notifies the player on any device.
+    const res = await window.NexusAPI.Teams.createInvite(backendTeamId(team), comp.dbId || comp.id, toUsername, session.username);
+    if (!res.ok) return { ok: false, error: res.error || 'Failed to send invite.' };
 
-    if (!isRegularAccount(targetAccount)) {
-      return { ok: false, error: 'Invitations can only be sent to regular users.' };
-    }
-
-    if (normalize(toUsername) === normalize(session.username)) {
-      return { ok: false, error: 'You cannot invite yourself.' };
-    }
-
-    const alreadyMember = team.members.some(member => normalize(member.username) === normalize(toUsername));
-    if (alreadyMember) {
-      return { ok: false, error: toUsername + ' is already in this team.' };
-    }
-
-    const pendingInvite = team.invites.find(inv => normalize(inv.toUsername) === normalize(toUsername) && inv.status === 'pending');
-    if (pendingInvite) {
-      return { ok: false, error: 'Pending invite already exists for this user.' };
-    }
-
-    const invite = {
-      id: makeId('invite'),
-      toUsername,
+    const invite = toLocalInvite(res.data, {
       roleOffered: String(opts.roleOffered || 'Player').trim(),
-      message: String(opts.message || '').trim(),
-      sentBy: session.username,
-      sentAt: isoNow(),
-      status: 'pending'
-    };
-
+      message: String(opts.message || '').trim()
+    });
     team.invites.unshift(invite);
     saveCompetition(comp);
-
-    pushNotification({
-      toUsername,
-      type: 'team-invite',
-      status: 'pending',
-      title: 'Team invitation from ' + team.name,
-      body: (session.displayName || session.username) + ' invited you to join ' + team.name + '.',
-      createdAt: invite.sentAt,
-      read: false,
-      meta: {
-        compId: comp.id,
-        teamId: team.id,
-        inviteId: invite.id,
-        roleOffered: invite.roleOffered
-      }
-    });
 
     return { ok: true, invite };
   }
 
-  function revokeInvite(options) {
+  async function revokeInvite(options) {
     const opts = options || {};
     const session = getSession();
     if (!session) return { ok: false, error: 'Please log in first.' };
@@ -635,13 +711,69 @@
     if (!team) return { ok: false, error: 'Team not found.' };
     if (!userCanManageTeam(team, session)) return { ok: false, error: 'Only team captain can revoke invites.' };
 
-    const inviteIndex = team.invites.findIndex(inv => inv.id === opts.inviteId);
-    if (inviteIndex < 0) return { ok: false, error: 'Invitation not found.' };
+    const res = await window.NexusAPI.Teams.revokeInvite(backendTeamId(team), opts.inviteId);
+    if (!res.ok) return { ok: false, error: res.error || 'Failed to revoke invite.' };
 
-    team.invites.splice(inviteIndex, 1);
+    team.invites = team.invites.filter(inv => inv.id !== opts.inviteId);
     saveCompetition(comp);
 
     return { ok: true };
+  }
+
+  // Pulls the team's roster and sent invites from the backend into the local copy.
+  // Resolves true if anything changed.
+  async function syncTeamFromBackend(compId, teamId) {
+    const comp = getCompetitionById(compId);
+    if (!comp || !window.NexusAPI) return false;
+    ensureCompetitionTeams(comp);
+    const team = findTeam(comp, teamId);
+    const id = backendTeamId(team);
+    if (!id) return false;
+
+    // Sent invites are only visible to whoever manages the team.
+    const [teamRes, inviteRes, joinRes] = await Promise.all([
+      window.NexusAPI.Teams.getById(id),
+      userCanManageTeam(team, getSession()) ? window.NexusAPI.Teams.getTeamInvites(id) : null,
+      userCanManageTeam(team, getSession()) ? window.NexusAPI.Teams.getJoinRequests(id) : null
+    ]);
+
+    const before = JSON.stringify(team);
+    if (teamRes.ok && teamRes.data) mergeBackendRoster(team, teamRes.data);
+    if (inviteRes && inviteRes.ok && Array.isArray(inviteRes.data)) {
+      const existing = new Map(team.invites.map(inv => [inv.id, inv]));
+      team.invites = inviteRes.data.map(inv => toLocalInvite(inv, existing.get(inv.id)));
+    }
+    if (joinRes && joinRes.ok && Array.isArray(joinRes.data)) {
+      const LOCAL_STATUS = { approved: 'accepted', rejected: 'declined' };
+      joinRes.data.forEach(serverReq => {
+        const status = LOCAL_STATUS[serverReq.status] || serverReq.status;
+        let local = team.joinRequests.find(req => req.backendId === serverReq.id || req.id === serverReq.id);
+        if (!local) {
+          // Requests from before they were linked to their backend record match by player.
+          local = team.joinRequests.find(req => !req.backendId && req.status === 'pending' && normalize(req.username) === normalize(serverReq.fromUsername));
+        }
+        if (local) {
+          local.backendId = serverReq.id;
+          local.status = status;
+        } else {
+          team.joinRequests.unshift({
+            id: serverReq.id,
+            backendId: serverReq.id,
+            username: serverReq.fromUsername,
+            displayName: serverReq.fromUsername,
+            message: serverReq.message || '',
+            requestedAt: serverReq.createdAt,
+            status,
+            feePaid: 0,
+            paymentStatus: playerFeeDue(comp) ? 'unpaid' : 'free'
+          });
+        }
+        if (serverReq.status === 'paid') setMemberFee(team, serverReq.fromUsername, playerFeeDue(comp));
+      });
+    }
+    if (JSON.stringify(team) === before) return false;
+    saveCompetition(comp);
+    return true;
   }
 
   function submitJoinRequest(options) {
@@ -684,54 +816,55 @@
       return { ok: false, error: 'You are already registered in another team for this competition.' };
     }
 
-    const existingPending = team.joinRequests.find(req => normalize(req.username) === normalize(session.username) && req.status === 'pending');
+    const existingPending = team.joinRequests.find(req => normalize(req.username) === normalize(session.username) && (req.status === 'pending' || req.status === 'awaiting_payment'));
     if (existingPending) {
       return { ok: false, error: 'You already sent a join request to this team.' };
     }
 
-    const entryFeeAmount = comp.entryFeeAmount || 0;
-    const feeType = comp.feeType || 'free';
-    const isPlayerPaid = feeType === 'per_player' && entryFeeAmount > 0;
-
+    // Where each player pays, payment comes after the team lead accepts.
     const request = {
       id: makeId('joinreq'),
+      backendId: opts.backendId || null,
       username: session.username,
       displayName: session.displayName || session.username,
       message: String(opts.message || '').trim(),
       requestedAt: isoNow(),
       status: 'pending',
-      feePaid: isPlayerPaid ? entryFeeAmount : 0,
-      paymentStatus: isPlayerPaid ? 'paid' : 'free'
+      feePaid: 0,
+      paymentStatus: playerFeeDue(comp) ? 'unpaid' : 'free'
     };
 
     team.joinRequests.unshift(request);
     saveCompetition(comp);
 
-    pushNotification({
-      toUsername: team.createdBy,
-      type: 'team-join-request',
-      status: 'pending',
-      title: 'New join request for ' + team.name,
-      body: (session.displayName || session.username) + ' requested to join your team.',
-      createdAt: request.requestedAt,
-      read: false,
-      meta: {
-        compId: comp.id,
-        teamId: team.id,
-        requestId: request.id
-      }
-    });
+    // The backend tells the team lead when it holds the request.
+    if (!request.backendId) {
+      pushNotification({
+        toUsername: team.createdBy,
+        type: 'team-join-request',
+        status: 'pending',
+        title: 'New join request for ' + team.name,
+        body: (session.displayName || session.username) + ' requested to join your team.',
+        createdAt: request.requestedAt,
+        read: false,
+        meta: {
+          compId: comp.id,
+          teamId: team.id,
+          requestId: request.id
+        }
+      });
+    }
 
     return { ok: true, request };
   }
 
-  function decideJoinRequest(options) {
+  async function decideJoinRequest(options) {
     const opts = options || {};
     const action = opts.action === 'accepted' ? 'accepted' : 'declined';
     const session = getSession();
     if (!session) return { ok: false, error: 'Please log in first.' };
 
-    const comp = getCompetitionById(opts.compId);
+    const comp = findCompetitionByAnyId(opts.compId);
     if (!comp) return { ok: false, error: 'Competition not found.' };
     ensureCompetitionTeams(comp);
 
@@ -739,9 +872,10 @@
     if (!team) return { ok: false, error: 'Team not found.' };
     if (!userCanManageTeam(team, session)) return { ok: false, error: 'Only team captain can review requests.' };
 
-    const request = team.joinRequests.find(item => item.id === opts.requestId);
-    if (!request) return { ok: false, error: 'Request not found.' };
-    if (request.status !== 'pending') return { ok: false, error: 'This request was already handled.' };
+    let request = team.joinRequests.find(item => item.id === opts.requestId || item.backendId === opts.requestId);
+    const backendId = request ? request.backendId : (UUID_PATTERN.test(String(opts.requestId || '')) ? opts.requestId : null);
+    if (!request && !backendId) return { ok: false, error: 'Request not found.' };
+    if (request && request.status !== 'pending') return { ok: false, error: 'This request was already handled.' };
 
     if (action === 'accepted') {
       if (hasCompetitionStarted(comp)) {
@@ -750,19 +884,42 @@
       if (team.members.length >= maxPlayers(comp)) {
         return { ok: false, error: 'Team is already full (' + team.members.length + ' / ' + maxPlayers(comp) + ').' };
       }
+    }
 
+    // Requests paid under the earlier pay-first flow don't pay a second time.
+    const feeAlreadyPaid = !!(request && Number(request.feePaid) > 0);
+    if (backendId) {
+      const res = await window.NexusAPI.Teams.updateJoinRequest(backendId, action, session.username, feeAlreadyPaid);
+      if (!res.ok) return { ok: false, error: res.error || 'Unable to update the request.' };
+    }
+    if (!request) {
+      request = {
+        id: backendId,
+        backendId,
+        username: opts.username || '',
+        status: 'pending',
+        feePaid: 0
+      };
+      team.joinRequests.unshift(request);
+    }
+
+    const feeDue = action === 'accepted' && !feeAlreadyPaid ? playerFeeDue(comp) : 0;
+    if (action === 'accepted' && !feeDue) {
       const exists = team.members.some(member => normalize(member.username) === normalize(request.username));
-      if (!exists) {
+      if (!exists && request.username) {
         team.members.push({
           username: request.username,
           displayName: request.displayName || request.username,
           role: 'player',
-          joinedAt: isoNow()
+          joinedAt: isoNow(),
+          feePaid: Number(request.feePaid) || 0,
+          paymentStatus: request.paymentStatus || 'free',
+          localOnly: !backendId
         });
       }
     }
 
-    request.status = action;
+    request.status = feeDue ? 'awaiting_payment' : action;
     request.handledAt = isoNow();
     team.players = team.members.length;
 
@@ -773,32 +930,108 @@
       const notifItems = JSON.parse(localStorage.getItem(NOTIFICATIONS_KEY) || '[]');
       let notifModified = false;
       notifItems.forEach(n => {
-        if (n && n.meta && n.meta.requestId === request.id && n.status === 'pending') {
+        if (n && n.type === 'team-join-request' && n.meta && (n.meta.requestId === request.id || n.meta.requestId === backendId) && n.status === 'pending') {
           n.status = action === 'accepted' ? 'approved' : 'rejected';
-          n.title = 'Join request ' + (action === 'accepted' ? 'accepted' : 'declined');
-          n.body = 'Your request to join ' + team.name + ' was ' + action + '.';
+          n.body = (n.body || '') + ' (' + (feeDue ? 'Accepted: waiting for the player to pay.' : 'You ' + action + ' this.') + ')';
           notifModified = true;
         }
       });
       if (notifModified) saveNotifications(notifItems);
     } catch (e) {}
 
-    pushNotification({
-      toUsername: request.username,
-      type: 'team-join-request-result',
-      status: action === 'accepted' ? 'approved' : 'rejected',
-      title: 'Join request ' + (action === 'accepted' ? 'accepted' : 'declined'),
-      body: 'Your request to join ' + team.name + ' was ' + action + '.',
-      createdAt: isoNow(),
-      read: false,
-      meta: {
-        compId: comp.id,
-        teamId: team.id,
-        requestId: request.id
-      }
-    });
+    // The backend notifies the player when it holds the request.
+    if (!backendId) {
+      pushNotification({
+        toUsername: request.username,
+        type: feeDue ? 'team-join-payment' : 'team-join-request-result',
+        status: feeDue ? 'pending' : (action === 'accepted' ? 'approved' : 'rejected'),
+        title: feeDue ? '✅ Join request accepted: payment needed' : 'Join request ' + (action === 'accepted' ? 'accepted' : 'declined'),
+        body: feeDue
+          ? 'The lead of "' + team.name + '" accepted your request. Pay the ₹' + feeDue + ' entry fee to join the team.'
+          : 'Your request to join ' + team.name + ' was ' + action + '.',
+        createdAt: isoNow(),
+        read: false,
+        meta: {
+          compId: comp.id,
+          teamId: team.id,
+          requestId: request.id,
+          amount: feeDue,
+          teamName: team.name
+        }
+      });
+    }
 
-    return { ok: true, action, request };
+    return { ok: true, action, request, feeDue };
+  }
+
+  // The player pays after the team lead accepted; this is what puts them on the roster.
+  async function payJoinRequest(options) {
+    const opts = options || {};
+    const session = getSession();
+    if (!session) return { ok: false, error: 'Please log in first.' };
+
+    const localComp = findCompetitionByAnyId(opts.compId);
+    if (localComp) ensureCompetitionTeams(localComp);
+    const localTeam = localComp ? findTeam(localComp, opts.teamId) : null;
+    const localRequest = localTeam
+      ? localTeam.joinRequests.find(item => item.id === opts.requestId || item.backendId === opts.requestId)
+      : null;
+    const backendId = localRequest ? localRequest.backendId : (UUID_PATTERN.test(String(opts.requestId || '')) ? opts.requestId : null);
+
+    let serverTeam = null;
+    let amount = playerFeeDue(localComp);
+    if (backendId) {
+      const res = await window.NexusAPI.Teams.payJoinRequest(backendId);
+      if (!res.ok) return { ok: false, error: res.error || 'Payment could not be completed.' };
+      serverTeam = res.data && res.data.team;
+      amount = (res.data && res.data.amount) || amount;
+    } else {
+      if (!localRequest) return { ok: false, error: 'Request not found.' };
+      if (localRequest.status !== 'awaiting_payment') return { ok: false, error: 'This request is not waiting for payment.' };
+      if (hasCompetitionStarted(localComp)) return { ok: false, error: 'The competition has started: rosters are locked.' };
+      if (localTeam.members.length >= maxPlayers(localComp)) {
+        return { ok: false, error: 'Team is already full (' + localTeam.members.length + ' / ' + maxPlayers(localComp) + ').' };
+      }
+    }
+
+    const { comp, team } = await ensureLocalTeam(opts.compId, opts.teamId, serverTeam);
+    if (comp && team) {
+      if (serverTeam) mergeBackendRoster(team, serverTeam);
+      if (!team.members.some(member => normalize(member.username) === normalize(session.username))) {
+        team.members.push({
+          username: session.username,
+          displayName: session.displayName || session.username,
+          role: 'player',
+          joinedAt: isoNow()
+        });
+      }
+      setMemberFee(team, session.username, amount);
+      const request = team.joinRequests.find(item => item.id === opts.requestId || item.backendId === opts.requestId);
+      if (request) {
+        request.status = 'paid';
+        request.feePaid = amount;
+        request.paymentStatus = 'paid';
+        request.paidAt = isoNow();
+      }
+      team.players = team.members.length;
+      saveCompetition(comp);
+      setActiveTeamContext({ compId: comp.id, teamId: team.id });
+
+      if (!backendId) {
+        pushNotification({
+          toUsername: team.createdBy,
+          type: 'team-join-paid',
+          status: 'approved',
+          title: 'Player paid and joined',
+          body: session.username + ' paid the ₹' + amount + ' entry fee and joined ' + team.name + '.',
+          createdAt: isoNow(),
+          read: false,
+          meta: { compId: comp.id, teamId: team.id, requestId: opts.requestId }
+        });
+      }
+    }
+
+    return { ok: true, amount };
   }
 
   function decideCoOrganizerInvite(options) {
@@ -895,96 +1128,30 @@
     }
   }
 
-  function decideInvite(options) {
+  async function decideInvite(options) {
     const opts = options || {};
     const action = opts.action === 'accepted' ? 'accepted' : 'declined';
     const session = getSession();
     if (!session) return { ok: false, error: 'Please log in first.' };
 
-    const comp = getCompetitionById(opts.compId);
-    if (!comp) return { ok: false, error: 'Competition not found.' };
-    ensureCompetitionTeams(comp);
+    const res = await window.NexusAPI.Teams.updateInvite(opts.inviteId, action);
+    if (!res.ok) return { ok: false, error: res.error || 'Unable to update the invitation.' };
 
-    const team = findTeam(comp, opts.teamId);
-    if (!team) return { ok: false, error: 'Team not found.' };
-
-    const invite = team.invites.find(item => item.id === opts.inviteId);
-    if (!invite) return { ok: false, error: 'Invitation not found.' };
-
-    if (normalize(invite.toUsername) !== normalize(session.username)) {
-      return { ok: false, error: 'This invitation is not assigned to your account.' };
+    // Mirror the backend result locally; this browser may never have seen the team.
+    const serverTeam = res.data && res.data.team;
+    const { comp, team } = await ensureLocalTeam(opts.compId, opts.teamId, serverTeam);
+    if (comp && team) {
+      if (serverTeam) mergeBackendRoster(team, serverTeam);
+      const invite = team.invites.find(item => item.id === opts.inviteId);
+      if (invite) {
+        invite.status = action;
+        invite.handledAt = isoNow();
+      }
+      saveCompetition(comp);
+      if (action === 'accepted') setActiveTeamContext({ compId: comp.id, teamId: team.id });
     }
 
-    if (invite.status !== 'pending') {
-      return { ok: false, error: 'This invitation was already handled.' };
-    }
-
-    if (action === 'accepted') {
-      if (hasCompetitionStarted(comp)) {
-        return { ok: false, error: 'The competition has started: rosters are locked.' };
-      }
-      if (team.members.length >= maxPlayers(comp)) {
-        return { ok: false, error: 'Team is already full (' + team.members.length + ' / ' + maxPlayers(comp) + ').' };
-      }
-
-      const inAnotherTeam = (comp.teams || []).some(item => {
-        if (item.id === team.id) return false;
-        if (String(item && item.status || '').toLowerCase() === 'rejected') return false;
-        return (item.members || []).some(member => normalize(member.username) === normalize(session.username));
-      });
-
-      if (inAnotherTeam) {
-        return { ok: false, error: 'You are already in another team for this competition.' };
-      }
-
-      const alreadyMember = team.members.some(member => normalize(member.username) === normalize(session.username));
-      if (!alreadyMember) {
-        team.members.push({
-          username: session.username,
-          displayName: session.displayName || session.username,
-          role: 'player',
-          joinedAt: isoNow()
-        });
-      }
-    }
-
-    invite.status = action;
-    invite.handledAt = isoNow();
-    team.players = team.members.length;
-    saveCompetition(comp);
-
- // Update any stale pending notifications for this invite
-    try {
-      const notifItems = JSON.parse(localStorage.getItem(NOTIFICATIONS_KEY) || '[]');
-      let notifModified = false;
-      notifItems.forEach(n => {
-        if (n && n.meta && n.meta.inviteId === invite.id && n.status === 'pending') {
-          n.status = action === 'accepted' ? 'approved' : 'rejected';
-          n.title = 'Team invitation ' + (action === 'accepted' ? 'accepted' : 'declined');
-          n.body = 'Your invitation to join ' + team.name + ' was ' + action + '.';
-          notifModified = true;
-        }
-      });
-      if (notifModified) saveNotifications(notifItems);
-    } catch (e) {}
-
-    pushNotification({
-      toUsername: team.createdBy,
-      type: 'team-invite-result',
-      status: action === 'accepted' ? 'approved' : 'rejected',
-      title: 'Invitation ' + (action === 'accepted' ? 'accepted' : 'declined'),
-      body: (session.displayName || session.username) + ' ' + action + ' your invitation to join ' + team.name + '.',
-      createdAt: isoNow(),
-      read: false,
-      meta: {
-        compId: comp.id,
-        teamId: team.id,
-        inviteId: invite.id
-      }
-    });
-
-    setActiveTeamContext({ compId: comp.id, teamId: team.id });
-    return { ok: true, action, invite };
+    return { ok: true, action, invite: res.data };
   }
 
   function directJoinTeam(options) {
@@ -1035,7 +1202,8 @@
       username: session.username,
       displayName: session.displayName || session.username,
       role: 'player',
-      joinedAt: isoNow()
+      joinedAt: isoNow(),
+      localOnly: true
     });
     team.players = team.members.length;
 
@@ -1099,19 +1267,24 @@
     team.players = team.members.length;
     saveCompetition(comp);
 
-    pushNotification({
-      toUsername: username,
-      type: 'team-roster-update',
-      status: 'rejected',
-      title: 'Removed from ' + team.name,
-      body: 'You were removed from the team roster.',
-      createdAt: isoNow(),
-      read: false,
-      meta: {
-        compId: comp.id,
-        teamId: team.id
-      }
-    });
+    // The backend notifies the player when it is reachable; this covers offline removals.
+    if (!opts.backendNotified) {
+      const reason = String(opts.reason).trim();
+      pushNotification({
+        toUsername: username,
+        type: 'team-roster-update',
+        status: 'rejected',
+        title: 'Removed from ' + team.name,
+        body: 'You were removed from team "' + team.name + '". Reason: ' + reason,
+        createdAt: isoNow(),
+        read: false,
+        meta: {
+          compId: comp.id,
+          teamId: team.id,
+          reason
+        }
+      });
+    }
 
     return { ok: true };
   }
@@ -1141,46 +1314,6 @@
     const team = findTeam(comp, teamId);
     if (!team) return [];
     return team.joinRequests.slice();
-  }
-
-  function getAvailablePlayers(compId, teamId) {
-    const comp = getCompetitionById(compId);
-    if (!comp) return [];
-    ensureCompetitionTeams(comp);
-    const team = findTeam(comp, teamId);
-    if (!team) return [];
-
-    const taken = new Set(team.members.map(member => normalize(member.username)));
-    const pendingInvites = new Set(team.invites.filter(inv => inv.status === 'pending').map(inv => normalize(inv.toUsername)));
-    const inOtherTeams = new Set();
-    const organizer = normalize(comp.createdBy || comp.organizerId || '');
-
-    (comp.teams || []).forEach(otherTeam => {
-      if (!otherTeam || otherTeam.id === team.id) return;
-      if (String(otherTeam.status || '').toLowerCase() === 'rejected') return;
-      (otherTeam.members || []).forEach(member => {
-        inOtherTeams.add(normalize(member.username));
-      });
-    });
-
- // Build set of banned usernames for dynamic filtering
-    const banned = new Set();
-    try {
-      const accounts = JSON.parse(localStorage.getItem('nexus.auth.accounts') || '[]');
-      accounts.forEach(a => { if (a && a.banned) banned.add(normalize(a.username)); });
-    } catch (e) {}
-
-    return getAllAccounts()
-      .filter(account => isRegularAccount(account) && !account.banned && !banned.has(normalize(account.username)))
-      .map(account => account.username)
-      .filter(username => {
-        const key = normalize(username);
-        return key !== organizer && !taken.has(key) && !pendingInvites.has(key) && !inOtherTeams.has(key);
-      })
-      .map(username => ({
-        username,
-        displayName: username
-      }));
   }
 
   function refreshTeamManagementUI(compId, teamId) {
@@ -1287,6 +1420,7 @@
     revokeInvite,
     submitJoinRequest,
     decideJoinRequest,
+    payJoinRequest,
     pushNotification,
     decideCoOrganizerInvite,
     decideInvite,
@@ -1295,9 +1429,10 @@
     getTeamRoster,
     getInvites,
     getJoinRequests,
-    getAvailablePlayers,
+    syncTeamFromBackend,
     refreshTeamManagementUI,
     getNotificationsForUser,
+    syncServerNotifications,
     getNotificationById,
     updateNotification,
     markAllNotificationsRead,
