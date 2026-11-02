@@ -1,505 +1,167 @@
-/**
- * NEXUS ESPORTS — Competition Detail
- *
- *
- * organizer's competition management view. Preserves: the hero + action buttons
- * (ended-aware), the stats row, the registered-teams table with approve/reject,
- * the paginated match schedule, the league/tournament bracket, and the (exported)
- * manage-organizers modal.
- *
- * Notes on the implementation carried over:
- * - `comp.role === 'organizer'` gates the team approve/reject actions;
- * - the organizer add/remove endpoints were hardcoded to :3000 in the file
- * (the rest of the app uses :3001) — preserved verbatim;
- * - `renderStandings` in the file is dead code (never called, no matching
- * DOM), so it is not ported.
- */
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import NexusData from '../services/data.js';
-import { showToast } from '../lib/toast.js';
+import { CompetitionsAPI, MatchesAPI, TeamsAPI } from '../services/api.js';
 import { assetUrl } from '../lib/assets.js';
+import { groupFixtures, isFixtureWinner, normalizeFixture } from '../lib/fixtures.mjs';
 import '../styles/pages/competition-detail.css';
 
-const STATUS_COLORS = { ongoing: '#c6ff33', completed: '#9aa4b2', upcoming: '#60a5fa' };
-const STATUS_LABELS = { ongoing: 'ONGOING', completed: 'COMPLETED', upcoming: 'UPCOMING' };
-const LIMIT = 3;
-
-function formatPrizePool(prize) {
-  if (!prize || ['—', '-', '₹0'].includes(prize) || String(prize).toLowerCase().includes('no prize')) return 'No Prize Pool';
-  const str = String(prize).trim();
-  return str.toLowerCase().includes('prize pool') ? str : `${str} Prize Pool`;
+function Icon({ name, size = 18 }) {
+  const paths = {
+    bracket: <><rect x="2" y="3" width="6" height="5" rx="1" /><rect x="2" y="16" width="6" height="5" rx="1" /><path d="M8 5h5v14H8m5-7h4" /><rect x="17" y="9" width="5" height="6" rx="1" /></>,
+    list: <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />,
+    arrow: <path d="m9 5 7 7-7 7" />,
+    refresh: <path d="M20 7a9 9 0 1 0 1 7M20 2v5h-5" />,
+    trophy: <path d="M7 3h10v5a5 5 0 0 1-10 0V3Zm5 10v7m-4 1h8M7 5H3v2a4 4 0 0 0 4 4m10-6h4v2a4 4 0 0 1-4 4" />,
+    search: <><circle cx="10" cy="10" r="6" /><path d="m15 15 6 6" /></>,
+    clock: <><circle cx="12" cy="12" r="9" /><path d="M12 6v6l4 2" /></>,
+  };
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name] || paths.bracket}</svg>;
 }
 
-function renderTeamAvatar(avatar, name) {
-  const fallback = name ? String(name).charAt(0).toUpperCase() : '🛡️';
-  if (!avatar) return fallback;
-  const str = String(avatar).trim();
-  if (str.startsWith('<svg') && str.endsWith('</svg>')) {
-    return (
-      <span
-        dangerouslySetInnerHTML={{ __html: str }}
-        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}
-      />
-    );
-  }
-  if (str.startsWith('http://') || str.startsWith('https://') || str.startsWith('/') || str.startsWith('data:image/')) {
-    return <img src={str} alt={name || 'Team'} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />;
-  }
-  if (str.length <= 4) return str;
-  return fallback;
+function Avatar({ name }) {
+  const text = String(name || '?');
+  const hue = [...text].reduce((sum, c) => sum + c.charCodeAt(0), 0) % 360;
+  return <span className="cd-avatar" style={{ '--team-hue': hue }} aria-hidden="true">{text.slice(0, 2).toUpperCase()}</span>;
 }
 
-const DEFAULT_BANNERS = [
-  [['valorant'], '8764f3a5ce7a0eb0275743600c60fb0c727893c8.png'],
-  [['counter-strike', 'cs2', 'cs:go', 'csgo'], 'c4f97eccde97e10ac89b61ec5fb36fdce0ab2477.png'],
-  [['league of legends', 'lol'], '95bc0921c86340a2cee9e0a2d7ecd20b15a26143.png'],
-  [['apex'], 'f03e2b11537e425d8544ee3ca732bf73af5137c0.png'],
-];
-function getDefaultBanner(gameName) {
-  const g = String(gameName || '').toLowerCase();
-  for (const [keys, file] of DEFAULT_BANNERS) {
-    if (keys.some((k) => g.includes(k))) return assetUrl(file);
-  }
-  return assetUrl('b890c61489a080992ad7e99adabb1145e6d59606.png');
+function Status({ value }) {
+  return <span className={`cd-status cd-status-${value}`}><i />{value === 'live' ? 'Live now' : value === 'completed' ? 'Completed' : value === 'scheduled' ? 'Scheduled' : value}</span>;
 }
 
-function roundPriority(r, tournament) {
-  const s = String(r || '').toLowerCase().replace(/\s/g, '');
-  if (s.includes('group')) return 1;
-  if (s.includes('elim')) return 2;
-  if (tournament && s.includes('roundof16')) return 2.5;
-  if (s.includes('quarter') || s.includes('quater')) return 3;
-  if (s.includes('semi')) return 4;
-  if (s.includes('final')) return 5;
-  return 99;
+function MatchCard({ match, selected, onSelect, number }) {
+  return <button type="button" className={`cd-match ${selected ? 'is-selected' : ''} ${match.status === 'live' ? 'is-live' : ''}`} onClick={() => onSelect(match.id)} aria-pressed={selected} aria-label={`${match.team1} vs ${match.team2}, ${match.round}, ${match.status}. View match details`}>
+    <span className="cd-match-heading"><span>M{String(number).padStart(2, '0')}</span><Status value={match.status} /></span>
+    {[1, 2].map((side) => <span key={side} className={`cd-contender ${isFixtureWinner(match, side) ? 'is-winner' : ''}`}>
+      <Avatar name={match[`team${side}`]} /><span className="cd-team-name">{match[`team${side}`]}</span>
+      <strong>{['completed', 'live'].includes(match.status) ? match[`score${side}`] ?? '—' : '—'}</strong>
+    </span>)}
+    <span className="cd-match-foot"><Icon name="clock" size={13} /><span>{match.date}{match.time ? ` · ${match.time}` : ''}</span><Icon name="arrow" size={13} /></span>
+  </button>;
 }
 
 export default function CompetitionDetail() {
-  const [params] = useSearchParams();
-  const navigate = useNavigate();
-  const { session } = useAuth();
-
+  const [params, setParams] = useSearchParams();
   const id = params.get('id') || '';
-  const [version, setVersion] = useState(0);
-  const [matchPage, setMatchPage] = useState(0);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [newOrg, setNewOrg] = useState('');
-
-  const comp = useMemo(
-    () => (id && NexusData ? NexusData.getCompetitionById(id) : null),
-    [id, version],
-  );
-
-  useEffect(() => {
-    if (!id) navigate('/pages/my-activity.html');
-  }, [id, navigate]);
-
-  useEffect(() => {
-    if (comp && NexusData && NexusData.enforceNotEnded) {
-      NexusData.enforceNotEnded(comp, '.act-btn-approve,.act-btn-reject,.disp-btn-resolve,.btn-schedule');
-    }
-    return () => {
-      const banner = document.getElementById('_ended_banner_');
-      if (banner) banner.remove();
-      document.body.style.marginTop = '';
-    };
-  }, [comp]);
+  const { session } = useAuth();
+  const [revision, setRevision] = useState(0);
+  const cached = useMemo(() => NexusData.getCompetitionById?.(id), [id, revision]);
+  const apiId = cached?.dbId || id;
+  const [remote, setRemote] = useState({ id: '', competition: null, matches: null, teams: null, errors: [], loading: true });
+  const [view, setView] = useState('board');
+  const [query, setQuery] = useState('');
+  const [status, setStatus] = useState('all');
+  const [selectedId, setSelectedId] = useState(null);
+  const [zoom, setZoom] = useState(1);
+  const boardRef = useRef(null);
+  const detailRef = useRef(null);
+  const activeTab = ['fixtures', 'teams', 'overview'].includes(params.get('tab')) ? params.get('tab') : 'fixtures';
 
   useEffect(() => {
-    if (comp) document.title = `NEXUS ESPORTS — ${comp.name}`;
-  }, [comp]);
+    const refresh = () => setRevision((v) => v + 1);
+    window.addEventListener('focus', refresh);
+    return () => window.removeEventListener('focus', refresh);
+  }, []);
 
-  if (!comp) {
-    return (
-      <main className="comp-main" id="comp-main">
-        <div className="comp-hero" id="comp-hero">
-          <div className="comp-hero-content">
-            <div className="comp-hero-tags" id="comp-hero-tags"><span className="hero-tag">Unknown</span></div>
-            <h1 className="comp-hero-title" id="comp-hero-title">Competition Not Found</h1>
-            <div className="comp-hero-meta" id="comp-hero-meta"></div>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  const isEnded = !!(comp.ended || comp.status === 'completed');
-  const teams = comp.teams || [];
-  const approvedCount = teams.filter((t) => t.status === 'approved').length;
-  const matches = comp.matches || [];
-
-  const bannerImg = comp.img ? assetUrl(comp.img) : getDefaultBanner(comp.game);
-  const heroStyle = bannerImg
-    ? { background: `linear-gradient(rgba(10, 15, 20, 0.75), rgba(10, 15, 20, 0.95)), url('${bannerImg}') center/cover no-repeat` }
-    : { background: `linear-gradient(135deg, ${comp.bannerColor || '#1a2e1a'} 0%, #0a0a0a 70%)` };
-
-  let pendingDisputesCount = 0;
-  if (NexusData && typeof NexusData.loadDisputes === 'function') {
-    pendingDisputesCount = NexusData.loadDisputes().filter((d) =>
-      d.competitionId === comp.id && ['open_organizer', 'under_review', 'open', 'awaiting'].includes(d.status)).length;
-  } else if (Array.isArray(comp.disputes)) {
-    pendingDisputesCount = comp.disputes.filter((d) => ['open_organizer', 'under_review', 'open', 'awaiting'].includes(d.status)).length;
-  }
-
-  const organizerCount = Array.isArray(comp.organizers) && comp.organizers.length > 0 ? comp.organizers.length : 1;
-  const hasEntryFee = comp.feeType && comp.feeType !== 'free' && Number(comp.entryFeeAmount || 0) > 0;
-
-  function approveTeam(teamId) {
-    const c = NexusData.getCompetitionById(id);
-    if (!c) return;
-    if (NexusData.isCompEnded && NexusData.isCompEnded(c)) { showToast('Competition has ended — team approvals are locked.', 'error'); return; }
-    const by = (session && session.username) || 'organizer';
-    if (NexusData.setTeamRegistrationStatus) NexusData.setTeamRegistrationStatus(id, teamId, 'approved', by);
-    else { const t = c.teams.find((x) => x.id === teamId); if (t) { t.status = 'approved'; NexusData.updateCompetition(c); } }
-    setVersion((v) => v + 1);
-  }
-
-  function rejectTeam(teamId) {
-    const c = NexusData.getCompetitionById(id);
-    if (!c) return;
-    if (NexusData.isCompEnded && NexusData.isCompEnded(c)) { showToast('Competition has ended — team approvals are locked.', 'error'); return; }
-    const by = (session && session.username) || 'organizer';
-    if (NexusData.setTeamRegistrationStatus) NexusData.setTeamRegistrationStatus(id, teamId, 'rejected', by);
-    else { const t = c.teams.find((x) => x.id === teamId); if (t) { t.status = 'rejected'; NexusData.updateCompetition(c); } }
-    setVersion((v) => v + 1);
-  }
-
-  function submitAddOrganizer() {
-    const org = newOrg.trim().replace(/^@/, '');
-    if (!org) { showToast('Please enter an organizer username or ID.', 'error'); return; }
-    if (NexusData && NexusData.addCoOrganizer) {
-      const res = NexusData.addCoOrganizer(comp.id, org);
-      if (!res.ok) { showToast(res.error || 'Unable to add organizer.', 'error'); return; }
+  useEffect(() => {
+    let cancelled = false;
+    if (!apiId) {
+      setRemote({ id: '', competition: null, matches: null, teams: null, errors: ['Open a competition from My Activity.'], loading: false });
+      return;
     }
- // Best-effort sync against the :3000 endpoint.
-    try {
-      fetch(`http://localhost:3000/competitions/${comp.id}/organizers`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-user-role': 'team_lead' },
-        body: JSON.stringify({ organizerId: org }),
-      }).catch(() => {});
-    } catch (e) { /* ignore */ }
-    setNewOrg('');
-    setVersion((v) => v + 1);
-    showToast(`Co-Organizer @${org} added successfully to this tournament!`);
-  }
+    setRemote((old) => ({ ...(old.id === apiId ? old : { competition: null, matches: null, teams: null }), id: apiId, errors: [], loading: true }));
+    const requests = [CompetitionsAPI.getById(apiId), MatchesAPI.getByCompetition(apiId), TeamsAPI.getByCompetition(apiId)];
+    Promise.allSettled(requests).then((results) => {
+      if (cancelled) return;
+      const keys = ['competition', 'matches', 'teams'];
+      setRemote((old) => {
+        const next = { ...old, loading: false, errors: [] };
+        results.forEach((result, i) => {
+          const response = result.status === 'fulfilled' ? result.value : null;
+          if (response?.ok && response.data && (i === 0 || Array.isArray(response.data))) next[keys[i]] = response.data;
+          else next.errors.push(`Could not refresh ${keys[i]}. ${response?.error || 'Please check your connection and retry.'}`);
+        });
+        return next;
+      });
+    });
+    return () => { cancelled = true; };
+  }, [apiId, revision]);
 
-  function submitRemoveOrganizer(orgId) {
-    if (NexusData && NexusData.removeCoOrganizer) {
-      const res = NexusData.removeCoOrganizer(comp.id, orgId);
-      if (!res.ok) { showToast(res.error || 'Unable to remove organizer.', 'error'); return; }
-    }
-    try {
-      fetch(`http://localhost:3000/competitions/${comp.id}/organizers/${orgId}`, {
-        method: 'DELETE',
-        headers: { 'x-user-role': 'team_lead' },
-      }).catch(() => {});
-    } catch (e) { /* ignore */ }
-    setVersion((v) => v + 1);
-    showToast(`Co-Organizer @${orgId} removed from this tournament.`);
-  }
+  useEffect(() => { setSelectedId(null); setQuery(''); setStatus('all'); }, [id]);
+  const current = remote.id === apiId ? remote : { loading: true, errors: [] };
+  const comp = current.competition ? { ...cached, ...current.competition } : cached;
+  // A successful empty API response is authoritative too; never resurrect cached matches.
+  const matches = useMemo(() => (current.matches ?? cached?.matches ?? []).map(normalizeFixture), [current.matches, cached]);
+  const teams = current.teams ?? cached?.teams ?? [];
+  const selected = matches.find((match) => match.id === selectedId);
+  const filtered = matches.filter((m) => (status === 'all' || m.status === status) && `${m.team1} ${m.team2} ${m.round}`.toLowerCase().includes(query.trim().toLowerCase()));
+  const rounds = groupFixtures(filtered);
+  const numbers = new Map(matches.map((m, index) => [m.id, index + 1]));
+  const completed = matches.filter((m) => m.status === 'completed').length;
+  const live = matches.filter((m) => m.status === 'live').length;
+  const ended = Boolean(comp?.ended || comp?.status === 'completed');
+  const isLeague = /league|robin/i.test(`${comp?.type} ${comp?.format}`);
+  const creator = comp?.createdBy || comp?.organizerId;
+  const organizers = [...new Set([creator, ...(comp?.organizers || [])].filter(Boolean))];
+  const canManage = organizers.includes(session?.username) || ['admin', 'comp_admin', 'super-admin', 'super_admin'].includes(session?.role);
+  const route = (page, extra = {}) => `/pages/${page}.html?${new URLSearchParams({ id: apiId, ...extra })}`;
+  const tab = (value) => { const next = new URLSearchParams(params); next.set('tab', value); setParams(next, { replace: true }); };
+  const selectMatch = (matchId) => setSelectedId(matchId);
 
- // Match pagination slice
-  const matchSlice = matches.slice(matchPage * LIMIT, matchPage * LIMIT + LIMIT);
-  const creator = comp.createdBy || comp.organizerId || 'Primary Organizer';
-  const orgs = Array.isArray(comp.organizers) && comp.organizers.length > 0
-    ? Array.from(new Set([creator, ...comp.organizers]))
-    : [creator];
+  useEffect(() => { if (comp?.name) document.title = `NEXUS ESPORTS — ${comp.name}`; }, [comp?.name]);
+  useEffect(() => { if (selectedId) detailRef.current?.focus({ preventScroll: true }); }, [selectedId]);
 
- // Bracket rounds
-  const bracketRounds = {};
-  matches.forEach((m) => {
-    const key = comp.type === 'league' ? (m.round || 'Group Stage') : m.round;
-    if (!bracketRounds[key]) bracketRounds[key] = [];
-    bracketRounds[key].push(m);
-  });
-  const sortedRoundKeys = Object.keys(bracketRounds).sort((a, b) => roundPriority(a, comp.type !== 'league') - roundPriority(b, comp.type !== 'league') || a.localeCompare(b));
+  if (!comp) return <main className="cd-page"><div className="cd-empty" role="status"><Icon name="bracket" size={36} /><h1>{current.loading ? 'Loading competition…' : 'Competition unavailable'}</h1><p>{current.errors.join(' ')}</p><Link className="cd-button" to="/pages/my-activity.html">Back to My Activity</Link></div></main>;
 
-  function bannedName(name) {
-    const isBanned = NexusData && NexusData.isTeamBannedInComp && NexusData.isTeamBannedInComp(name, comp);
-    if (!isBanned) return name;
-    return (<><del style={{ color: '#ef4444' }}>{name}</del> <span style={{ color: '#ef4444', fontSize: 10, fontWeight: 700 }}>(BANNED)</span></>);
-  }
+  const banner = assetUrl(comp.img || 'c4f97eccde97e10ac89b61ec5fb36fdce0ab2477.png');
+  const final = matches.find((m) => /^finals?$/i.test(m.round) && m.status === 'completed' && m.winnerName);
+  return <main className="cd-page">
+    <div className="cd-breadcrumb"><Link to="/pages/my-activity.html">My activity</Link><span>/</span><span>Competition center</span></div>
+    <header className="cd-hero" style={{ '--cover': `url("${banner}")` }}>
+      <div className="cd-hero-copy"><div className="cd-eyebrow"><span className={`cd-dot ${ended ? 'ended' : ''}`} />{ended ? 'Completed' : comp.status || 'Upcoming'}<span className="cd-divider">/</span>{comp.game || 'Esports'}</div>
+        <h1>{comp.name}</h1><p>{comp.format || comp.type || 'Tournament'}<span>•</span>{comp.location || 'Online'}{comp.season && <><span>•</span>{comp.season}</>}</p>
+      </div>
+      <div className="cd-hero-stats"><div><strong>{teams.length}</strong><span>Teams</span></div><div><strong>{current.loading && !current.matches ? '—' : matches.length}</strong><span>Fixtures</span></div><div><strong>{completed}<small>/{matches.length}</small></strong><span>Completed</span></div></div>
+    </header>
 
-  return (
-    <>
-      <main className="comp-main" id="comp-main">
-        <div className="comp-hero" id="comp-hero" style={heroStyle}>
-          <div className="comp-hero-content">
-            <div className="comp-hero-tags" id="comp-hero-tags">
-              <span className="hero-tag hero-tag-status" style={{ color: STATUS_COLORS[comp.status] || '#c6ff33' }}>{(STATUS_LABELS[comp.status] || String(comp.status).toUpperCase())}</span>
-              <span className="hero-tag-sep">•</span>
-              <span className="hero-tag hero-tag-game">{String(comp.game).toUpperCase()}</span>
-            </div>
-            <h1 className="comp-hero-title" id="comp-hero-title">{comp.name}</h1>
-            <div className="comp-hero-meta" id="comp-hero-meta">
-              <span className="hero-meta-item">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><rect x="1" y="2" width="14" height="13" rx="2" /><line x1="1" y1="6" x2="15" y2="6" /><line x1="5" y1="1" x2="5" y2="3" /><line x1="11" y1="1" x2="11" y2="3" /></svg>
-                {comp.dates}
-              </span>
-              <span className="hero-meta-item">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M8 1a5 5 0 0 1 5 5c0 4-5 9-5 9S3 10 3 6a5 5 0 0 1 5-5z" /><circle cx="8" cy="6" r="1.5" /></svg>
-                {comp.location}
-              </span>
-              <span className="hero-meta-item">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M8 1a3 3 0 1 0 0 6 3 3 0 0 0 0-6z" /><path d="M2 15c0-3 2.7-5 6-5s6 2 6 5" /></svg>
-                {comp.participants} Participants
-              </span>
-              <span className="hero-meta-item">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M4.5 1h7l-1 5a3.5 3.5 0 0 1-5 0L4.5 1z" /><path d="M2 1h2.5m9 0H14" /><path d="M8 9v5m-2 0h4" /></svg>
-                {formatPrizePool(comp.prizePool)}
-              </span>
-              <span className="hero-meta-item">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6" /><path d="M8 5v3l2 2" /></svg>
-                {comp.season}
-              </span>
-            </div>
-          </div>
+    <nav className="cd-nav" aria-label="Competition sections">
+      {['fixtures', 'teams', 'overview'].map((value) => <button key={value} type="button" aria-current={activeTab === value ? 'page' : undefined} className={activeTab === value ? 'active' : ''} onClick={() => tab(value)}>{value === 'fixtures' && <Icon name="bracket" size={16} />}{value[0].toUpperCase() + value.slice(1)}</button>)}
+      <Link to={route('comp-standings')}>Standings</Link>
+      {canManage && <><Link to={route('comp-manage-organizers')}>Organizers</Link><Link to={route('comp-dispute-review')}>Disputes</Link>{comp.feeType && comp.feeType !== 'free' && <Link to={route('organizer-revenue')}>Transactions</Link>}{!ended && <Link to={route('edit-competition')}>Settings</Link>}</>}
+    </nav>
 
-          <div className="comp-hero-actions" id="comp-hero-actions">
-            {hasEntryFee && (
-              <Link to={`/pages/organizer-revenue.html?id=${comp.id}`} className="hero-btn hero-btn-secondary" style={{ borderColor: 'rgba(96,165,250,0.45)', color: '#bfdbfe' }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="2" y="5" width="20" height="14" rx="2" /><circle cx="12" cy="12" r="3" /><path d="M6 9v6M18 9v6" /></svg>
-                TRANSACTIONS
-              </Link>
-            )}
-            {isEnded ? (
-              <>
-                <Link to={`/pages/comp-standings.html?id=${comp.id}`} className="hero-btn hero-btn-secondary">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="9 11 12 14 22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
-                  VIEW STANDINGS
-                </Link>
-                <span className="hero-btn" style={{ background: 'rgba(251,146,60,0.12)', border: '1px solid rgba(251,146,60,0.35)', color: '#fb923c', cursor: 'default', pointerEvents: 'none' }}>
-                  🏁 COMPETITION ENDED
-                </span>
-              </>
-            ) : (
-              <>
-                <Link to={`/pages/comp-manage-teams.html?id=${comp.id}`} className="hero-btn hero-btn-secondary">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /></svg>
-                  MANAGE TEAMS
-                </Link>
-                <Link to={`/pages/comp-manage-matches.html?id=${comp.id}`} className="hero-btn hero-btn-secondary">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
-                  MANAGE MATCHES
-                </Link>
-                <Link to={`/pages/comp-standings.html?id=${comp.id}`} className="hero-btn hero-btn-secondary">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="9 11 12 14 22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
-                  VIEW STANDINGS
-                </Link>
-                <Link to={`/pages/comp-manage-organizers.html?id=${comp.id}`} className="hero-btn hero-btn-secondary" style={{ borderColor: 'rgba(198,255,51,0.4)', color: '#c6ff33', cursor: 'pointer' }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
-                  + ADD / MANAGE ORGANIZERS ({organizerCount})
-                </Link>
-                <Link to={`/pages/comp-dispute-review.html?id=${comp.id}`} className="hero-btn hero-btn-secondary" style={{ borderColor: 'rgba(239,68,68,0.4)', color: '#fca5a5' }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
-                  DISPUTES ({pendingDisputesCount})
-                </Link>
-                <Link to={`/pages/edit-competition.html?id=${comp.id}`} className="hero-btn hero-btn-secondary">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
-                  EDIT COMPETITION
-                </Link>
-              </>
-            )}
-          </div>
-        </div>
+    {!!current.errors.length && <div className="cd-notice" role="alert"><div>{current.errors.map((error) => <p key={error}>{error}</p>)}{matches.length > 0 && <small>Showing the last available fixtures until refresh succeeds.</small>}</div><button className="cd-button" onClick={() => setRevision((v) => v + 1)} disabled={current.loading}>Retry</button></div>}
 
-        <div className="comp-stats-row" id="comp-stats-row">
-          <div className="stat-card"><span className="stat-label">{comp.type === 'tournament' ? 'TOURNAMENT' : 'LEAGUE'}</span><span className="stat-val">{comp.name}</span></div>
-          <div className="stat-card"><span className="stat-label">TITLE</span><span className="stat-val"><span className="stat-game-icon">🎮</span> {comp.game}</span></div>
-          <div className="stat-card"><span className="stat-label">MATCHES</span><span className="stat-val stat-accent">{comp.totalMatches}</span></div>
-          <div className="stat-card"><span className="stat-label">TEAMS</span><span className="stat-val stat-accent">{approvedCount} / {comp.maxTeams || 16}</span></div>
-          <div className="stat-card stat-card-highlight"><span className="stat-label">STATUS</span><span className="stat-val stat-accent">{String(comp.status).toUpperCase()}</span></div>
-        </div>
+    {activeTab === 'fixtures' && <section className="cd-fixtures" aria-labelledby="cd-fixture-title">
+      <div className="cd-section-heading"><div><div className="cd-eyebrow cd-accent">THE ROAD TO THE TITLE</div><h2 id="cd-fixture-title">{isLeague ? 'League fixtures' : 'Tournament fixtures'}</h2><p>{isLeague ? 'Explore each round and follow your team.' : 'Follow the rounds. Select a match to see the details.'}</p></div>
+        <div className="cd-heading-actions"><button className="cd-icon-button" title="Refresh fixtures" aria-label="Refresh fixtures" disabled={current.loading} onClick={() => setRevision((v) => v + 1)}><Icon name="refresh" /></button>{canManage && !ended && <Link className="cd-button cd-primary" to={route('comp-manage-matches')}>Manage matches <Icon name="arrow" size={15} /></Link>}</div>
+      </div>
+      <div className="cd-toolbar"><div className="cd-segment" aria-label="Fixture view">{[['board', 'bracket', 'Round board'], ['schedule', 'list', 'Schedule']].map(([value, icon, label]) => <button key={value} type="button" aria-pressed={view === value} onClick={() => setView(value)}><Icon name={icon} size={16} />{label}</button>)}</div>
+        <label className="cd-search"><Icon name="search" size={17} /><input aria-label="Search teams or rounds" placeholder="Find a team or round…" value={query} onChange={(e) => setQuery(e.target.value)} /></label>
+        <select aria-label="Filter match status" value={status} onChange={(e) => setStatus(e.target.value)}><option value="all">All matches</option><option value="scheduled">Scheduled</option><option value="live">Live now</option><option value="completed">Completed</option></select>
+      </div>
 
-        <div className="comp-body">
-          <div className="comp-panel">
-            <div className="comp-panel-header">
-              <div className="comp-panel-title-row">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C6FF33" strokeWidth="2" strokeLinecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /></svg>
-                <span>Registered Teams</span>
-              </div>
-              <span className="comp-panel-count" id="teams-count-label">Showing all {teams.length} teams ({approvedCount} approved)</span>
-            </div>
-            <div className="comp-teams-table" id="comp-teams-table">
-              {teams.length === 0 ? (
-                <div className="empty-state">No teams registered yet.</div>
-              ) : (
-                <div className="teams-list" style={{ maxHeight: 400, overflowY: 'auto' }}>
-                  {teams.map((t) => {
-                    const statusMap = { approved: 'APPROVED', pending: 'PENDING', rejected: 'REJECTED' };
-                    const statusCls = { approved: 'status-approved', pending: 'status-pending', rejected: 'status-rejected' };
-                    const canManage = comp.role === 'organizer' && t.status === 'pending';
-                    return (
-                      <div className="team-row" key={t.id || t.name}>
-                        <div className="team-avatar" style={{ cursor: 'pointer' }} onClick={() => navigate(`/pages/team/team-roster.html?compId=${comp.id}&teamId=${t.id}`)}>{renderTeamAvatar(t.avatar, t.name)}</div>
-                        <div className="team-info" style={{ cursor: 'pointer' }} onClick={() => navigate(`/pages/team/team-roster.html?compId=${comp.id}&teamId=${t.id}`)}>
-                          <span className="team-name">{t.name}</span>
-                          <span className="team-players">{t.players || 0} Players</span>
-                        </div>
-                        <span className={`team-status ${statusCls[t.status] || ''}`}>{statusMap[t.status] || String(t.status).toUpperCase()}</span>
-                        <div className="team-actions">
-                          {canManage && (
-                            <>
-                              <button className="act-btn act-btn-approve" onClick={() => approveTeam(t.id)}>Approve</button>
-                              <button className="act-btn act-btn-reject" onClick={() => rejectTeam(t.id)}>Reject</button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-            <Link className="comp-view-all" id="link-manage-teams" to={`/pages/comp-manage-teams.html?id=${comp.id}`}>View All Registered Teams →</Link>
-          </div>
-
-          <div className="comp-panel">
-            <div className="comp-panel-header">
-              <div className="comp-panel-title-row">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C6FF33" strokeWidth="2" strokeLinecap="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg>
-                <span>Match Schedule</span>
-              </div>
-              <div className="comp-panel-nav">
-                <button className="comp-nav-btn" id="match-prev" disabled={matchPage === 0} onClick={() => { if (matchPage > 0) setMatchPage((p) => p - 1); }}>‹</button>
-                <button className="comp-nav-btn" id="match-next" disabled={(matchPage + 1) * LIMIT >= matches.length} onClick={() => { if ((matchPage + 1) * LIMIT < matches.length) setMatchPage((p) => p + 1); }}>›</button>
-              </div>
-            </div>
-            <div className="comp-matches-list" id="comp-matches-list">
-              {matches.length === 0 ? (
-                <div className="empty-state">No matches scheduled yet.</div>
-              ) : (
-                matchSlice.map((m) => {
-                  const isLive = m.status === 'live';
-                  const isComp = m.status === 'completed';
-                  return (
-                    <div className={`match-item ${isLive ? 'match-item-live' : ''}`} key={m.id || `${m.round}-${m.team1}-${m.team2}`}>
-                      <div className="match-round">{m.round} {isLive && <span className="live-tag">LIVE</span>}</div>
-                      <div className="match-teams-row">
-                        {isComp ? (
-                          <>
-                            <span className="match-team">{m.team1}</span>
-                            <span className="match-score">{m.score1} – {m.score2}</span>
-                            <span className="match-team">{m.team2}</span>
-                          </>
-                        ) : (
-                          <>
-                            <span className="match-team">{m.team1}</span>
-                            <span className="match-vs">VS</span>
-                            <span className="match-team">{m.team2}</span>
-                          </>
-                        )}
-                      </div>
-                      <div className="match-meta">{m.date} · {m.time}</div>
-                      {isLive && <Link to={`/pages/comp-match-results.html?id=${comp.id}`} className="match-result-btn">MATCH RESULTS</Link>}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="comp-bracket-section" id="comp-bracket-section" style={{ display: matches.length ? 'block' : 'none' }}>
-          <div className="comp-panel-header">
-            <div className="comp-panel-title-row">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C6FF33" strokeWidth="2" strokeLinecap="round"><rect x="3" y="3" width="6" height="4" rx="1" /><rect x="15" y="3" width="6" height="4" rx="1" /><rect x="9" y="10" width="6" height="4" rx="1" /><rect x="9" y="17" width="6" height="4" rx="1" /><line x1="6" y1="7" x2="6" y2="12" /><line x1="18" y1="7" x2="18" y2="12" /><line x1="6" y1="12" x2="18" y2="12" /><line x1="12" y1="12" x2="12" y2="14" /><line x1="12" y1="21" x2="12" y2="24" /></svg>
-              <span id="bracket-section-title">{comp.type === 'league' ? 'League Bracket' : 'Tournament Bracket'}</span>
-            </div>
-          </div>
-          <div className="comp-bracket-info" id="comp-bracket-info">
-            {matches.length === 0 ? (
-              <p style={{ color: '#9aa4b2', fontSize: 14 }}>No matches scheduled yet.</p>
-            ) : (
-              <div className="bracket-grid">
-                {sortedRoundKeys.map((round) => (
-                  <div className="bracket-round" key={round}>
-                    <div className="bracket-round-label">{round}</div>
-                    {bracketRounds[round].map((m) => {
-                      const isComp = m.status === 'completed';
-                      const isLive = m.status === 'live';
-                      return (
-                        <div className={`bracket-match ${isLive && comp.type === 'league' ? 'bracket-match-live' : ''}`} key={m.id || `${round}-${m.team1}-${m.team2}`}>
-                          <div className={`bracket-team ${isComp && m.score1 > m.score2 ? 'bracket-winner' : ''}`}>
-                            <span>{bannedName(m.team1)}</span>{isComp && <span>{m.score1}</span>}
-                          </div>
-                          <div className={`bracket-team ${isComp && m.score2 > m.score1 ? 'bracket-winner' : ''}`}>
-                            <span>{bannedName(m.team2)}</span>{isComp && <span>{m.score2}</span>}
-                          </div>
-                          {isLive && comp.type === 'league' && (
-                            <span style={{ background: '#c6ff33', color: '#000', fontSize: 9, padding: '1px 6px', borderRadius: 999, fontWeight: 800, marginLeft: 6 }}>LIVE</span>
-                          )}
-                        </div>
-                      );
-                    })}
+      {current.loading && current.matches == null ? <div className="cd-empty" role="status"><span className="cd-loader" /><h3>Loading scheduled matches…</h3></div>
+        : !filtered.length ? <div className="cd-empty"><Icon name="bracket" size={40} /><h3>{matches.length ? 'No matches match your filters' : current.errors.length ? 'Fixtures could not be loaded' : 'The stage is set'}</h3><p>{matches.length ? 'Try a different team, round, or status.' : current.errors.length ? 'Use Retry above to load the schedule.' : 'Scheduled matches will appear here as soon as fixtures are created.'}</p>{matches.length > 0 && <button className="cd-button" onClick={() => { setQuery(''); setStatus('all'); }}>Clear filters</button>}</div>
+          : <div className={`cd-workspace ${selected ? 'has-details' : ''}`}>
+            <div className="cd-visual">
+              {view === 'board' ? <>
+                <div className="cd-board-meta"><span>{rounds.length} rounds <span className="cd-divider">/</span> {filtered.length} matches {live > 0 && <b className="cd-live-count">{live} live</b>}</span><div className="cd-board-controls"><button aria-label="Scroll rounds left" onClick={() => boardRef.current?.scrollBy({ left: -310, behavior: 'smooth' })}>←</button><button aria-label="Scroll rounds right" onClick={() => boardRef.current?.scrollBy({ left: 310, behavior: 'smooth' })}>→</button><span /><button aria-label="Zoom out" disabled={zoom <= .8} onClick={() => setZoom((v) => Math.max(.8, v - .1))}>−</button><button aria-label="Reset zoom" onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button><button aria-label="Zoom in" disabled={zoom >= 1.3} onClick={() => setZoom((v) => Math.min(1.3, v + .1))}>+</button></div></div>
+                <div className="cd-board-scroll" ref={boardRef} tabIndex={0} role="region" aria-label="Scrollable fixture rounds">
+                  <div className={`cd-board ${isLeague ? 'is-league' : 'is-knockout'}`} style={{ zoom }}>
+                    {rounds.map((round, index) => <section className="cd-round" key={round.name} aria-label={round.name}><header><span className="cd-round-number">{String(index + 1).padStart(2, '0')}</span><div><h3>{round.name}</h3><small>{round.matches.length} {round.matches.length === 1 ? 'match' : 'matches'}</small></div>{!isLeague && index < rounds.length - 1 && <Icon name="arrow" size={16} />}</header><div className="cd-round-cards">{round.matches.map((match) => <MatchCard key={match.id} match={match} number={numbers.get(match.id)} selected={match.id === selectedId} onSelect={selectMatch} />)}</div></section>)}
+                    {!isLeague && <div className="cd-title-stage"><div className="cd-trophy"><Icon name="trophy" size={34} /></div><span className="cd-eyebrow">CHAMPION</span><h3>{final?.winnerName || 'Who takes the title?'}</h3><p>{final ? 'Final result confirmed' : 'Later rounds appear as results are confirmed.'}</p></div>}
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {modalOpen && (
-          <div id="organizers-modal" className="custom-modal" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}>
-            <div style={{ background: '#131b24', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 14, padding: 26, maxWidth: 500, width: '90%', boxShadow: '0 12px 36px rgba(0,0,0,0.6)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: 12 }}>
-                <div>
-                  <h3 style={{ color: '#fff', margin: 0, fontSize: 18, display: 'flex', alignItems: 'center', gap: 8 }}><span>👥</span> Tournament Organizers</h3>
-                  <p style={{ color: 'var(--text-muted)', fontSize: 12, margin: '4px 0 0' }}>Add and manage co-organizers for this tournament.</p>
-                </div>
-                <button onClick={() => setModalOpen(false)} style={{ background: 'none', border: 'none', color: '#9aa4b2', fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>&times;</button>
-              </div>
-
-              <div style={{ marginBottom: 18 }}>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Add Co-Organizer</label>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <div style={{ position: 'relative', flex: 1 }}>
-                    <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontSize: 13, fontWeight: 700 }}>@</span>
-                    <input type="text" id="modal-new-organizer" className="form-input" placeholder="Enter username or User ID" value={newOrg} onChange={(e) => setNewOrg(e.target.value)} style={{ paddingLeft: 28, width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', borderRadius: 8, paddingTop: 8, paddingBottom: 8 }} />
-                  </div>
-                  <button className="btn-table-primary" onClick={submitAddOrganizer} style={{ padding: '8px 16px', fontSize: 12, fontWeight: 700, background: '#c6ff33', color: '#000', border: 'none', borderRadius: 8, cursor: 'pointer' }}>+ Add</button>
-                </div>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Current Organizers</label>
-                <div id="modal-organizers-list" style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 220, overflowY: 'auto' }}>
-                  {orgs.map((org) => {
-                    const isOwner = org === creator;
-                    return (
-                      <div key={org} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: '10px 14px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span style={{ fontSize: 16 }}>👤</span>
-                          <div>
-                            <div style={{ fontSize: 14, color: '#fff', fontWeight: 700 }}>@{org}</div>
-                            <div style={{ fontSize: 11, color: isOwner ? '#c6ff33' : 'var(--text-muted)', fontWeight: isOwner ? 700 : 400 }}>
-                              {isOwner ? 'Primary Creator / Owner' : 'Co-Organizer'}
-                            </div>
-                          </div>
-                        </div>
-                        {!isOwner ? (
-                          <button type="button" onClick={() => submitRemoveOrganizer(org)} style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', borderRadius: 6, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}>Remove</button>
-                        ) : (
-                          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Protected</span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div style={{ marginTop: 20, textAlign: 'right' }}>
-                <button className="btn-table-secondary" onClick={() => setModalOpen(false)} style={{ padding: '8px 18px', fontSize: 13, borderRadius: 8 }}>Done</button>
-              </div>
+                </div><div className="cd-board-caption"><span><i className="cd-legend-line" />Rounds shown in competition order</span><span>Scroll to explore · Click a match for details</span></div>
+              </> : <div className="cd-schedule">{rounds.map((round) => <section key={round.name}><h3>{round.name}<span>{round.matches.length} matches</span></h3><div className="cd-schedule-grid">{round.matches.map((match) => <MatchCard key={match.id} match={match} selected={match.id === selectedId} number={numbers.get(match.id)} onSelect={selectMatch} />)}</div></section>)}</div>}
             </div>
-          </div>
-        )}
-      </main>
-    </>
-  );
+            {selected && <aside className="cd-detail" ref={detailRef} tabIndex={-1} aria-label="Selected match details" onKeyDown={(e) => { if (e.key === 'Escape') setSelectedId(null); }}><div className="cd-detail-heading"><span className="cd-eyebrow">MATCH {String(numbers.get(selected.id)).padStart(2, '0')}</span><button aria-label="Close match details" onClick={() => setSelectedId(null)}>×</button></div><h3>{selected.round}</h3><Status value={selected.status} /><div className="cd-detail-versus"><div><Avatar name={selected.team1} /><strong>{selected.team1}</strong></div><span>{selected.status === 'completed' ? `${selected.score1 ?? '—'} : ${selected.score2 ?? '—'}` : 'VS'}</span><div><Avatar name={selected.team2} /><strong>{selected.team2}</strong></div></div><dl><div><dt>Date</dt><dd>{selected.date}</dd></div><div><dt>Time</dt><dd>{selected.time || 'To be confirmed'}</dd></div><div><dt>Format</dt><dd>{comp.format || comp.type}</dd></div>{selected.winnerName && <div><dt>Winner</dt><dd>{selected.winnerName}</dd></div>}</dl>{selected.notes && <p className="cd-detail-notes">{selected.notes}</p>}{canManage && !ended && selected.status !== 'completed' && <Link className="cd-button cd-primary" to={route('comp-match-results', { matchId: selected.id })}>Enter result <Icon name="arrow" size={15} /></Link>}<p className="cd-detail-hint">Times are shown in your local time zone.</p></aside>}
+          </div>}
+      <div className="cd-progress"><span>{completed} of {matches.length} matches completed</span><div role="progressbar" aria-label="Competition progress" aria-valuenow={matches.length ? Math.round(completed / matches.length * 100) : 0} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${matches.length ? completed / matches.length * 100 : 0}%` }} /></div><strong>{matches.length ? Math.round(completed / matches.length * 100) : 0}%</strong></div>
+    </section>}
+
+    {activeTab === 'teams' && <section className="cd-content-panel"><div className="cd-section-heading"><div><h2>Registered teams</h2><p>{teams.length} teams in this competition</p></div>{canManage && !ended && <Link className="cd-button" to={route('comp-manage-teams')}>Manage teams <Icon name="arrow" size={15} /></Link>}</div><div className="cd-team-grid">{teams.map((team) => <Link className="cd-team-tile" key={team.id || team.name} to={`/pages/team/team-roster.html?${new URLSearchParams({ compId: apiId, teamId: team.dbId || team.id })}`}><Avatar name={team.name} /><div><h3>{team.name}</h3><p>{team.memberUsernames?.length ?? team.members?.length ?? team.players ?? 0} players · {team.status || 'Registered'}</p></div><Icon name="arrow" size={16} /></Link>)}</div>{!teams.length && <div className="cd-empty"><h3>No teams registered yet</h3><p>Teams will appear here after registration.</p></div>}</section>}
+    {activeTab === 'overview' && <section className="cd-content-panel"><div className="cd-section-heading"><div><h2>About the competition</h2><p>{comp.description || 'Competition details and organizers.'}</p></div></div><dl className="cd-overview-grid">{[['Game', comp.game], ['Format', comp.format || comp.type], ['Starts', comp.startDate ? new Date(comp.startDate).toLocaleDateString() : comp.dates], ['Ends', comp.endDate ? new Date(comp.endDate).toLocaleDateString() : null], ['Prize pool', comp.prizePool || (comp.prize ? `₹${Number(comp.prize).toLocaleString('en-IN')}` : 'No prize pool')], ['Entry', comp.entryFee || (comp.entryFeeAmount ? `₹${comp.entryFeeAmount}` : 'Free')], ['Team capacity', comp.maxTeams], ['Organizers', organizers.map((name) => `@${name}`).join(', ')]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value || 'Not specified'}</dd></div>)}</dl></section>}
+  </main>;
 }
-
-
