@@ -53,7 +53,15 @@ export class CompetitionRepository {
   }
 
   async findByOrganizer(userId: string): Promise<CompetitionEntity[]> {
-    return this.findByCreator(userId);
+    // Exact membership (never a substring match): co-organisers see the same
+    // reports queue as the creator, but an organiser named "bob" must not match
+    // a competition organised by "bobby".
+    return this.repo
+      .createQueryBuilder('c')
+      .where('c.createdBy = :userId', { userId })
+      .orWhere(":userId = ANY(string_to_array(c.organizers, ','))", { userId })
+      .orderBy('c.createdAt', 'DESC')
+      .getMany();
   }
 
   async findByStatus(status: string): Promise<CompetitionEntity[]> {

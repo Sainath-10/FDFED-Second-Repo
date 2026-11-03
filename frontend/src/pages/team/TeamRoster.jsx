@@ -11,6 +11,7 @@ import { useTeamContext, hasCompetitionStarted } from '../../hooks/useTeamContex
 import NexusTeamWorkflow from '../../services/teamWorkflow.js';
 import { TeamsAPI } from '../../services/api.js';
 import TeamTabs from '../../components/TeamTabs.jsx';
+import ReportButton from '../../components/ReportButton.jsx';
 import { showToast } from '../../lib/toast.js';
 import { assetUrl } from '../../lib/assets.js';
 import '../../styles/pages/team/team-roster.css';
@@ -132,8 +133,10 @@ export default function TeamRoster() {
                     <div className="p-role">Captain</div>
                     <div className="p-stats">Username: {username}</div>
                     <div className="captain-pill-wrapper"><span className="captain-pill">Captain</span></div>
-                    {canReportNow && !isMe(username) && (
-                      <div className="captain-pill-wrapper"><Link to={reportPlayerHref(username)} className="btn-table-secondary">Report</Link></div>
+                    {!isMe(username) && (
+                      <div className="captain-pill-wrapper">
+                        <ReportButton compId={comp.id} against={username} targetRole="team_leader" source="team-roster" />
+                      </div>
                     )}
                   </div>
                 );
@@ -150,8 +153,11 @@ export default function TeamRoster() {
                       <button className="btn-table-danger btn-remove-alt" onClick={() => askRemovePlayer(username)}>Remove</button>
                     )}
                     {!isEnded && paidEntryFee && <span className="status-pill approved status-pill-sm">Paid</span>}
-                    {((canManage && !rosterLocked && paidEntryFee) || canReportNow) && !isMe(username) && (
-                      <Link to={reportPlayerHref(username)} className="btn-table-secondary">Report</Link>
+                    {!isMe(username) && (
+                      <Link to={reportPlayerHref(username)} className="btn-table-secondary">Report issue</Link>
+                    )}
+                    {!isMe(username) && (
+                      <ReportButton compId={comp.id} against={username} targetRole="player" source="team-roster" />
                     )}
                   </div>
                 </div>

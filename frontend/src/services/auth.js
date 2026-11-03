@@ -28,6 +28,7 @@ export const DEMO_ACCOUNTS = [
   { username: 'compadmin', email: 'compadmin@nexus.gg', password: 'nexus', role: 'comp_admin', adminType: 'comp_admin', displayName: 'Competition Admin' },
   { username: 'revenueadmin', email: 'revenueadmin@nexus.gg', password: 'nexus', role: 'revenue_admin', adminType: 'revenue_admin', displayName: 'Revenue Admin' },
   { username: 'disputeadmin', email: 'disputeadmin@nexus.gg', password: 'nexus', role: 'dispute_admin', adminType: 'dispute_admin', displayName: 'Dispute Admin' },
+  { username: 'communitymod', email: 'communitymod@nexus.gg', password: 'nexus', role: 'community_moderator', adminType: 'community_moderator', displayName: 'Community Moderator' },
   { username: 'regular1', email: 'regular1@nexus.gg', password: 'nexus', role: 'regular', displayName: 'Regular User 1' },
   { username: 'regular2', email: 'regular2@nexus.gg', password: 'nexus', role: 'regular', displayName: 'Regular User 2' },
   { username: 'regular3', email: 'regular3@nexus.gg', password: 'nexus', role: 'regular', displayName: 'Regular User 3' },
@@ -65,6 +66,7 @@ export function normalizeRole(role) {
   const key = normalize(role);
   if (key === 'super_admin') return 'super-admin';
   if (key === 'teamlead') return 'team_lead';
+  if (key === 'community moderator' || key === 'communitymod') return 'community_moderator';
   return key;
 }
 

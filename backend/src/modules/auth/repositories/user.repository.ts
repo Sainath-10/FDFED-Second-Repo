@@ -201,6 +201,7 @@ export class UserRepository {
       { email: 'compadmin@nexus.gg', username: 'compadmin', password, role: UserRole.COMP_ADMIN, adminType: 'comp_admin' },
       { email: 'revenueadmin@nexus.gg', username: 'revenueadmin', password, role: UserRole.REVENUE_ADMIN, adminType: 'revenue_admin' },
       { email: 'disputeadmin@nexus.gg', username: 'disputeadmin', password, role: UserRole.DISPUTE_ADMIN, adminType: 'dispute_admin' },
+      { email: 'communitymod@nexus.gg', username: 'communitymod', password, role: UserRole.COMMUNITY_MODERATOR, adminType: 'community_moderator' },
       { email: 'regular1@nexus.gg', username: 'regular1', password, role: UserRole.PARTICIPANT, adminType: null },
       { email: 'regular2@nexus.gg', username: 'regular2', password, role: UserRole.PARTICIPANT, adminType: null },
       { email: 'regular3@nexus.gg', username: 'regular3', password, role: UserRole.PARTICIPANT, adminType: null },

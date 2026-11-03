@@ -675,6 +675,134 @@ export const RevenueAPI = {
   },
 };
 
+// ============ REPORTS API ============
+export const ReportsAPI = {
+  async create(payload) {
+    return makeRequest('/reports', { method: 'POST', body: JSON.stringify(payload) });
+  },
+  async mine() {
+    return makeRequest('/reports/mine', { method: 'GET' });
+  },
+  async organiser(status) {
+    const q = status ? `?status=${encodeURIComponent(status)}` : '';
+    return makeRequest(`/reports/organiser${q}`, { method: 'GET' });
+  },
+  async moderation(status) {
+    const q = status ? `?status=${encodeURIComponent(status)}` : '';
+    return makeRequest(`/reports/moderation${q}`, { method: 'GET' });
+  },
+  async moderationCounts() {
+    return makeRequest('/reports/moderation/counts', { method: 'GET' });
+  },
+  async restrictions(competitionId) {
+    return makeRequest(`/reports/restrictions/${encodeURIComponent(competitionId)}`, { method: 'GET' });
+  },
+  async get(id) {
+    return makeRequest(`/reports/${id}`, { method: 'GET' });
+  },
+  async priority(id, priority, note) {
+    return makeRequest(`/reports/${id}/priority`, { method: 'PATCH', body: JSON.stringify({ priority, note }) });
+  },
+  async discard(id, reason, note) {
+    return makeRequest(`/reports/${id}/discard`, { method: 'POST', body: JSON.stringify({ reason, note }) });
+  },
+  async startDiscussion(id) {
+    return makeRequest(`/reports/${id}/discussion`, { method: 'POST', body: JSON.stringify({}) });
+  },
+  async requestResponse(id) {
+    return makeRequest(`/reports/${id}/request-response`, { method: 'POST', body: JSON.stringify({}) });
+  },
+  async actPlayer(id, payload) {
+    return makeRequest(`/reports/${id}/act-player`, { method: 'POST', body: JSON.stringify(payload) });
+  },
+  async actOrganiser(id, payload) {
+    return makeRequest(`/reports/${id}/act-organiser`, { method: 'POST', body: JSON.stringify(payload) });
+  },
+  async investigation(id) {
+    return makeRequest(`/reports/${id}/investigation`, { method: 'GET' });
+  },
+  async myDiscussions() {
+    return makeRequest('/reports/discussions/mine', { method: 'GET' });
+  },
+  async discussion(discussionId) {
+    return makeRequest(`/reports/discussions/${discussionId}`, { method: 'GET' });
+  },
+  async postMessage(discussionId, body, evidence) {
+    return makeRequest(`/reports/discussions/${discussionId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ body, evidence }),
+    });
+  },
+  async endDiscussion(discussionId) {
+    return makeRequest(`/reports/discussions/${discussionId}/end`, { method: 'POST', body: JSON.stringify({}) });
+  },
+  async addParticipant(discussionId, username, role) {
+    return makeRequest(`/reports/discussions/${discussionId}/participants`, {
+      method: 'POST',
+      body: JSON.stringify({ username, role }),
+    });
+  },
+  async removeParticipant(discussionId, username) {
+    return makeRequest(`/reports/discussions/${discussionId}/participants/${encodeURIComponent(username)}`, { method: 'DELETE' });
+  },
+  async escalate() {
+    return makeRequest('/reports/maintenance/escalate', { method: 'POST', body: JSON.stringify({}) });
+  },
+};
+
+// ============ REPUTATION API ============
+export const ReputationAPI = {
+  async config() {
+    return makeRequest('/reputation/config', { method: 'GET' });
+  },
+  async setCeiling(maxPrizePool) {
+    return makeRequest('/reputation/config', { method: 'PUT', body: JSON.stringify({ maxPrizePool }) });
+  },
+  async me() {
+    return makeRequest('/reputation/me', { method: 'GET' });
+  },
+  async profile(username) {
+    return makeRequest(`/reputation/user/${encodeURIComponent(username)}`, { method: 'GET' });
+  },
+  async history(username) {
+    return makeRequest(`/reputation/user/${encodeURIComponent(username)}/history`, { method: 'GET' });
+  },
+  async evaluate(username, facts) {
+    return makeRequest('/reputation/evaluate', { method: 'POST', body: JSON.stringify({ username, ...facts }) });
+  },
+  async downgrade(username, level, reason, reportId) {
+    return makeRequest(`/reputation/user/${encodeURIComponent(username)}/downgrade`, {
+      method: 'POST',
+      body: JSON.stringify({ level, reason, reportId }),
+    });
+  },
+  async sanction(username, payload) {
+    return makeRequest(`/reputation/user/${encodeURIComponent(username)}/sanctions`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+  async requestException(requestedAmount, reason) {
+    return makeRequest('/reputation/prize-pool-exceptions', {
+      method: 'POST',
+      body: JSON.stringify({ requestedAmount, reason }),
+    });
+  },
+  async myExceptions() {
+    return makeRequest('/reputation/prize-pool-exceptions/mine', { method: 'GET' });
+  },
+  async exceptions(status) {
+    const q = status ? `?status=${encodeURIComponent(status)}` : '';
+    return makeRequest(`/reputation/prize-pool-exceptions${q}`, { method: 'GET' });
+  },
+  async reviewException(id, status, note) {
+    return makeRequest(`/reputation/prize-pool-exceptions/${id}/review`, {
+      method: 'POST',
+      body: JSON.stringify({ status, note }),
+    });
+  },
+};
+
 // Same shape as the `window.NexusAPI`.
 const NexusAPI = {
   Auth: AuthAPI,
@@ -687,6 +815,8 @@ const NexusAPI = {
   Admin: AdminAPI,
   Revenue: RevenueAPI,
   Chat: ChatAPI,
+  Reports: ReportsAPI,
+  Reputation: ReputationAPI,
   getToken,
   setToken,
   removeToken,

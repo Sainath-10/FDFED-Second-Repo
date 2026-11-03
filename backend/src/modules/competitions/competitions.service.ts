@@ -6,6 +6,7 @@ import { UserRepository } from '../auth/repositories/user.repository';
 import { TeamEntity } from '../../entities/team.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditLogService } from '../../common/audit/audit.service';
+import { ReputationService } from '../reputation/reputation.service';
 import { CreateCompetitionDto, UpdateCompetitionDto } from './dto/competition.dto';
 import { ICompetition } from '../../common/interfaces';
 import {
@@ -33,6 +34,7 @@ export class CompetitionsService {
     private teamRepository: Repository<TeamEntity>,
     private notificationsService: NotificationsService,
     private auditLog: AuditLogService,
+    private reputation: ReputationService,
   ) {}
 
   /** Mock-verification gate (§12.4). Backend enforcement — frontend UI alone is insufficient. */
@@ -103,6 +105,11 @@ export class CompetitionsService {
     const totalPrizeError = validatePrizePool(resolvedPrize);
     if (totalPrizeError) throw new BadRequestException(totalPrizeError);
 
+    // Organiser reputation + platform ceiling. Both are enforced here so a
+    // direct API request can never bypass the limits shown in the UI.
+    await this.reputation.assertCanOrganise(createdBy);
+    const prizeGate = await this.reputation.authorizePrizePool(resolvedPrize, createdBy);
+
     const { prizes: _prizeDistribution, ...competitionExtras } = extras as any;
 
     // §2.2 — minimum entry fee ₹10 where a fee applies
@@ -151,6 +158,11 @@ export class CompetitionsService {
         approvalStatus: 'approved',
       },
     );
+
+    // Bind a single-use approved prize-pool exception to this competition.
+    if (prizeGate.exceptionId) {
+      await this.reputation.consumeException(prizeGate.exceptionId, competition.id, resolvedPrize);
+    }
 
     // §2.1 preserve the co-organizer invitation notification flow
     validCoOrganizers.forEach((co) => {
@@ -294,6 +306,8 @@ export class CompetitionsService {
     if (!isOrganizer && !isAdmin) {
       throw new ForbiddenException('Only an organizer of this competition (or an admin) can update it.');
     }
+    // Reputation sanctions (creation restriction / bans) are backend-enforced.
+    if (isOrganizer) await this.reputation.assertCanOrganise(requesterUsername);
 
     // §3.5 — obsolete edit fields must not be smuggled through the API
     const obsoleteTouched = ['format', 'season', 'prizePool', 'prize'].filter(

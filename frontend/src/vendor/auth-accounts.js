@@ -40,6 +40,14 @@ window.NEXUS_DEMO_ACCOUNTS = [
     displayName: 'Dispute Admin'
   },
   {
+    username: 'communitymod',
+    email: 'communitymod@nexus.gg',
+    password: 'nexus',
+    role: 'community_moderator',
+    adminType: 'community_moderator',
+    displayName: 'Community Moderator'
+  },
+  {
     username: 'regular1',
     email: 'regular1@nexus.gg',
     password: 'nexus',

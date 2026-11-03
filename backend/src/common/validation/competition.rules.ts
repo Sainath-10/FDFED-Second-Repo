@@ -4,7 +4,7 @@
  * Shared by create/update services and unit tests. All monetary amounts are in INR.
  *
  * Implements (§2.2, §2.4, §3.1–§3.4):
- *  - Max prize pool ₹10,00,000, min entry fee ₹10 (where a fee applies)
+ *  - Platform prize-pool ceiling ₹3,00,000 (organiser reputation limits may be stricter), min entry fee ₹10
  *  - Prize pools above ₹50,000 no longer require administrative approval
  *  - Registration window validated separately from competition dates
  *  - Registration-closed field locks for name/game/type/description
@@ -12,7 +12,7 @@
  *  - Co-organizer rules: must exist, no self-assignment, no duplicates
  */
 
-export const MAX_PRIZE_POOL = 1_000_000; // ₹10,00,000
+export const MAX_PRIZE_POOL = 300_000; // ₹3,00,000 platform-wide ceiling
 export const MIN_ENTRY_FEE = 10; // ₹10
 export const MIN_COMPETITION_NAME = 3;
 export const MIN_DESCRIPTION = 10;
@@ -115,7 +115,7 @@ export function validatePrizeDistribution(prizes: unknown): string | null {
   }
   const total = prizeDistributionTotal(prizes);
   if (total > MAX_PRIZE_POOL) {
-    return `Total prize pool cannot exceed ₹${MAX_PRIZE_POOL.toLocaleString('en-IN')} (₹10 lakh).`;
+    return `Total prize pool cannot exceed ₹${MAX_PRIZE_POOL.toLocaleString('en-IN')} (₹3 lakh platform maximum).`;
   }
   return null;
 }
@@ -142,7 +142,7 @@ export function validatePrizePool(prize: unknown): string | null {
   const num = typeof prize === 'number' ? prize : Number(prize);
   if (Number.isNaN(num)) return 'Prize pool must be a valid number.';
   if (num < 0) return 'Prize pool cannot be negative.';
-  if (num > MAX_PRIZE_POOL) return `Prize pool cannot exceed ₹${MAX_PRIZE_POOL.toLocaleString('en-IN')} (₹10 lakh).`;
+  if (num > MAX_PRIZE_POOL) return `Prize pool cannot exceed ₹${MAX_PRIZE_POOL.toLocaleString('en-IN')} (₹3 lakh platform maximum).`;
   return null;
 }
 

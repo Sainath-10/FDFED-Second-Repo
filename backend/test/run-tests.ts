@@ -116,10 +116,10 @@ async function middlewareTests() {
 async function competitionRuleTests() {
   console.log('\nCompetition rules');
 
-  await test('prize pool cap is ₹10,00,000', () => {
-    assert.equal(MAX_PRIZE_POOL, 1_000_000);
-    assert.equal(validatePrizePool(1_000_000), null);
-    assert.match(String(validatePrizePool(1_000_001)), /cannot exceed/i);
+  await test('platform prize pool ceiling is ₹3,00,000', () => {
+    assert.equal(MAX_PRIZE_POOL, 300_000);
+    assert.equal(validatePrizePool(300_000), null);
+    assert.match(String(validatePrizePool(300_001)), /cannot exceed/i);
     assert.match(String(validatePrizePool(-1)), /negative/i);
     assert.match(String(validatePrizePool('abc')), /valid number/i);
   });
@@ -130,8 +130,8 @@ async function competitionRuleTests() {
     assert.equal(parsePrizeAmount('No Prize Pool'), 0);
     assert.equal(Number.isNaN(parsePrizeAmount('abc')), true);
 
-    const distribution = [{ amount: '₹5,00,000' }, { amount: '₹3,00,000' }, { amount: '₹2,00,000' }];
-    assert.equal(prizeDistributionTotal(distribution), 1_000_000);
+    const distribution = [{ amount: '₹1,50,000' }, { amount: '₹1,00,000' }, { amount: '₹50,000' }];
+    assert.equal(prizeDistributionTotal(distribution), 300_000);
     assert.equal(validatePrizeDistribution(distribution), null);
 
     const tooLarge = [...distribution, { amount: 1 }];
@@ -396,12 +396,22 @@ async function competitionServiceTests() {
       },
     };
     const teamRepository = { find: async () => teams };
+    const reputation = {
+      assertCanOrganise: async () => ({ level: 'blue', username: 'alice' }),
+      authorizePrizePool: async (amount: number) => (
+        amount > 300_000
+          ? (() => { throw new BadRequestException(`Prize pool cannot exceed ₹300,000`); })()
+          : { level: 'blue', levelLimit: 300000, globalMax: 300000, limit: 300000, exceptionId: null }
+      ),
+      consumeException: async () => undefined,
+    };
     return new CompetitionsService(
       competitionRepository as any,
       userRepository as any,
       teamRepository as any,
       notifications as any,
       noopAudit as any,
+      reputation as any,
     );
   }
 
@@ -433,7 +443,7 @@ async function competitionServiceTests() {
 
   await test('prize pool above ₹10 lakh and negative values are rejected', async () => {
     const service = makeService(null);
-    await expectThrow(() => service.createCompetition({ ...validDto, prize: 1_000_001 }, 'alice', 'u1'), BadRequestException, 'cannot exceed');
+    await expectThrow(() => service.createCompetition({ ...validDto, prize: 300_001 }, 'alice', 'u1'), BadRequestException, 'cannot exceed');
     await expectThrow(() => service.createCompetition({ ...validDto, prize: -50 }, 'alice', 'u1'), BadRequestException, 'negative');
   });
 
@@ -450,13 +460,13 @@ async function competitionServiceTests() {
     );
   });
 
-  await test('backend accepts a distribution totalling exactly ₹10,00,000', async () => {
+  await test('backend accepts a distribution totalling exactly ₹3,00,000', async () => {
     const service = makeService(null);
     const comp: any = await service.createCompetition({
       ...validDto,
-      prizes: [{ place: '1st Place', amount: '₹5,00,000' }, { place: '2nd Place', amount: '₹5,00,000' }],
+      prizes: [{ place: '1st Place', amount: '₹2,00,000' }, { place: '2nd Place', amount: '₹1,00,000' }],
     }, 'alice', 'u1');
-    assert.equal(comp.prize, 1_000_000);
+    assert.equal(comp.prize, 300_000);
   });
 
   await test('backend rejects malformed prize distribution entries', async () => {

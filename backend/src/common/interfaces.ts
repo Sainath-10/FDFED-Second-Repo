@@ -6,6 +6,8 @@ export enum UserRole {
   TEAM_LEAD = 'team_lead',
   PARTICIPANT = 'participant',
   ADMIN = 'admin',
+  /** Handles reports against organisers only (separate dashboard). */
+  COMMUNITY_MODERATOR = 'community_moderator',
 }
 
 export enum DisputeStatus {

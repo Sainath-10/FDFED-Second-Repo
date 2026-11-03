@@ -15,6 +15,7 @@ import useVerificationGate from '../hooks/useVerificationGate.jsx';
 import useJoinCodeGate from '../hooks/useJoinCodeGate.jsx';
 import { DisputesAPI, MatchesAPI, TeamsAPI } from '../services/api.js';
 import ChatRoom from '../components/ChatRoom.jsx';
+import OrganiserReputation from '../components/OrganiserReputation.jsx';
 import { showToast } from '../lib/toast.js';
 import { assetUrl } from '../lib/assets.js';
 import '../styles/pages/comp-info.css';
@@ -679,6 +680,15 @@ export default function CompInfo() {
               <div className="info-row"><span className="key">Teams</span><span className="val" id="info-teams">{approvedTeams.length} / {comp.maxTeams || '—'}</span></div>
               <div className="info-row"><span className="key">Date</span><span className="val" id="info-date">{comp.dates || '—'}</span></div>
               <div className="info-row"><span className="key">Prize Pool</span><span className="val" id="info-prize" style={{ color: 'var(--accent)', fontSize: 18 }}>{comp.prizePool || '—'}</span></div>
+              {comp.createdBy && (
+                <div className="info-row" style={{ alignItems: 'center' }}>
+                  <span className="key">Organiser</span>
+                  <span className="val" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    @{comp.createdBy}
+                    <OrganiserReputation username={comp.createdBy} />
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className="comp-sidebar-block" id="prize-breakdown-block">

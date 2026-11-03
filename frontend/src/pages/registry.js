@@ -56,6 +56,15 @@ import CreatePolicy from './super-admin/CreatePolicy.jsx';
 import EditPolicy from './super-admin/EditPolicy.jsx';
 import ViewPolicy from './super-admin/ViewPolicy.jsx';
 import SuperProfile from './super-admin/SuperProfile.jsx';
+import ReportForm from './ReportForm.jsx';
+import MyReports from './MyReports.jsx';
+import CaseDiscussion from './CaseDiscussion.jsx';
+import OrganizerReports from './OrganizerReports.jsx';
+import OrganizerReportDetail from './OrganizerReportDetail.jsx';
+import ModeratorDashboard from './moderator/ModeratorDashboard.jsx';
+import ModeratorReports from './moderator/ModeratorReports.jsx';
+import ModeratorReportDetail from './moderator/ModeratorReportDetail.jsx';
+import ModeratorProfile from './moderator/ModeratorProfile.jsx';
 
 export const PAGE_COMPONENTS = {
   '/': Index,
@@ -113,6 +122,15 @@ export const PAGE_COMPONENTS = {
 
   '/pages/watch-live.html': WatchLive,
   '/pages/about.html': About,
+  '/pages/report.html': ReportForm,
+  '/pages/my-reports.html': MyReports,
+  '/pages/case-discussion.html': CaseDiscussion,
+  '/pages/organizer-reports.html': OrganizerReports,
+  '/pages/organizer-report-detail.html': OrganizerReportDetail,
+  '/pages/moderator/dashboard.html': ModeratorDashboard,
+  '/pages/moderator/reports.html': ModeratorReports,
+  '/pages/moderator/report-detail.html': ModeratorReportDetail,
+  '/pages/moderator/profile.html': ModeratorProfile,
 };
 
 

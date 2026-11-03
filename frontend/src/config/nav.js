@@ -29,8 +29,24 @@ const MAIN_NAV = [
   { id: 'competitions', label: 'Competitions', to: '/pages/competitions.html', icon: TrophyIcon },
   { id: 'activity', label: 'Activity', to: '/pages/my-activity.html', icon: ActivityIcon, protected: true },
   { id: 'notifications', label: 'Notifications', to: '/pages/notifications.html', icon: BellIcon, protected: true },
+  { id: 'reports', label: 'My Reports', to: '/pages/my-reports.html', icon: ShieldIcon, protected: true },
   { id: 'profile', label: 'Profile', to: '/pages/profile.html', icon: ProfileIcon, protected: true },
   { id: 'about', label: 'About', to: '/pages/about.html', icon: InfoIcon },
+];
+
+/** Organiser-only queue for participant reports. */
+const ORGANISER_REPORTS_ITEM = {
+  id: 'organiser-reports',
+  label: 'Reports',
+  to: '/pages/organizer-reports.html',
+  icon: ShieldIcon,
+};
+
+/** Community Moderator sidebar: Dashboard, Reports, Profile only. */
+const MODERATOR_NAV = [
+  { id: 'dashboard', label: 'Dashboard', to: '/pages/moderator/dashboard.html', icon: HomeIcon, end: true },
+  { id: 'reports', label: 'Reports', to: '/pages/moderator/reports.html', icon: ShieldIcon },
+  { id: 'profile', label: 'Profile', to: '/pages/moderator/profile.html', icon: ProfileIcon },
 ];
 
 const ADMIN_NAV = {
@@ -94,6 +110,15 @@ export function getSidebarNav(session) {
 
   const role = session.role;
 
+  if (role === 'community_moderator') {
+    return {
+      variant: 'admin',
+      top: MODERATOR_NAV.slice(0, 2),
+      bottom: MODERATOR_NAV.slice(2),
+      showLogin: false,
+    };
+  }
+
   if (role === 'super-admin') {
     return {
       variant: 'super-admin',
@@ -111,7 +136,13 @@ export function getSidebarNav(session) {
     return { variant: 'admin', top: items.slice(0, cut), bottom: items.slice(cut), showLogin: false };
   }
 
- // participant / team_lead / regular share the main sidebar (logged in).
+  // Team leads also get the organiser reports queue.
+  if (role === 'team_lead') {
+    const items = [...MAIN_NAV.slice(0, 4), ORGANISER_REPORTS_ITEM, ...MAIN_NAV.slice(4)];
+    return { variant: 'main', top: items.slice(0, 5), bottom: items.slice(5), showLogin: false };
+  }
+
+ // participant / regular share the main sidebar (logged in).
   return {
     variant: 'main',
     top: MAIN_NAV.slice(0, 4),

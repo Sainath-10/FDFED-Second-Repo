@@ -35,6 +35,7 @@ export const ROLE_ROUTES = {
   revenue_admin: '/pages/admin/revenue-transactions.html',
   'super-admin': '/pages/super-admin/super-dashboard.html',
   super_admin: '/pages/super-admin/super-dashboard.html',
+  community_moderator: '/pages/moderator/dashboard.html',
 };
 
 /**
@@ -44,6 +45,8 @@ export const ROLE_ROUTES = {
 export const ADMIN_ROLES = ['admin', 'comp_admin', 'dispute_admin', 'revenue_admin'];
 export const SUPER_ADMIN_ROLES = ['super-admin'];
 export const TEAM_LEAD_ROLES = ['team_lead'];
+/** Handles reports against organisers only. */
+export const MODERATOR_ROLES = ['community_moderator'];
 
 const route = (path, label, group, roles = null) => ({ path, label, group, roles });
 
@@ -115,6 +118,19 @@ export const PROTECTED_ROUTES = [
   route('/pages/super-admin/edit-policy.html', 'Edit policy', 'super-admin', SUPER_ADMIN_ROLES),
   route('/pages/super-admin/view-policy.html', 'View policy', 'super-admin', SUPER_ADMIN_ROLES),
   route('/pages/super-admin/profile.html', 'Profile', 'super-admin', SUPER_ADMIN_ROLES),
+
+ // Reporting & case management
+  route('/pages/report.html', 'Report', 'participant'),
+  route('/pages/my-reports.html', 'My reports', 'participant'),
+  route('/pages/case-discussion.html', 'Case discussion', 'participant'),
+  route('/pages/organizer-reports.html', 'Reports', 'organizer'),
+  route('/pages/organizer-report-detail.html', 'Report details', 'organizer'),
+
+ // Community Moderator (reports against organisers only)
+  route('/pages/moderator/dashboard.html', 'Moderator dashboard', 'moderator', MODERATOR_ROLES),
+  route('/pages/moderator/reports.html', 'Reports', 'moderator', MODERATOR_ROLES),
+  route('/pages/moderator/report-detail.html', 'Report investigation', 'moderator', MODERATOR_ROLES),
+  route('/pages/moderator/profile.html', 'Profile', 'moderator', MODERATOR_ROLES),
 ];
 
 export const ROUTES = [...PUBLIC_ROUTES, ...PROTECTED_ROUTES];

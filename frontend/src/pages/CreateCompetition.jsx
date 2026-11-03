@@ -13,14 +13,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import NexusData from '../services/data.js';
 import NexusTeamWorkflow from '../services/teamWorkflow.js';
-import NexusAPI, { CompetitionsAPI } from '../services/api.js';
+import NexusAPI, { CompetitionsAPI, ReputationAPI } from '../services/api.js';
 import useVerificationGate from '../hooks/useVerificationGate.jsx';
 import { showToast } from '../lib/toast.js';
 import { assetUrl } from '../lib/assets.js';
 import '../styles/pages/create-competition.css';
 
 /** §2.2 — backend mirrors these limits (competition.rules.ts). */
-const MAX_PRIZE_POOL = 1_000_000; // ₹10,00,000
+const MAX_PRIZE_POOL = 300_000; // ₹3,00,000 platform-wide ceiling
 const MIN_ENTRY_FEE = 10; // ₹10 where a fee applies
 
 const GAMES = ['Counter-Strike 2', 'League of Legends', 'Dota 2', 'Fortnite', 'Valorant', 'Rocket League'];
@@ -135,12 +135,26 @@ export default function CreateCompetition() {
       setOrClear(
         'prize-total',
         totalPrize > MAX_PRIZE_POOL
-          ? `Total prize pool cannot exceed ₹${MAX_PRIZE_POOL.toLocaleString('en-IN')} (₹10 lakh).`
+          ? `Total prize pool cannot exceed ₹${MAX_PRIZE_POOL.toLocaleString('en-IN')} (₹3 lakh platform maximum).`
           : '',
       );
       return next;
     });
   }, [n1, n2, n3, totalPrize]);
+
+  // Organiser reputation limit (backend-enforced). Blue/Green share the platform
+  // ceiling; Orange and Red are stricter.
+  const [reputation, setReputation] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    ReputationAPI.me()
+      .then((res) => { if (alive && res.ok && res.data) setReputation(res.data); })
+      .catch(() => undefined);
+    return () => { alive = false; };
+  }, []);
+  const prizeLimit = reputation
+    ? Math.min(reputation.levelLimit ?? MAX_PRIZE_POOL, reputation.globalMax ?? MAX_PRIZE_POOL)
+    : MAX_PRIZE_POOL;
 
   const effectiveBanner = bannerSrc || getDefaultBanner(game);
 
@@ -201,8 +215,9 @@ export default function CreateCompetition() {
     if (n3 < 0) next['prize-3'] = 'Prize cannot be negative.';
     if (n2 > 0 && n2 > n1) next['prize-2'] = '1st place prize must be ≥ 2nd place prize.';
     if (n3 > 0 && n3 > n2 && n2 > 0) next['prize-3'] = '2nd place prize must be ≥ 3rd place prize.';
-    // §2.2 — total prize pool is capped at ₹10,00,000 (no admin approval checks)
-    if (totalPrize > MAX_PRIZE_POOL) next['prize-total'] = `Total prize pool cannot exceed ₹${MAX_PRIZE_POOL.toLocaleString('en-IN')} (₹10 lakh).`;
+    // Platform ceiling + organiser reputation limit (the backend is authoritative).
+    if (totalPrize > MAX_PRIZE_POOL) next['prize-total'] = `Total prize pool cannot exceed ₹${MAX_PRIZE_POOL.toLocaleString('en-IN')} (₹3 lakh platform maximum).`;
+    else if (totalPrize > prizeLimit) next['prize-total'] = `Your current reputation level permits a maximum prize pool of ₹${prizeLimit.toLocaleString('en-IN')}.`;
 
  // Co-organizers — self/duplicate checks synchronously; existence is validated
  // against registered accounts via the backend below (§2.1).
