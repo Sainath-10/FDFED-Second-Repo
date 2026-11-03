@@ -131,11 +131,11 @@ export function iplPlayoffFixtures(pointsTable: { team: string }[], qualifiers =
 
 /** Next IPL round after Q1 + Eliminator are decided (winners passed in). */
 export function iplNextRound(
-  q1Loser: string | null,
+  q1Winner: string | null,
   eliminatorWinner: string | null,
 ): Fixture[] {
-  if (!q1Loser || !eliminatorWinner) return [];
-  return [{ round: 2, roundLabel: 'Qualifier 2', team1Id: q1Loser, team2Id: eliminatorWinner }];
+  if (!q1Winner || !eliminatorWinner) return [];
+  return [{ round: 2, roundLabel: 'Qualifier 2', team1Id: q1Winner, team2Id: eliminatorWinner }];
 }
 
 /**
@@ -216,8 +216,8 @@ export function iplProgressionAfterRound1(
 ): Fixture[] {
   const q1 = results.find((r) => r.roundLabel === 'Qualifier 1');
   const elim = results.find((r) => r.roundLabel === 'Eliminator');
-  if (!q1?.loserName || !elim?.winnerName) return [];
-  return [{ round: 2, roundLabel: 'Qualifier 2', team1Id: q1.loserName, team2Id: elim.winnerName }];
+  if (!q1 || !elim) return [];
+  return [{ round: 2, roundLabel: 'Qualifier 2', team1Id: q1.winnerName, team2Id: elim.winnerName }];
 }
 
 /** Simple single-elimination advancement: returns winner & loser given a completed match. */

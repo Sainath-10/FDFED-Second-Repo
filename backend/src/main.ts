@@ -1,5 +1,4 @@
 import './common/timezone';
-import { NestExpressApplication } from '@nestjs/platform-express';
 import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
@@ -8,9 +7,7 @@ import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
 import { FileLoggerService } from './common/logger/file-logger.service';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
-
-  app.useBodyParser('json', { limit: '8mb' });
+  const app = await NestFactory.create(AppModule);
 
   const fileLogger = app.get(FileLoggerService);
 

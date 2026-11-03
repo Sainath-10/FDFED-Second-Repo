@@ -189,11 +189,6 @@ export class AddCoOrganizerDto {
 }
 
 export class UpdateCompetitionDto {
-  @ApiProperty({ required: false, description: 'Competition banner image; empty string removes it' })
-  @IsString()
-  @IsOptional()
-  img?: string;
-
   @ApiProperty({
     description: 'Competition name',
     required: false,
