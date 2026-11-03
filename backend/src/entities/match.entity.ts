@@ -5,6 +5,15 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { MatchResultDetails } from '../common/tournament/match-rules';
+
+export type StoredParticipantSlot = { teamId: string | null; seed: number | null; sourceMatchId?: string; bye?: boolean };
+export type StoredBracket = {
+  key: string; version?: number; round?: number; position?: number; bracketSize?: number; roundCount?: number;
+  slots?: [StoredParticipantSlot, StoredParticipantSlot];
+  nextMatchId?: string | null; nextSlot?: 1 | 2 | null;
+  source1?: string; source2?: string; bye1?: boolean; bye2?: boolean;
+};
 
 @Entity('matches')
 export class MatchEntity {
@@ -36,10 +45,22 @@ export class MatchEntity {
   score: string;
 
   @Column({ default: 'scheduled' })
-  status: string; // scheduled | ongoing | completed
+  status: string; // pending | ready | scheduled | ongoing | completed | bye
 
   @Column({ nullable: true, type: 'timestamptz' })
   scheduledAt: Date;
+
+  @Column({ default: 60 })
+  durationMinutes: number;
+
+  @Column({ type: 'jsonb', nullable: true })
+  bracket: StoredBracket;
+
+  @Column({ default: 'standard' })
+  resultRule: string;
+
+  @Column({ type: 'jsonb', nullable: true })
+  resultDetails: MatchResultDetails;
 
   @Column({ nullable: true })
   round: string;

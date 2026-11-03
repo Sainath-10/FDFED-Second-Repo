@@ -45,6 +45,8 @@ import { ROLES_KEY } from '../src/common/decorators/roles.decorator';
 import { TeamsService } from '../src/modules/teams/teams.service';
 import { TeamsController } from '../src/modules/teams/teams.controller';
 import { MatchesService } from '../src/modules/matches/matches.service';
+import { buildBracket } from '../src/common/tournament/bracket';
+import { MatchesController } from '../src/modules/matches/matches.controller';
 import { RateLimiterMiddleware } from '../src/common/middleware/rate-limiter.middleware';
 import { UserRole } from '../src/common/interfaces';
 
@@ -766,6 +768,7 @@ async function teamServiceTests() {
     paidMembers?: string[];
     existingRefund?: any;
     teams?: any[];
+    matchesService?: any;
   } = {}) {
     const competition = opts.competition || {
       id: 'c1', name: 'Cup', createdBy: 'organizer', organizers: ['organizer'],
@@ -850,6 +853,7 @@ async function teamServiceTests() {
       noopAudit as any,
       refundRepo as any,
       revenueRepo as any,
+      opts.matchesService as any,
     );
     return { service, team, competition, saved, mutations, invites, joinRequest };
   }
@@ -865,6 +869,24 @@ async function teamServiceTests() {
     const created = mutations.find((m) => m.op === 'create');
     assert.ok(created);
     assert.equal(created.status, 'approved');
+  });
+
+  await test('a new registration automatically validates and rebuilds an existing bracket', async () => {
+    const calls: string[] = [];
+    const matchesService = {
+      assertRosterCanChange: async (id: string) => calls.push(`guard:${id}`),
+      syncRosterAfterRegistration: async (id: string) => { calls.push(`sync:${id}`); return { rebuilt: true, created: 7 }; },
+    };
+    const { service } = makeService({ matchesService });
+    await service.createTeam({ name: 'Bravo', competitionId: 'c1' } as any, { id: 'u1', username: 'alice' });
+    assert.deepEqual(calls, ['guard:c1', 'sync:c1']);
+  });
+
+  await test('team registration is rejected before its write when bracket play has started', async () => {
+    const matchesService = { assertRosterCanChange: async () => { throw new BadRequestException('bracket has already started'); } };
+    const { service, mutations } = makeService({ matchesService });
+    await expectThrow(() => service.createTeam({ name: 'Bravo', competitionId: 'c1' } as any, { id: 'u1', username: 'alice' }), BadRequestException, 'already started');
+    assert.equal(mutations.some((mutation) => mutation.op === 'create'), false);
   });
 
   await test('participants may create a team and are promoted to team lead', async () => {
@@ -1133,7 +1155,14 @@ async function matchServiceTests() {
         return match;
       },
       count: async ({ where }: any = {}) => matches.filter((m) => Object.entries(where || {}).every(([k, v]) => m[k] === v)).length,
-      delete: async () => undefined,
+      delete: async (target: any) => {
+        if (typeof target === 'string') {
+          const index = matches.findIndex((m) => m.id === target);
+          if (index >= 0) matches.splice(index, 1);
+        } else if (target?.competitionId) {
+          for (let i = matches.length - 1; i >= 0; i--) if (matches[i].competitionId === target.competitionId) matches.splice(i, 1);
+        }
+      },
     };
     const competitionRepository = {
       findById: async () => competition,
@@ -1150,6 +1179,115 @@ async function matchServiceTests() {
       repo,
     };
   }
+
+  await test('complete brackets contain B-1 positions, separate top seeds, and award byes for 2 through 64 teams', () => {
+    for (let count = 2; count <= 64; count++) {
+      const teams = Array.from({ length: count }, (_, i) => `t${i}`);
+      const nodes = buildBracket(teams);
+      const size = 2 ** Math.ceil(Math.log2(count));
+      assert.equal(nodes.length, size - 1);
+      const opening = nodes.filter((node) => node.roundIndex === 1);
+      const byes = opening.filter((node) => node.sides.some((side) => side.bye));
+      assert.equal(byes.length, size - count);
+      assert.deepEqual(byes.map((node) => node.sides.find((side) => side.teamId).seed).sort((a,b) => a-b), Array.from({length: size-count}, (_,i) => i+1));
+      const seedOne = opening.find((node) => node.sides.some((side) => side.seed === 1));
+      const seedTwo = opening.find((node) => node.sides.some((side) => side.seed === 2));
+      if (size > 2) assert.ok(seedOne.position <= size/4 && seedTwo.position > size/4);
+      const destinations = new Set();
+      for (const node of nodes) {
+        if (!node.destination) { assert.equal(node.roundIndex, Math.log2(size)); continue; }
+        const target = nodes.find((item) => item.key === node.destination.key);
+        assert.equal(target.roundIndex, node.roundIndex + 1);
+        assert.equal(target.sides[node.destination.slot-1].source, node.key);
+        assert.ok(!destinations.has(`${target.key}:${node.destination.slot}`));
+        destinations.add(`${target.key}:${node.destination.slot}`);
+      }
+      assert.deepEqual(nodes.flatMap((node) => node.sides.map((side) => side.teamId)).filter(Boolean).sort(), teams.sort());
+      const available = new Set<string>();
+      for (const node of nodes) {
+        node.sides.forEach((side) => { if (side.source) assert.ok(available.has(side.source)); });
+        available.add(node.key);
+      }
+      assert.equal(nodes.at(-1).round, 'Final');
+    }
+  });
+
+  await test('five-team legacy bracket is completed without replacing its match or schedule', async () => {
+    const teams = ['A', 'B', 'C', 'D', 'E'].map((name) => ({ id: `t${name}`, name, status: 'approved' }));
+    const first = { id: 'legacy', competitionId: 'c1', team1Id: 'tD', team2Id: 'tE', team1Name: 'D', team2Name: 'E', round: 'Quarterfinal', status: 'scheduled', scheduledAt: new Date('2026-02-10T10:00:00Z') };
+    const competition = { id: 'c1', name: 'Cup', type: 'tournament', format: 'Single Elimination', status: 'active', createdBy: 'organizer', startDate: new Date('2026-02-01'), endDate: new Date('2026-02-28') };
+    const { service, matches } = makeService({ teams, matches: [first], competition });
+    const result = await service.completeBracket('c1', 'organizer');
+    assert.equal(result.created, 6);
+    assert.equal(matches.length, 7);
+    assert.equal(+new Date(matches.find((m) => m.id === 'legacy').scheduledAt), +first.scheduledAt);
+    assert.equal(matches.filter((m) => m.round === 'Semifinal').length, 2);
+    assert.equal(matches.filter((m) => m.status === 'bye').length, 3);
+    matches.filter((m) => m.status === 'bye').forEach((m) => { assert.equal(m.scheduledAt, null); assert.equal(m.score, null); assert.ok(m.winnerId); });
+    const ids = matches.map((m) => m.id);
+    const snapshot = JSON.stringify(matches);
+    assert.equal((await service.completeBracket('c1', 'organizer')).created, 0);
+    assert.deepEqual(matches.map((m) => m.id), ids);
+    assert.equal(JSON.stringify(matches), snapshot, 'repeat completion must preserve team orientation, feeder links, byes, and dates');
+    await expectThrow(() => service.recordResult(matches.find((m) => m.round === 'Final').id, 'tA', 'A', '2-0', 'organizer'), BadRequestException, 'Both participating');
+    await service.recordResult('legacy', matches.find(m => m.id === 'legacy').team1Id, matches.find(m => m.id === 'legacy').team1Name, '15-1', 'organizer');
+    assert.equal(competition.status, 'active', 'quarterfinal must not end the tournament');
+    const semis = matches.filter((m) => m.round === 'Semifinal');
+    assert.ok(semis.some((m) => m.team2Id === 'tD'));
+    for (const semi of semis) await service.recordResult(semi.id, semi.team1Id, semi.team1Name, '15-1', 'organizer');
+    assert.equal(competition.status, 'active', 'semifinals must not end the tournament');
+    const final = matches.find((m) => m.round === 'Final');
+    assert.ok(final.team1Id && final.team2Id);
+    await service.recordResult(final.id, final.team1Id, final.team1Name, '15-1', 'organizer');
+    assert.equal(competition.status, 'completed');
+    assert.equal(matches.length, 7, 'progression fills existing slots without creating duplicates');
+  });
+
+  await test('ambiguous legacy brackets are rejected without changing fixtures', async () => {
+    const original = { id: 'old', competitionId: 'c1', team1Id: 'tA', team2Id: 'tB', round: 'Quarterfinal', status: 'scheduled' };
+    const competition = { id: 'c1', type: 'tournament', format: 'Single Elimination', createdBy: 'organizer', startDate: new Date('2026-02-01'), endDate: new Date('2026-02-28') };
+    const { service, matches } = makeService({ competition, matches: [original] });
+    await expectThrow(() => service.completeBracket('c1', 'organizer'), BadRequestException, 'No fixtures were changed');
+    assert.deepEqual(matches, [original]);
+  });
+
+  await test('rescheduling accepts serialized dates and rejects all overlaps, invalid dates, and window overflow', async () => {
+    const a = { id: 'a', competitionId: 'c1', team1Id: 'tA', team2Id: 'tB', status: 'scheduled', scheduledAt: new Date('2026-02-10T10:00:00Z'), durationMinutes: 90 };
+    const b = { id: 'b', competitionId: 'c1', team1Id: 'tC', team2Id: 'tD', status: 'scheduled', scheduledAt: new Date('2026-02-10T14:00:00Z'), durationMinutes: 60 };
+    const { service } = makeService({ matches: [a, b] });
+    await expectThrow(() => service.updateSchedule('b', { scheduledAt: '2026-02-10T11:00:00Z' as any }, 'organizer'), BadRequestException, 'Overlapping match');
+    await expectThrow(() => service.updateSchedule('b', { scheduledAt: 'invalid' as any }, 'organizer'), BadRequestException, 'valid match date');
+    await expectThrow(() => service.updateSchedule('b', { scheduledAt: '2026-02-27T23:30:00Z' as any }, 'organizer'), BadRequestException, 'finish before');
+    const saved = await service.updateSchedule('b', { scheduledAt: '2026-02-10T11:30:00Z' as any }, 'organizer');
+    assert.equal(new Date(saved.scheduledAt).toISOString(), '2026-02-10T11:30:00.000Z');
+  });
+
+  await test('a feeder match cannot move after its dependent round even without an overlap', async () => {
+    const first = { id: 'first', competitionId: 'c1', status: 'scheduled', scheduledAt: new Date('2026-02-10T10:00:00Z'), bracket: { key: 'r1-m1' } };
+    const final = { id: 'final', competitionId: 'c1', status: 'scheduled', scheduledAt: new Date('2026-02-10T12:00:00Z'), bracket: { key: 'r2-m1', source1: 'first' } };
+    const { service } = makeService({ matches: [first, final] });
+    await expectThrow(() => service.updateSchedule('first', { scheduledAt: new Date('2026-02-11T10:00:00Z') }, 'organizer'), BadRequestException, 'finish before the next');
+    await expectThrow(() => service.updateSchedule('final', { scheduledAt: new Date('2026-02-09T10:00:00Z') }, 'organizer'), BadRequestException, 'after its feeder');
+  });
+
+  await test('organizers with participant roles can edit their matches; unrelated users cannot', async () => {
+    const { service } = makeService({ matches: [{ id: 'm', competitionId: 'c1', status: 'scheduled' }] });
+    const controller = new MatchesController(service);
+    assert.equal(Reflect.getMetadata(ROLES_KEY, MatchesController.prototype.recordResult), undefined);
+    assert.equal(Reflect.getMetadata(ROLES_KEY, MatchesController.prototype.update), undefined);
+    await service.assertOrganizer('c1', 'organizer', 'participant');
+    await expectThrow(() => controller.update('m', { scheduledAt: '2026-02-10T10:00:00Z' }, { user: { username: 'stranger', role: 'team_lead' } }), ForbiddenException, 'Only an organizer');
+  });
+
+  await test('completed draws are immutable and a winner must agree with the score', async () => {
+    const draw = { id: 'draw', competitionId: 'c1', team1Id: 'tA', team2Id: 'tB', team1Name: 'A', team2Name: 'B', status: 'completed', score: '1-1' };
+    const pending = { ...draw, id: 'pending', status: 'scheduled' };
+    const { service } = makeService({ matches: [draw, pending] });
+    await expectThrow(() => service.recordResult('draw', '', '', '2-2', 'organizer'), BadRequestException, 'Duplicate submissions');
+    await expectThrow(() => service.updateSchedule('draw', { scheduledAt: new Date('2026-02-10') }, 'organizer'), ForbiddenException, 'cannot be modified');
+    await expectThrow(() => service.recordResult('pending', 'tA', 'A', '0-2', 'organizer'), BadRequestException, 'Winner must match');
+    await expectThrow(() => service.recordResult('pending', 'tA', 'A', '-1-0', 'organizer'), BadRequestException, 'non-negative');
+  });
 
   await test('manual scheduling rejects out-of-window and overlapping matches', async () => {
     const existing = [{
@@ -1205,29 +1343,109 @@ async function matchServiceTests() {
     await expectThrow(() => knockout.service.recordResult('m2', '', '', '1-1', 'organizer'), BadRequestException, 'require a winner');
   });
 
-  await test('elimination winner advances to the next bracket round only after both results', async () => {
-    const m1 = { id: 'm1', competitionId: 'c1', team1Id: 'tA', team2Id: 'tB', team1Name: 'A', team2Name: 'B', status: 'scheduled', round: 'Round 1' };
-    const m2 = { id: 'm2', competitionId: 'c1', team1Id: 'tC', team2Id: 'tD', team1Name: 'C', team2Name: 'D', status: 'completed', winnerId: 'tC', winnerName: 'C', score: '2-0', round: 'Round 1' };
-    const competition = {
-      id: 'c1', name: 'Knockout', type: 'tournament', format: 'Single Elimination', status: 'active',
-      startDate: new Date('2026-02-01T00:00:00Z'), endDate: new Date('2026-02-28T00:00:00Z'),
-    };
-    const { service, matches } = makeService({ competition, matches: [m1, m2] });
-    await service.recordResult('m1', 'tA', 'A', '2-1', 'organizer');
-    const next = matches.find((m) => m.round === 'Semifinal');
-    assert.ok(next, 'expected a Semifinal fixture to be created');
-    assert.deepEqual([next.team1Name, next.team2Name].sort(), ['A', 'C']);
+  await test('16 and 14 team tournaments persist every destination, wait for both teams, and crown only the final winner', async () => {
+    for (const count of [3, 14, 16, 17]) {
+      const teams = Array.from({ length: count }, (_, i) => ({ id: `t${i+1}`, name: `Team ${i+1}`, status: 'approved' }));
+      const competition = { id: 'c1', name: 'Tournament', type: 'tournament', format: 'Single Elimination', status: 'active', createdBy: 'organizer', startDate: new Date('2026-02-01'), endDate: new Date('2026-02-28') };
+      const { service, matches } = makeService({ teams, competition });
+      await service.generateSchedule('c1', 'organizer');
+      const size = 2 ** Math.ceil(Math.log2(count));
+      assert.equal(matches.length, size-1);
+      assert.equal(matches.filter((m) => m.status === 'bye').length, size-count);
+      if (count === 16 || count === 14) assert.deepEqual([1,2,3,4].map((round) => matches.filter((m) => m.bracket.round === round).length), [8,4,2,1]);
+      const pending = matches.find((m) => m.status === 'pending');
+      await expectThrow(() => service.recordResult(pending.id, '', '', '10-0', 'organizer'), BadRequestException, 'Both participating');
+      let played = 0;
+      while (matches.some((m) => m.status === 'ready')) {
+        const current = matches.find((m) => m.status === 'ready');
+        const strongerSide = current.bracket.slots[0].seed < current.bracket.slots[1].seed ? 1 : 2;
+        const round = { team1: strongerSide === 1 ? 10 : 0, team2: strongerSide === 2 ? 10 : 0 };
+        await service.recordResult(current.id, current[`team${strongerSide}Id`], current[`team${strongerSide}Name`], `${round.team1}-${round.team2}`, 'organizer');
+        played++;
+        if (current.bracket.nextMatchId) {
+          const target = matches.find((m) => m.id === current.bracket.nextMatchId);
+          assert.equal(target.bracket.slots[current.bracket.nextSlot-1].teamId, current.winnerId);
+          assert.equal(target.status, target.team1Id && target.team2Id ? 'ready' : 'pending');
+          assert.equal(competition.status, 'active');
+        }
+      }
+      assert.equal(played, count-1);
+      assert.equal(matches.length, size-1);
+      const final = matches.find((m) => !m.bracket.nextMatchId);
+      assert.equal(final.winnerId, 't1');
+      assert.deepEqual([final.team1Id,final.team2Id].sort(), ['t1','t2']);
+      assert.equal(competition.status, 'completed');
+    }
   });
 
-  await test('final verified result declares the tournament winner', async () => {
-    const final = { id: 'mF', competitionId: 'c1', team1Id: 'tA', team2Id: 'tB', team1Name: 'A', team2Name: 'B', status: 'scheduled', round: 'Final' };
-    const competition = {
-      id: 'c1', name: 'Knockout', type: 'tournament', format: 'Single Elimination', status: 'active',
-      startDate: new Date('2026-02-01T00:00:00Z'), endDate: new Date('2026-02-28T00:00:00Z'),
-    };
-    const { service } = makeService({ competition, matches: [final] });
-    await service.recordResult('mF', 'tA', 'A', '3-1', 'organizer');
+  await test('a 20-15 final score completes an existing match without question rounds', async () => {
+    const competition = { id: 'c1', name: 'Tournament', type: 'tournament', format: 'Single Elimination', status: 'active', createdBy: 'organizer', startDate: new Date('2026-02-01'), endDate: new Date('2026-02-28') };
+    const { service, matches } = makeService({ competition, teams: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }] });
+    await service.completeBracket('c1', 'organizer');
+    const match = matches[0];
+    match.resultRule = 'obsolete-scoring-rule';
+    await service.recordResult(match.id, match.team1Id, match.team1Name, '20-15', 'organizer');
+    assert.equal(match.score, '20-15');
+    assert.equal(match.status, 'completed');
+    assert.equal(match.winnerId, match.team1Id);
+    assert.equal(match.resultDetails, null);
     assert.equal(competition.status, 'completed');
+  });
+
+  await test('single final scores support legacy fixtures and host-decided knockout ties', async () => {
+    const competition = { id: 'c1', name: 'Tournament', type: 'tournament', format: 'Single Elimination', status: 'active', createdBy: 'organizer', startDate: new Date('2026-02-01'), endDate: new Date('2026-02-28') };
+    const {service, matches} = makeService({competition, teams: [{id:'a', name:'A'}, {id:'b',name:'B'}]});
+    await service.completeBracket('c1','organizer');
+    const match = matches[0];
+    match.resultRule = 'obsolete-scoring-rule';
+    await expectThrow(() => service.recordResult(match.id, 'b', 'B', '10-0', 'organizer'), BadRequestException, 'Winner must match');
+    await expectThrow(() => service.recordResult(match.id, 'other', 'B', '10-10', 'organizer'), BadRequestException, 'participating team');
+    await service.recordResult(match.id, 'b', 'B', '10-10', 'organizer');
+    assert.equal(match.winnerId, 'b');
+    assert.equal(match.score, '10-10');
+    assert.equal(match.resultRule, 'standard');
+    assert.equal(match.resultDetails.rounds, undefined);
+    assert.equal(match.resultDetails.hostWinnerId, 'b');
+    assert.equal(matches.length, 1, 'a tied match never adds another question or fixture');
+    assert.equal(competition.status, 'completed');
+  });
+
+  await test('custom seeding must be a permutation, persists on reload, and locks after play starts', async () => {
+    const competition = { id: 'c1', name: 'Tournament', type: 'tournament', format: 'Single Elimination', status: 'active', createdBy: 'organizer', startDate: new Date('2026-02-01'), endDate: new Date('2026-02-28') };
+    const {service, matches} = makeService({competition});
+    await expectThrow(() => service.completeBracket('c1','organizer','',['tA','tA','tC','tD']), BadRequestException, 'exactly once');
+    const seeds=['tD','tC','tB','tA'];
+    await service.completeBracket('c1','organizer','',seeds);
+    const first = matches.find((m) => m.bracket.round===1 && m.bracket.position===1);
+    assert.equal(first.team1Id,'tD'); assert.equal(first.team2Id,'tA');
+    await service.completeBracket('c1','organizer');
+    assert.equal(matches.find((m)=>m.id===first.id).team1Id,'tD');
+    await service.recordResult(first.id,first.team1Id,first.team1Name,'3-0','organizer');
+    await expectThrow(() => service.completeBracket('c1','organizer','',['tA','tB','tC','tD']), BadRequestException, 'cannot be reseeded');
+  });
+
+  await test('registering another team spontaneously expands an unstarted bracket and appends its seed', async () => {
+    const teams = ['A', 'B', 'C', 'D'].map((name) => ({ id: `t${name}`, name, status: 'approved' }));
+    const competition = { id: 'c1', name: 'Cup', type: 'tournament', format: 'Single Elimination', status: 'active', createdBy: 'organizer', startDate: new Date('2026-02-01'), endDate: new Date('2026-02-28') };
+    const { service, matches } = makeService({ teams, competition });
+    await service.completeBracket('c1', 'organizer', '', ['tC', 'tA', 'tD', 'tB']);
+    teams.push({ id: 'tE', name: 'E', status: 'approved' });
+    const result = await service.syncRosterAfterRegistration('c1');
+    assert.equal(result.rebuilt, true);
+    assert.equal(matches.length, 7);
+    const seeds = matches.filter((match) => match.bracket.round === 1).flatMap((match) => match.bracket.slots)
+      .filter((slot) => slot.teamId).sort((a, b) => a.seed - b.seed).map((slot) => slot.teamId);
+    assert.deepEqual(seeds, ['tC', 'tA', 'tD', 'tB', 'tE']);
+    assert.equal(matches.filter((match) => match.status === 'bye').length, 3);
+    assert.equal(matches.filter((match) => match.status !== 'bye').length, 4);
+  });
+
+  await test('roster sync is inert before a bracket exists and rejects a started bracket', async () => {
+    const competition = { id: 'c1', name: 'Cup', type: 'tournament', format: 'Single Elimination', status: 'active', createdBy: 'organizer', startDate: new Date('2026-02-01'), endDate: new Date('2026-02-28') };
+    const empty = makeService({ competition });
+    assert.deepEqual(await empty.service.syncRosterAfterRegistration('c1'), { rebuilt: false, created: 0 });
+    const started = makeService({ competition, matches: [{ id: 'm1', competitionId: 'c1', status: 'completed' }] });
+    await expectThrow(() => started.service.syncRosterAfterRegistration('c1'), BadRequestException, 'already started');
   });
 
   await test('schedule regeneration never touches completed results and avoids duplicates', async () => {

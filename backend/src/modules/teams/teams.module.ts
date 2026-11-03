@@ -1,4 +1,4 @@
-import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { TeamsService } from './teams.service';
 import { TeamsController } from './teams.controller';
@@ -14,6 +14,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { CompetitionsModule } from '../competitions/competitions.module';
 import { AuthModule } from '../auth/auth.module';
 import { AuditModule } from '../../common/audit/audit.module';
+import { MatchesModule } from '../matches/matches.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { AuditModule } from '../../common/audit/audit.module';
     CompetitionsModule, // exports CompetitionRepository
     AuthModule,         // exports UserRepository
     AuditModule,
+    forwardRef(() => MatchesModule),
   ],
   controllers: [TeamsController],
   providers: [TeamsService, TeamRepository],

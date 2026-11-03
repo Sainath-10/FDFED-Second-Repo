@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Inject, Optional, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TeamRepository } from './repositories/team.repository';
@@ -11,6 +11,7 @@ import { RevenueTransactionEntity } from '../../entities/revenue-transaction.ent
 import { CreateTeamDto, UpdateTeamDto, AddTeamMemberDto } from './dto/team.dto';
 import { ITeam, UserRole } from '../../common/interfaces';
 import { isCompetitionStarted } from '../../common/validation/competition.rules';
+import { MatchesService } from '../matches/matches.service';
 
 @Injectable()
 export class TeamsService {
@@ -24,6 +25,8 @@ export class TeamsService {
     private refundRepo: Repository<RefundRequestEntity>,
     @InjectRepository(RevenueTransactionEntity)
     private revenueRepo: Repository<RevenueTransactionEntity>,
+    @Optional() @Inject(forwardRef(() => MatchesService))
+    private matchesService?: MatchesService,
   ) {}
 
   async verifyTeamOwnership(teamId: string, user: any): Promise<ITeam> {
@@ -90,6 +93,10 @@ export class TeamsService {
     if (competition.approvalStatus && competition.approvalStatus !== 'approved') {
       throw new ForbiddenException('This competition is not accepting team registrations.');
     }
+    if (isCompetitionStarted(competition)) {
+      throw new ForbiddenException('Team registration is closed because the competition has started.');
+    }
+    await this.matchesService?.assertRosterCanChange(competitionId);
 
     // §2.4 — private competitions require a valid join code; public never do
     if (competition.visibility === 'private') {
@@ -151,6 +158,10 @@ export class TeamsService {
         meta: { compId: competitionId, teamId: (team as any).id },
       }).catch(() => {});
     });
+
+    // Once a bracket exists, registration is the source of truth for rebuilding
+    // it. Preserve the existing seeds and append this team as the next seed.
+    await this.matchesService?.syncRosterAfterRegistration(competitionId);
 
     return team;
   }

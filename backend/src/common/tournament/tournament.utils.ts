@@ -179,29 +179,32 @@ export function scheduleFixtures(
  */
 export function findScheduleConflicts(
   proposed: { team1Id?: string; team2Id?: string; scheduledAt?: Date; competitionId?: string; matchId?: string },
-  existingMatches: { id: string; competitionId: string; team1Id?: string; team2Id?: string; status: string; scheduledAt?: Date | null }[],
+  existingMatches: { id: string; competitionId: string; team1Id?: string; team2Id?: string; status: string; scheduledAt?: Date | null; durationMinutes?: number }[],
   window: { start: Date; end: Date },
   matchDurationMinutes: number,
 ): string[] {
   const conflicts: string[] = [];
   const at = proposed.scheduledAt?.getTime();
+  if (!Number.isFinite(at)) return ['A valid match date and time is required.'];
   if (at !== undefined && at !== null) {
     if (at < window.start.getTime()) conflicts.push('Match cannot be scheduled before the competition start date.');
     if (at > window.end.getTime()) conflicts.push('Match cannot be scheduled after the competition end date.');
     if (conflicts.length) return conflicts;
     const end = at + matchDurationMinutes * 60_000;
+    if (end > window.end.getTime()) return ['Match must finish before the competition end date.'];
     existingMatches.forEach((m) => {
       if (proposed.matchId && m.id === proposed.matchId) return;
       if (proposed.competitionId && m.competitionId !== proposed.competitionId) return;
       if (!m.scheduledAt) return;
+      if (m.status === 'cancelled') return;
       const mStart = new Date(m.scheduledAt).getTime();
-      const mEnd = mStart + matchDurationMinutes * 60_000;
+      const mEnd = mStart + (m.durationMinutes || matchDurationMinutes) * 60_000;
       const overlaps = mStart < end && at < mEnd;
       if (!overlaps) return;
       const sameTeam =
         (proposed.team1Id && (proposed.team1Id === m.team1Id || proposed.team1Id === m.team2Id)) ||
         (proposed.team2Id && (proposed.team2Id === m.team1Id || proposed.team2Id === m.team2Id));
-      if (sameTeam) conflicts.push(`Overlapping match for the same team: ${m.id} (${m.status}).`);
+      conflicts.push(`Overlapping match${sameTeam ? ' for the same team' : ''}: ${m.id}. Choose a time after it finishes or before it starts.`);
     });
   }
   return conflicts;

@@ -26,14 +26,10 @@ import JoinRequests from './team/JoinRequests.jsx';
 import TeamSettings from './team/TeamSettings.jsx';
 import Profile from './Profile.jsx';
 import MyActivity from './MyActivity.jsx';
-import CompStandings from './CompStandings.jsx';
 import CompReports from './CompReports.jsx';
 import CompManageTeams from './CompManageTeams.jsx';
-import CompManageMatches from './CompManageMatches.jsx';
-import CompMatchResults from './CompMatchResults.jsx';
-import CompDisputeReview from './CompDisputeReview.jsx';
+import FixtureRedirect from './FixtureRedirect.jsx';
 import CompParticipant from './CompParticipant.jsx';
-import CompManageOrganizers from './CompManageOrganizers.jsx';
 import OrganizerRevenue from './OrganizerRevenue.jsx';
 import CreateCompetition from './CreateCompetition.jsx';
 import EditCompetition from './EditCompetition.jsx';
@@ -87,15 +83,15 @@ export const PAGE_COMPONENTS = {
   '/pages/submit-report.html': SubmitReport,
   '/pages/dispute-escalation.html': DisputeEscalation,
   '/pages/comp-participant.html': CompParticipant,
-  '/pages/comp-manage-organizers.html': CompManageOrganizers,
+  '/pages/comp-manage-organizers.html': FixtureRedirect,
   '/pages/organizer-revenue.html': OrganizerRevenue,
   '/pages/comp-manage-teams.html': CompManageTeams,
-  '/pages/comp-manage-matches.html': CompManageMatches,
-  '/pages/comp-match-results.html': CompMatchResults,
-  '/pages/comp-dispute-review.html': CompDisputeReview,
+  '/pages/comp-manage-matches.html': FixtureRedirect,
+  '/pages/comp-match-results.html': FixtureRedirect,
+  '/pages/comp-dispute-review.html': FixtureRedirect,
   '/pages/profile.html': Profile,
   '/pages/my-activity.html': MyActivity,
-  '/pages/comp-standings.html': CompStandings,
+  '/pages/comp-standings.html': FixtureRedirect,
   '/pages/comp-reports.html': CompReports,
   '/pages/comp-info.html': CompInfo,
   '/pages/competition-detail.html': CompetitionDetail,

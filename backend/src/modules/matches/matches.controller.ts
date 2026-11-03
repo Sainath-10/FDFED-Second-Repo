@@ -5,6 +5,17 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/decorators/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../common/interfaces';
+import { IsISO8601, IsOptional, IsString, MaxLength } from 'class-validator';
+
+export class RescheduleMatchDto {
+  @IsISO8601()
+  scheduledAt: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  notes?: string;
+}
 
 @Controller('matches')
 @ApiTags('Matches')
@@ -56,7 +67,7 @@ export class MatchesController {
   @ApiOperation({ summary: 'Generate fixtures for the selected tournament format (§8). Safe regeneration: requires confirmOverlap=true when scheduled matches would change.' })
   async generateSchedule(
     @Param('competitionId') competitionId: string,
-    @Body() body: { confirmOverlap?: boolean; matchDurationMinutes?: number; intervalMinutes?: number },
+    @Body() body: { confirmOverlap?: boolean; matchDurationMinutes?: number; intervalMinutes?: number; seedOrder?: string[] },
     @Request() req?: any,
   ) {
     return this.service.generateSchedule(
@@ -67,6 +78,13 @@ export class MatchesController {
     );
   }
 
+  @Post('competition/:competitionId/complete-bracket')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  async completeBracket(@Param('competitionId') competitionId: string, @Request() req: any, @Body() body?: { seedOrder?: string[] }) {
+    return this.service.completeBracket(competitionId, req.user.username, req.user.role, body?.seedOrder);
+  }
+
   @Get('competition/:competitionId/standings')
   @ApiOperation({ summary: 'League standings computed from verified completed matches only (§10)' })
   async getStandings(@Param('competitionId') competitionId: string) {
@@ -74,17 +92,17 @@ export class MatchesController {
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.TEAM_LEAD, UserRole.COMP_ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a match (Organizers / Admins only)' })
-  async update(@Param('id') id: string, @Body() body: any, @Request() req?: any) {
-    return this.service.updateSchedule(id, body, req?.user?.username || 'system');
+  async update(@Param('id') id: string, @Body() body: RescheduleMatchDto, @Request() req?: any) {
+    const match = await this.service.findById(id);
+    await this.service.assertOrganizer(match.competitionId, req.user.username, req.user.role);
+    return this.service.updateSchedule(id, { ...body, scheduledAt: new Date(body.scheduledAt) }, req.user.username);
   }
 
   @Patch(':id/result')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.TEAM_LEAD, UserRole.COMP_ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Record match result (Organizers / Admins only)' })
   async recordResult(
@@ -92,6 +110,8 @@ export class MatchesController {
     @Body() body: { winnerId: string; winnerName: string; score: string },
     @Request() req?: any,
   ) {
+    const match = await this.service.findById(id);
+    await this.service.assertOrganizer(match.competitionId, req.user.username, req.user.role);
     return this.service.recordResult(id, body.winnerId, body.winnerName, body.score, req?.user?.username || 'system');
   }
 

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { MatchesService } from './matches.service';
 import { MatchesController } from './matches.controller';
@@ -12,7 +12,7 @@ import { AuditModule } from '../../common/audit/audit.module';
   imports: [
     TypeOrmModule.forFeature([MatchEntity]),
     CompetitionsModule, // exports CompetitionRepository
-    TeamsModule,        // exports TeamRepository
+    forwardRef(() => TeamsModule), // exports TeamRepository; team registration triggers bracket sync
     NotificationsModule,
     AuditModule,
   ],
