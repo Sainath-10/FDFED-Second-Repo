@@ -9,6 +9,7 @@ import { MatchResultDetails } from '../common/tournament/match-rules';
 
 export type StoredParticipantSlot = { teamId: string | null; seed: number | null; sourceMatchId?: string; bye?: boolean };
 export type StoredBracket = {
+  kind?: 'ipl'; loserMatchId?: string; loserSlot?: 1 | 2;
   key: string; version?: number; round?: number; position?: number; bracketSize?: number; roundCount?: number;
   slots?: [StoredParticipantSlot, StoredParticipantSlot];
   nextMatchId?: string | null; nextSlot?: 1 | 2 | null;

@@ -40,11 +40,8 @@ export class TeamsService {
     }
     const currentUsername = (user.username || user.id || '').toLowerCase();
     const leaderId = (team.leaderId || '').toLowerCase();
-    const createdBy = (team.createdBy || '').toLowerCase();
-    const leaderUsername = ((team as any).leaderUsername || '').toLowerCase();
-
-    if (currentUsername !== leaderId && currentUsername !== createdBy && currentUsername !== leaderUsername) {
-      throw new ForbiddenException('Only the team captain or an administrator can manage this team');
+    if (['rejected', 'banned', 'disbanded'].includes(team.status) || currentUsername !== leaderId || !(team.memberUsernames || []).some(name => name.toLowerCase() === currentUsername)) {
+      throw new ForbiddenException('Only the current team captain or an administrator can manage this team');
     }
     return team;
   }

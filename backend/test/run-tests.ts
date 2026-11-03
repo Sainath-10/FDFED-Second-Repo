@@ -513,6 +513,19 @@ async function competitionServiceTests() {
     assert.equal(ok.ok, true);
   });
 
+  await test('competition banners persist and can be removed by the organizer only', async () => {
+    const comp: any = {id:'c1',name:'Cup',createdBy:'alice',organizers:['alice'],status:'upcoming',startDate:future,endDate:new Date(+future+86400000)};
+    const service = makeService(comp);
+    const img = 'data:image/png;base64,iVBORw0KGgo=';
+    await service.updateCompetition('c1',{img},'alice','team_lead');
+    assert.equal(comp.img,img);
+    await expectThrow(() => service.updateCompetition('c1',{img:''},'bob','participant'), ForbiddenException);
+    await expectThrow(() => service.updateCompetition('c1',{img:'data:text/html;base64,abcd'},'alice','team_lead'), BadRequestException, 'PNG or JPEG');
+    assert.equal(comp.img,img);
+    await service.updateCompetition('c1',{img:''},'alice','team_lead');
+    assert.equal(comp.img,'');
+  });
+
   await test('registration-closed competitions lock name/game/type/description', async () => {
     const comp = {
       id: 'c1', name: 'Locked Cup', description: 'Original description', game: 'Valorant', type: 'league',
@@ -971,6 +984,18 @@ async function teamServiceTests() {
     assert.ok(!team.memberUsernames.includes('carol'));
   });
 
+  await test('removed members and former captains cannot edit through historical ownership', async () => {
+    const { service, team } = makeService();
+    await expectThrow(() => service.updateTeam('t1',{name:'Changed'},{username:'bob'}), ForbiddenException);
+    team.memberUsernames = ['bob'];
+    await expectThrow(() => service.updateTeam('t1',{name:'Changed'},{username:'alice'}), ForbiddenException);
+    team.leaderId = 'bob';
+    await expectThrow(() => service.updateTeam('t1',{name:'Changed'},{username:'alice'}), ForbiddenException);
+    team.status = 'banned';
+    await expectThrow(() => service.updateTeam('t1',{name:'Changed'},{username:'bob'}), ForbiddenException);
+    assert.equal(team.name,'Alpha');
+  });
+
   await test('a removed player is told the reason', async () => {
     const sent: any[] = [];
     const original = notifications.create;
@@ -1179,6 +1204,60 @@ async function matchServiceTests() {
       repo,
     };
   }
+
+  await test('IPL playoffs advance the Q1 loser, freeze standings and finish only at the Final', async () => {
+    for (const first of ['Qualifier 1', 'Eliminator']) {
+      const {service, matches, competition} = makeService();
+      await service.generateSchedule('c1', 'organizer');
+      const league = [...matches];
+      const finish = (m: any) => service.recordResult(m.id, m.team1Id, m.team1Name, '20-15', 'organizer');
+      for (const m of league.slice(0, -1)) await finish(m);
+      assert.equal(matches.filter(m => m.bracket?.kind === 'ipl').length, 0);
+      await finish(league[league.length - 1]);
+      const standings = await service.getStandings('c1');
+      const stage = (label: string) => matches.find(m => m.round === label);
+      const q1 = stage('Qualifier 1'), e = stage('Eliminator'), q2 = stage('Qualifier 2'), final = stage('Final');
+      assert.deepEqual([q1.team1Name,q1.team2Name,e.team1Name,e.team2Name], standings.slice(0,4).map(r => r.team));
+      assert.equal(q2.status, 'pending'); assert.equal(q2.scheduledAt, null);
+      assert.equal(q2.team1Name, 'Loser of Qualifier 1');
+      await expectThrow(() => service.recordResult(q2.id, '', '', '20-15', 'organizer'), BadRequestException, 'Both participating');
+      await expectThrow(() => service.updateSchedule(q2.id, {scheduledAt: new Date('2026-02-20')}, 'organizer'), BadRequestException, 'prerequisites');
+      await expectThrow(() => service.recordResult(q1.id, '', '', '20-20', 'organizer'), BadRequestException, 'require a winner');
+      await finish(stage(first));
+      assert.equal(q2.status, 'pending'); assert.equal(final.status, 'pending');
+      await finish(stage(first === 'Qualifier 1' ? 'Eliminator' : 'Qualifier 1'));
+      assert.equal(q2.team1Id, q1.team2Id); assert.equal(q2.team2Id, e.winnerId);
+      assert.equal(q2.status, 'ready'); assert.ok(q2.scheduledAt);
+      assert.equal(final.team1Id, q1.winnerId); assert.equal(final.status, 'pending');
+      assert.equal(competition.status, 'active');
+      await finish(q2);
+      assert.equal(final.team2Id, q2.winnerId); assert.equal(final.status, 'ready');
+      await finish(final);
+      assert.equal(competition.status, 'completed');
+      assert.deepEqual(await service.getStandings('c1'), standings);
+      const ids = matches.map(m => m.id).sort();
+      await service.findByCompetition('c1'); await service.syncPlayoffs('c1');
+      assert.deepEqual(matches.map(m => m.id).sort(), ids);
+      assert.equal(matches.length, league.length + 4);
+      const scheduled = matches.filter(m => m.scheduledAt).sort((a,b) => +a.scheduledAt - +b.scheduledAt);
+      for (let i=1; i<scheduled.length; i++) assert.ok(+new Date(scheduled[i].scheduledAt) >= +new Date(scheduled[i-1].scheduledAt) + scheduled[i-1].durationMinutes * 60000);
+    }
+  });
+
+  await test('legacy name-only playoff fixtures are repaired without duplicates', async () => {
+    const {service, matches} = makeService();
+    await service.generateSchedule('c1', 'organizer');
+    for (const m of matches) Object.assign(m, {status:'completed', winnerId:m.team1Id, winnerName:m.team1Name, score:'20-15'});
+    matches.push({id:'legacy-q1',competitionId:'c1',round:'Qualifier 1',team1Name:'A',team2Name:'B',status:'scheduled'});
+    matches.push({id:'duplicate-q1',competitionId:'c1',round:'Qualifier 1',team1Name:'A',team2Name:'B',status:'scheduled'});
+    await service.findByCompetition('c1');
+    assert.equal(matches.filter(m => m.round === 'Qualifier 1').length, 1);
+    const q1 = matches.find(m => m.round === 'Qualifier 1');
+    assert.ok(q1.team1Id && q1.team2Id);
+    await service.recordResult(q1.id,q1.team1Id,q1.team1Name,'20-15','organizer');
+    assert.equal(q1.status,'completed');
+    assert.equal(matches.filter(m => m.bracket?.kind === 'ipl').length, 4);
+  });
 
   await test('complete brackets contain B-1 positions, separate top seeds, and award byes for 2 through 64 teams', () => {
     for (let count = 2; count <= 64; count++) {

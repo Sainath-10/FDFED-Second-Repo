@@ -386,6 +386,13 @@ export class CompetitionsService {
     }
 
     const updates: Partial<ICompetition> = {};
+    if (updateCompetitionDto.img !== undefined) {
+      const image = updateCompetitionDto.img;
+      if (typeof image !== 'string' || image.length > 7 * 1024 * 1024 || (image !== '' && !/^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(image))) {
+        throw new BadRequestException('Choose a PNG or JPEG banner up to 5 MB.');
+      }
+      (updates as any).img = image;
+    }
     if (updateCompetitionDto.name !== undefined) updates.name = updateCompetitionDto.name;
     if (updateCompetitionDto.description !== undefined) updates.description = updateCompetitionDto.description;
     if (updateCompetitionDto.game !== undefined) (updates as any).game = updateCompetitionDto.game;
