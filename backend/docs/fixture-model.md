@@ -27,3 +27,11 @@ Enter one final score per team. Match scoring is independent of bracket generati
 Existing unplayed fixtures accept this same result format regardless of their previous result rule. Previously recorded scores and history are preserved.
 
 Run `npm test` in backend and frontend, then `npm run build` in both. Backend migrations add the bracket metadata, reserved duration, result rule, and result details columns on startup.
+
+## Round-robin playoffs
+
+Once every league pairing is completed, the top four qualify by points, then wins, then team name for a deterministic tie-break. Playoff results never contribute to league standings. Competitions with fewer than four eligible teams do not create an IPL playoff bracket.
+
+The saved `bracket.kind = "ipl"` structure contains Qualifier 1 (ranks 1/2), Eliminator (ranks 3/4), Qualifier 2 (Q1 loser / Eliminator winner), and Final (Q1 winner / Q2 winner). Both winner and loser routes use stored match IDs. Dependent stages display placeholders and have no scheduled time until their prerequisites finish. Available times are reserved after existing matches without overlaps. If the competition date window is full, the ready match remains unscheduled until the organizer extends the window and chooses a time.
+
+The Fixtures section separates League stage and Playoffs. Recording a final score advances participants automatically, and only the playoff Final completes the competition. Reconciliation repairs old name-only playoff records and removes duplicate unplayed records without replacing verified results.

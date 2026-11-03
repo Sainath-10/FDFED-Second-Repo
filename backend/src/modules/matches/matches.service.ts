@@ -12,10 +12,12 @@ import {
   roundRobinFixtures,
   eliminationPairings,
   computeStandings,
-  iplPlayoffFixtures,
   scheduleFixtures,
   findScheduleConflicts,
 } from '../../common/tournament/tournament.utils';
+
+const PLAYOFF_ROUNDS = ['Qualifier 1', 'Eliminator', 'Qualifier 2', 'Final'];
+const isPlayoff = (match: MatchEntity) => match.bracket?.kind === 'ipl' || PLAYOFF_ROUNDS.includes(match.round);
 
 const DEFAULT_MATCH_DURATION_MINUTES = 60;   // §8.2 — configurable via env MATCH_DURATION_MINUTES
 const DEFAULT_INTERVAL_MINUTES = 30;         // configurable via env MATCH_INTERVAL_MINUTES
@@ -232,6 +234,7 @@ export class MatchesService {
   }
 
   async findByCompetition(competitionId: string): Promise<MatchEntity[]> {
+    await this.syncPlayoffs(competitionId);
     return this.repo.find({ where: { competitionId }, order: { scheduledAt: 'ASC' } });
   }
 
@@ -247,6 +250,7 @@ export class MatchesService {
    */
   async updateSchedule(id: string, updates: { scheduledAt?: Date; round?: string; notes?: string }, actor: string): Promise<MatchEntity> {
     const match = await this.findById(id);
+    if (match.bracket?.kind === 'ipl' && match.status === 'pending') throw new BadRequestException('Wait until playoff prerequisites are completed before scheduling this match.');
     if (!this.locked && this.repo.manager) return this.lockedWrite(match.competitionId, (service) => service.updateSchedule(id, updates, actor));
     if (match.status === 'bye' || match.status === 'completed' || match.status === 'ongoing' || (match as any).winnerId) {
       throw new ForbiddenException('Verified/completed results cannot be modified through scheduling.');
@@ -477,7 +481,12 @@ export class MatchesService {
 
     // §10 — draws are valid in league formats; knockout matches must have a winner.
     const competition = await this.competitionRepository.findById(match.competitionId);
-    const isLeague = competition ? this.resolveFormat(competition) !== 'elimination' : false;
+    const isLeague = competition ? this.resolveFormat(competition) !== 'elimination' && !isPlayoff(match) : false;
+    if (isPlayoff(match) && this.resolveFormat(competition) !== 'elimination') {
+      const all = await this.repo.find({ where: { competitionId: match.competitionId } });
+      const required = [match.bracket?.source1, match.bracket?.source2].filter(Boolean);
+      if (match.bracket?.kind !== 'ipl' || required.some(id => all.find(m => m.id === id)?.status !== 'completed')) throw new BadRequestException('Playoff prerequisites must be completed before entering results.');
+    }
     const noWinner = !String(winnerId || '').trim() && !String(winnerName || '').trim();
     if (noWinner && !isLeague) {
       throw new BadRequestException('Knockout matches require a winner; draws are only valid in league formats.');
@@ -496,7 +505,7 @@ export class MatchesService {
     }
     const side = Number(scores[1]) > Number(scores[2]) ? 1 : Number(scores[2]) > Number(scores[1]) ? 2 : 0;
     if ((!side && !noWinner && isLeague) || (side && (winnerId !== match[`team${side}Id`] || winnerName !== match[`team${side}Name`]))) throw new BadRequestException('Winner must match the submitted scores and participating team.');
-    if (!isLeague && match.bracket?.version !== 2) throw new BadRequestException('Generate the full seeded bracket before recording knockout results.');
+    if (!isLeague && match.bracket?.kind !== 'ipl' && match.bracket?.version !== 2) throw new BadRequestException('Generate the full seeded bracket before recording knockout results.');
 
     await this.repo.update(id, {
       winnerId: noWinner ? null : winnerId,
@@ -583,42 +592,68 @@ export class MatchesService {
       return;
     }
 
-    // League formats — generate playoffs when the league stage completes (§8.1/§10)
-    const teams = await this.teamRepository.findByCompetition(match.competitionId);
-    const eligible = teams.filter((t) => t.status !== 'rejected' && t.status !== 'banned' && t.status !== 'disbanned' && t.status !== 'disbanded');
-    const completed = await this.repo.find({ where: { competitionId: match.competitionId, status: 'completed' } });
-    const scheduledCount = await this.repo.count({ where: { competitionId: match.competitionId, status: 'scheduled' } });
-    const expectedLeague = roundRobinFixtures(eligible.map((t) => t.name)).length;
-    if (expectedLeague > 0 && completed.length < expectedLeague) return; // league not finished
+    await this.syncPlayoffs(match.competitionId);
+    if (isPlayoff(match) && match.round === 'Final') await finishTournament(match.winnerName);
+  }
 
-    const standings = computeStandings(eligible.map((t) => t.name), completed as any);
-    // Qualification default: top 4 (IPL-style); configurable with QUALIFIERS env
-    const qualifiers = Math.max(2, Math.min(4, parseInt(process.env.PLAYOFF_QUALIFIERS || '4', 10)));
-    const playoffFixtures = iplPlayoffFixtures(standings, qualifiers);
-    if (!playoffFixtures.length) return finishTournament(standings[0]?.team ?? null);
-
-    const existingTeams = new Set<string>(completed.map((m) => m.round || ''));
-    if (existingTeams.has('Qualifier 1')) return; // playoffs already generated
-
-    for (const f of playoffFixtures) {
-      const playoff = this.repo.create({
-        competitionId: match.competitionId,
-        team1Name: f.team1Id,
-        team2Name: f.team2Id,
-        status: 'scheduled',
-        round: f.roundLabel,
-        createdBy: actor,
-      });
-      const saved = await this.repo.save(playoff);
-      await this.notifyTeams(saved as any, '🏆 Playoffs Generated');
+  /** Reconcile legacy and current IPL fixtures under the same competition write lock. */
+  async syncPlayoffs(competitionId: string): Promise<void> {
+    const competition = await this.competitionRepository.findById(competitionId);
+    if (!competition || this.resolveFormat(competition) === 'elimination') return;
+    if (!this.locked && this.repo.manager) return this.lockedWrite(competitionId, service => service.syncPlayoffs(competitionId));
+    const all = await this.repo.find({ where: { competitionId } });
+    const teams = (await this.teamRepository.findByCompetition(competitionId)).filter(t => !['rejected', 'banned', 'disbanded'].includes(t.status));
+    const league = all.filter(m => !isPlayoff(m));
+    const expected = roundRobinFixtures(teams.map(t => t.id));
+    const pair = (a: string, b: string) => [a, b].sort().join('|');
+    const completedPairs = new Set(league.filter(m => m.status === 'completed').map(m => pair(m.team1Id, m.team2Id)));
+    if (teams.length < 4 || !expected.length || league.some(m => m.status !== 'completed') || expected.some(f => !completedPairs.has(pair(f.team1Id, f.team2Id)))) return;
+    const standings = computeStandings(teams.map(t => t.name), league);
+    const top = standings.slice(0, 4).map(row => teams.find(t => t.name === row.team));
+    const stages: MatchEntity[] = [];
+    for (const label of PLAYOFF_ROUNDS) {
+      const candidates = all.filter(m => isPlayoff(m) && m.round === label).sort((a,b) => Number(b.status === 'completed') - Number(a.status === 'completed') || a.id.localeCompare(b.id));
+      if (candidates.filter(m => m.status === 'completed').length > 1) throw new BadRequestException('Duplicate verified playoff results require organizer review.');
+      let match = candidates[0];
+      for (const duplicate of candidates.slice(1)) {
+        if (['live', 'ongoing'].includes(duplicate.status)) throw new BadRequestException('Duplicate live playoff fixtures require organizer review.');
+        await this.repo.delete(duplicate.id);
+        all.splice(all.findIndex(m => m.id === duplicate.id), 1);
+      }
+      if (!match) {
+        match = await this.repo.save(this.repo.create({ id: randomUUID(), competitionId, round: label, status: 'pending', durationMinutes: this.matchDurationMinutes(), createdBy: 'system', resultRule: 'standard' }));
+        all.push(match);
+      }
+      stages.push(match);
     }
-    await this.auditLog.record('PLAYOFFS_GENERATED', {
-      actor,
-      entityType: 'competition',
-      entityId: match.competitionId,
-      details: `IPL-style playoffs generated after the league stage (top ${qualifiers} of ${eligible.length} teams).`,
-      metadata: { scheduledRemaining: scheduledCount },
-    });
+    const [q1, eliminator, q2, final] = stages;
+    const winner = (m: MatchEntity) => m.status === 'completed' ? teams.find(t => t.id === m.winnerId || (!m.winnerId && t.name === m.winnerName)) : null;
+    const loser = (m: MatchEntity) => winner(m) ? teams.find(t => (t.id === m.team1Id || t.id === m.team2Id || (!m.team1Id && t.name === m.team1Name) || (!m.team2Id && t.name === m.team2Name)) && t.id !== winner(m).id) : null;
+    const participants = [[top[0], top[1]], [top[2], top[3]], [loser(q1), winner(eliminator)], [winner(q1), winner(q2)]];
+    const sources = [[], [], [q1.id, eliminator.id], [q1.id, q2.id]];
+    const placeholders = [[], [], ['Loser of Qualifier 1', 'Winner of Eliminator'], ['Winner of Qualifier 1', 'Winner of Qualifier 2']];
+    for (let i = 0; i < stages.length; i++) {
+      const match = stages[i];
+      const [a,b] = participants[i];
+      const ready = !!(a && b) && sources[i].every(id => stages.find(m => m.id === id)?.status === 'completed');
+      const bracket: MatchEntity['bracket'] = { kind: 'ipl', key: `ipl-${i}`, round: i < 2 ? 1 : i, position: i === 1 ? 2 : 1, source1: sources[i][0], source2: sources[i][1], nextMatchId: i === 0 || i === 2 ? final.id : i === 1 ? q2.id : null, nextSlot: i === 0 ? 1 : i === 3 ? null : 2, ...(i === 0 ? { loserMatchId: q2.id, loserSlot: 1 } : {}) };
+      if (['completed', 'live', 'ongoing'].includes(match.status)) {
+        // Upgrade legacy metadata without changing verified or in-progress matches.
+        if (JSON.stringify(match.bracket) !== JSON.stringify(bracket)) await this.repo.update(match.id, { bracket });
+        continue;
+      }
+      let scheduledAt = ready ? match.scheduledAt : null;
+      if (ready && !scheduledAt) {
+        const endOf = (m: MatchEntity) => m.scheduledAt ? +new Date(m.scheduledAt) + (m.durationMinutes || this.matchDurationMinutes()) * 60000 : 0;
+        const start = Math.max(+new Date(competition.startDate), ...all.filter(m => m.id !== match.id).map(endOf));
+        const proposed = new Date(start + this.intervalMinutes() * 60000);
+        // An exhausted date window leaves the ready fixture unscheduled for the organizer.
+        if (+proposed + (match.durationMinutes || this.matchDurationMinutes()) * 60000 <= +new Date(competition.endDate)) scheduledAt = proposed;
+      }
+      const update = { bracket, team1Id: a?.id || null, team2Id: b?.id || null, team1Name: a?.name || placeholders[i][0], team2Name: b?.name || placeholders[i][1], status: ready ? 'ready' : 'pending', scheduledAt };
+      if (Object.entries(update).some(([key, value]) => JSON.stringify(match[key]) !== JSON.stringify(value))) await this.repo.update(match.id, update);
+      Object.assign(match, update);
+    }
   }
 
   /** §10 — standings for a competition computed from verified completed matches only. */
@@ -628,12 +663,12 @@ export class MatchesService {
     const teams = await this.teamRepository.findByCompetition(competitionId);
     const eligible = teams.filter((t) => t.status !== 'rejected' && t.status !== 'banned' && t.status !== 'disbanded');
     const completed = await this.repo.find({ where: { competitionId, status: 'completed' } });
-    return computeStandings(eligible.map((t) => t.name), completed as any);
+    return computeStandings(eligible.map((t) => t.name), completed.filter(m => this.resolveFormat(competition) === 'elimination' || !isPlayoff(m)) as any);
   }
 
   async delete(id: string, actor: string): Promise<void> {
     const match = await this.findById(id);
-    if (match.bracket?.version === 2) throw new ForbiddenException('Individual bracket positions cannot be deleted.');
+    if (match.bracket?.version === 2 || match.bracket?.kind === 'ipl') throw new ForbiddenException('Individual bracket positions cannot be deleted.');
     if (match.status === 'completed') {
       throw new ForbiddenException('Completed/verified matches cannot be deleted — match history and results must be preserved.');
     }
