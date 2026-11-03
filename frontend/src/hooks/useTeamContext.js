@@ -73,6 +73,9 @@ export function useTeamContext() {
       && (serverTeam.memberUsernames || []).some(name => name.toLowerCase() === username);
   }, [ctx, serverTeam, teamId]);
 
+  const canChat = !!ctx?.session?.username && !!serverTeam && String(serverTeam.id) === String(ctx.team?.dbId || teamId) && !['rejected', 'banned', 'disbanded'].includes(serverTeam.status)
+    && (serverTeam.memberUsernames || []).some(name => name.toLowerCase() === ctx.session.username.toLowerCase());
+
   const isEnded = useMemo(() => {
     if (!ctx || !ctx.comp) return false;
     return !!(ctx.comp.ended || ctx.comp.status === 'completed');
@@ -80,7 +83,7 @@ export function useTeamContext() {
 
   const isStarted = useMemo(() => hasCompetitionStarted(ctx && ctx.comp), ctx ? [ctx.comp] : [ctx]);
 
-  return { ctx, refresh, canManage, checkingPermission, isEnded, isStarted };
+  return { ctx, refresh, canManage, canChat, checkingPermission, isEnded, isStarted };
 }
 
 export default useTeamContext;

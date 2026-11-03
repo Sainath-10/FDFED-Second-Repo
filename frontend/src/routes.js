@@ -67,6 +67,7 @@ export const PROTECTED_ROUTES = [
   route('/pages/create-team.html', 'Create team', 'participant'),
   route('/pages/join-teams.html', 'Join teams', 'participant'),
   route('/pages/team/team-roster.html', 'Team roster', 'participant'),
+  route('/pages/team/team-chat.html', 'Team chat', 'participant'),
   route('/pages/team/add-players.html', 'Add players', 'participant'),
   route('/pages/team/invite-player.html', 'Invite player', 'participant'),
   route('/pages/team/invitations-sent.html', 'Invitations sent', 'participant'),

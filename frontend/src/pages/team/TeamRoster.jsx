@@ -16,7 +16,7 @@ import { assetUrl } from '../../lib/assets.js';
 import '../../styles/pages/team/team-roster.css';
 
 export default function TeamRoster() {
-  const { ctx, refresh, canManage } = useTeamContext();
+  const { ctx, refresh, canManage, canChat } = useTeamContext();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -96,7 +96,7 @@ export default function TeamRoster() {
       <h1 className="page-title">{team.name}</h1>
       <p className="page-subtitle">{comp.game || 'Game'} - Captain: {captain}</p>
 
-      <TeamTabs active="roster" context={context} canManage={canManage} isEnded={isEnded} />
+      <TeamTabs active="roster" context={context} canManage={canManage} canChat={canChat} isEnded={isEnded} />
 
       {isEnded && (
         <div style={{ background: 'rgba(251,146,60,0.12)', border: '1px solid rgba(251,146,60,0.4)', color: '#fb923c', padding: '10px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700, textAlign: 'center', margin: '12px 0 16px', letterSpacing: '0.5px' }}>

@@ -27,7 +27,7 @@ const UPLOAD_SVG = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" 
 
 export default function TeamSettings() {
   const navigate = useNavigate();
-  const { ctx, checkingPermission, refresh, canManage: hookCanManage, isEnded: hookIsEnded, isStarted: hookIsStarted } = useTeamContext();
+  const { ctx, checkingPermission, canChat, refresh, canManage: hookCanManage, isEnded: hookIsEnded, isStarted: hookIsStarted } = useTeamContext();
   const [name, setName] = useState(() => (ctx && ctx.team ? ctx.team.name || '' : ''));
   const [tag, setTag] = useState(() => (ctx && ctx.team ? ctx.team.tag || '' : ''));
   const [logo, setLogo] = useState('shield');
@@ -122,7 +122,7 @@ export default function TeamSettings() {
       <h1 className="page-title">{team.name || 'Team Settings'}</h1>
       <p className="page-subtitle">Team settings and management options</p>
 
-      <TeamTabs active="settings" context={context} canManage={canManage} isEnded={isEnded} joinRequestCount={pendingRequests} />
+      <TeamTabs active="settings" context={context} canManage={canManage} canChat={canChat} isEnded={isEnded} joinRequestCount={pendingRequests} />
 
       <div className="settings-container-centered">
         <div className="design-card">

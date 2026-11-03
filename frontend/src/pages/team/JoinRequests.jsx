@@ -12,7 +12,7 @@ import { showToast } from '../../lib/toast.js';
 import '../../styles/pages/team/join-requests.css';
 
 export default function JoinRequests() {
-  const { ctx, checkingPermission, refresh, canManage: hookCanManage, isEnded: hookIsEnded } = useTeamContext();
+  const { ctx, checkingPermission, canChat, refresh, canManage: hookCanManage, isEnded: hookIsEnded } = useTeamContext();
 
   if (!ctx || !ctx.comp || !ctx.team) {
     return <main className="main-content"><h1 className="page-title">Team</h1></main>;
@@ -47,7 +47,7 @@ export default function JoinRequests() {
       <h1 className="page-title">{team.name}</h1>
       <p className="page-subtitle">Players who have requested to join your team</p>
 
-      <TeamTabs active="join-requests" context={context} canManage={canManage} isEnded={isEnded} joinRequestCount={pending.length} />
+      <TeamTabs active="join-requests" context={context} canManage={canManage} canChat={canChat} isEnded={isEnded} joinRequestCount={pending.length} />
 
       <div id="requests-list" className="requests-stack">
         {pending.length === 0 ? (

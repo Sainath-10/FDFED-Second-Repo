@@ -19,6 +19,7 @@ import Notifications from './Notifications.jsx';
 import CreateTeam from './CreateTeam.jsx';
 import JoinTeams from './JoinTeams.jsx';
 import TeamRoster from './team/TeamRoster.jsx';
+import TeamChat from './team/TeamChat.jsx';
 import AddPlayers from './team/AddPlayers.jsx';
 import InvitePlayer from './team/InvitePlayer.jsx';
 import InvitationsSent from './team/InvitationsSent.jsx';
@@ -99,6 +100,7 @@ export const PAGE_COMPONENTS = {
   '/pages/create-team.html': CreateTeam,
   '/pages/join-teams.html': JoinTeams,
   '/pages/team/team-roster.html': TeamRoster,
+  '/pages/team/team-chat.html': TeamChat,
   '/pages/team/add-players.html': AddPlayers,
   '/pages/team/invite-player.html': InvitePlayer,
   '/pages/team/invitations-sent.html': InvitationsSent,

@@ -264,6 +264,8 @@ export default function CompParticipant() {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></svg>
               Back
             </Link>
+            <Link className="hero-btn hero-btn-secondary" to={`/pages/comp-info.html?id=${encodeURIComponent(compId || '')}&tab=announcements`}>Announcements</Link>
+            <Link className="hero-btn hero-btn-secondary" to={`/pages/comp-info.html?id=${encodeURIComponent(compId || '')}&tab=general-chat`}>General chat</Link>
 
             {isLeague && (
               <button className="hero-btn hero-btn-secondary" onClick={() => document.getElementById('part-standings-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
@@ -495,5 +497,4 @@ export default function CompParticipant() {
     </>
   );
 }
-
 

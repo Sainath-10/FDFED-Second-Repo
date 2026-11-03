@@ -145,6 +145,22 @@ export async function makeRequest(endpoint, options = {}) {
 }
 
 // ============ AUTH API ============
+export const ChatAPI = {
+  listCompetition(id, channel) {
+    return makeRequest(`/chat/competitions/${encodeURIComponent(id)}/${channel}`);
+  },
+  postCompetition(id, channel, body) {
+    return makeRequest(`/chat/competitions/${encodeURIComponent(id)}/${channel}`, { method: 'POST', body: JSON.stringify({ body }) });
+  },
+  listTeam(id) {
+    return makeRequest(`/chat/teams/${encodeURIComponent(id)}`);
+  },
+  postTeam(id, body) {
+    return makeRequest(`/chat/teams/${encodeURIComponent(id)}`, { method: 'POST', body: JSON.stringify({ body }) });
+  },
+};
+
+// ============ AUTH API ============
 export const AuthAPI = {
   async register(email, username, password) {
     return makeRequest('/auth/register', {
@@ -670,6 +686,7 @@ const NexusAPI = {
   Matches: MatchesAPI,
   Admin: AdminAPI,
   Revenue: RevenueAPI,
+  Chat: ChatAPI,
   getToken,
   setToken,
   removeToken,

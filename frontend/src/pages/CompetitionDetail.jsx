@@ -120,10 +120,10 @@ export default function CompetitionDetail() {
   const creator = comp?.createdBy || comp?.organizerId;
   const organizers = [...new Set([creator, ...(comp?.organizers || [])].filter(Boolean))];
   const canManage = organizers.includes(session?.username) || ['admin', 'comp_admin', 'super-admin', 'super_admin'].includes(session?.role);
+  const eligibleTeams = teams.filter((team) => team.status === 'approved');
   const availableTabs = canManage ? ['fixtures', 'teams', 'overview', 'standings', 'organizers', 'disputes'] : ['fixtures', 'teams', 'overview', 'standings'];
   const activeTab = availableTabs.includes(params.get('tab')) ? params.get('tab') : 'fixtures';
   const singleElimination = !isLeague && !/double/i.test(comp?.format || '');
-  const eligibleTeams = teams.filter((team) => !['rejected', 'banned', 'disbanded'].includes(team.status));
   const storedSeeds = matches.filter((match) => match.bracket?.version === 2 && match.bracket.round === 1).flatMap((match) => match.bracket.slots).filter((slot) => slot.teamId).sort((a, b) => a.seed - b.seed).map((slot) => slot.teamId);
   const seedOrder = storedSeeds.length === eligibleTeams.length ? storedSeeds : eligibleTeams.map((team) => team.id);
   const route = (page, extra = {}) => `/pages/${page}.html?${new URLSearchParams({ id: apiId, ...extra })}`;

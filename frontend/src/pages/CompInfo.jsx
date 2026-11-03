@@ -14,6 +14,7 @@ import NexusTeamWorkflow from '../services/teamWorkflow.js';
 import useVerificationGate from '../hooks/useVerificationGate.jsx';
 import useJoinCodeGate from '../hooks/useJoinCodeGate.jsx';
 import { DisputesAPI, MatchesAPI, TeamsAPI } from '../services/api.js';
+import ChatRoom from '../components/ChatRoom.jsx';
 import { showToast } from '../lib/toast.js';
 import { assetUrl } from '../lib/assets.js';
 import '../styles/pages/comp-info.css';
@@ -24,6 +25,8 @@ const TABS = [
   { id: 'bracket', label: 'Bracket' },
   { id: 'standings', label: 'Standings' },
   { id: 'rules', label: 'Rules' },
+  { id: 'announcements', label: 'Announcements' },
+  { id: 'general-chat', label: 'General chat' },
 ];
 
 const STATUS_MAP = { ongoing: 'Ongoing', upcoming: 'Registration Open', completed: 'Completed', live: 'LIVE' };
@@ -97,7 +100,10 @@ export default function CompInfo() {
   const compId = params.get('id') || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('last_comp_id') : '') || '';
   const comp = useMemo(() => (compId && NexusData ? NexusData.getCompetitionById(compId) : null), [compId]);
 
-  const [tab, setTab] = useState('overview');
+  const [tab, setTab] = useState(() => {
+    const requestedTab = params.get('tab');
+    return TABS.some((item) => item.id === requestedTab) ? requestedTab : 'overview';
+  });
   const [disputeOpen, setDisputeOpen] = useState(false);
   const [dTargetType, setDTargetType] = useState('');
   const [dTargetUser, setDTargetUser] = useState('');
@@ -634,7 +640,35 @@ export default function CompInfo() {
                 </div>
               </div>
             </div>
-          </div>
+
+            <div className={`tab-panel${tab === 'announcements' ? ' active' : ''}`} id="tab-announcements">
+                <div className="comp-info-block">
+                  <h2>Announcements</h2>
+                  <p style={{ marginBottom: 20, fontSize: 14, color: 'var(--text-muted)' }}>Updates from the competition organizers.</p>
+                  <ChatRoom
+                    scope="competition"
+                    id={backendCompId}
+                    channel="announcements"
+                    username={session?.username}
+                    canPost={isOwner}
+                  />
+                </div>
+              </div>
+
+              <div className={`tab-panel${tab === 'general-chat' ? ' active' : ''}`} id="tab-general-chat">
+                <div className="comp-info-block">
+                  <h2>General chat</h2>
+                  <p style={{ marginBottom: 20, fontSize: 14, color: 'var(--text-muted)' }}>For organizers and registered team members. You can send up to five messages every 30 seconds.</p>
+                  <ChatRoom
+                    scope="competition"
+                    id={backendCompId}
+                    channel="general"
+                    username={session?.username}
+                    canPost={!!session}
+                  />
+                </div>
+              </div>
+            </div>
 
           <aside className="comp-sidebar-panel">
             <div className="comp-sidebar-block">
@@ -747,5 +781,3 @@ export default function CompInfo() {
     </>
   );
 }
-
-

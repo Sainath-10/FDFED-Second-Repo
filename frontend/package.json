@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test test/fixture-editor.test.cjs"
+    "test": "node --test test/fixture-editor.test.cjs test/chat-room.test.cjs"
   },
   "dependencies": {
     "react": "^18.3.1",

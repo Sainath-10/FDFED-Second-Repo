@@ -10,6 +10,7 @@ import { Link } from 'react-router-dom';
 
 const TABS = [
   { id: 'roster', label: 'Roster', file: 'team-roster.html' },
+  { id: 'chat', label: 'Team chat', file: 'team-chat.html' },
   { id: 'add-players', label: 'Add Players', file: 'add-players.html' },
   { id: 'join-requests', label: 'Join Requests', file: 'join-requests.html', badge: true },
   { id: 'invitations', label: 'Invitations Sent', file: 'invitations-sent.html' },
@@ -24,13 +25,14 @@ export function withTeamContext(path, context) {
   return `${path}?${p.toString()}`;
 }
 
-export default function TeamTabs({ active, context, canManage = true, isEnded = false, joinRequestCount }) {
+export default function TeamTabs({ active, context, canManage = true, canChat = false, isEnded = false, joinRequestCount }) {
   const hideAdmin = !canManage || isEnded;
 
   return (
     <div className="team-tabs-nav">
       {TABS.map((t) => {
-        if (hideAdmin && t.id !== 'roster') return null;
+        if (t.id === 'chat' && !canChat) return null;
+        if (hideAdmin && t.id !== 'roster' && t.id !== 'chat') return null;
         return (
           <Link
             key={t.id}

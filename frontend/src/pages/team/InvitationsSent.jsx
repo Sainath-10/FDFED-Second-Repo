@@ -19,7 +19,7 @@ function formatSentTime(value) {
 }
 
 export default function InvitationsSent() {
-  const { ctx, checkingPermission, refresh, canManage: hookCanManage, isEnded: hookIsEnded } = useTeamContext();
+  const { ctx, checkingPermission, canChat, refresh, canManage: hookCanManage, isEnded: hookIsEnded } = useTeamContext();
 
   if (!ctx || !ctx.comp || !ctx.team) {
     return <main className="main-content"><h1 className="page-title">Team</h1></main>;
@@ -53,7 +53,7 @@ export default function InvitationsSent() {
       <h1 className="page-title">{team.name}</h1>
       <p className="page-subtitle">Track invitations sent to players.</p>
 
-      <TeamTabs active="invitations" context={context} canManage={canManage} isEnded={isEnded} joinRequestCount={pendingRequests} />
+      <TeamTabs active="invitations" context={context} canManage={canManage} canChat={canChat} isEnded={isEnded} joinRequestCount={pendingRequests} />
 
       <div className="invites-stack">
         {invites.map((invite) => {

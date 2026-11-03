@@ -15,7 +15,7 @@ import { showToast } from '../../lib/toast.js';
 import '../../styles/pages/team/add-players.css';
 
 export default function AddPlayers() {
-  const { ctx, checkingPermission, refresh, canManage: hookCanManage, isEnded: hookIsEnded } = useTeamContext();
+  const { ctx, checkingPermission, canChat, refresh, canManage: hookCanManage, isEnded: hookIsEnded } = useTeamContext();
   const [query, setQuery] = useState('');
   const [direct, setDirect] = useState('');
   const [players, setPlayers] = useState([]);
@@ -95,7 +95,7 @@ export default function AddPlayers() {
       <h1 className="page-title">{team.name}</h1>
       <p className="page-subtitle">Invite players to join your roster.</p>
 
-      <TeamTabs active="add-players" context={context} canManage={canManage} isEnded={isEnded} joinRequestCount={pendingRequests} />
+      <TeamTabs active="add-players" context={context} canManage={canManage} canChat={canChat} isEnded={isEnded} joinRequestCount={pendingRequests} />
 
       {isEnded && (
         <div style={{ background: 'rgba(251,146,60,0.12)', border: '1px solid rgba(251,146,60,0.4)', color: '#fb923c', padding: '14px 20px', borderRadius: 10, fontSize: 14, fontWeight: 700, textAlign: 'center', margin: '24px 0', letterSpacing: '0.5px' }}>
