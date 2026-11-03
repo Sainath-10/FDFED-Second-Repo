@@ -108,6 +108,7 @@ export class CompetitionsController {
   }
 
   @Get('organizer/:organizerId')
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Get competitions by organizer or co-organizer',
     description: 'Retrieve all competitions where user is primary organizer or co-organizer',
@@ -119,8 +120,9 @@ export class CompetitionsController {
   })
   async getCompetitionsByOrganizer(
     @Param('organizerId') organizerId: string,
+    @CurrentUser() user: any,
   ): Promise<CompetitionResponseDto[]> {
-    return this.competitionsService.getCompetitionsByOrganizer(organizerId);
+    return this.competitionsService.getCompetitionsByOrganizer(organizerId, user.username);
   }
 
   @Get()

@@ -37,7 +37,10 @@ export const VerificationAPI = {
       if (user && res.data.verificationStatus) {
         setUser({ ...user, verificationStatus: res.data.verificationStatus });
       }
-    } else if (cachedStatus && cachedForUser === userKey) {
+    } else if (res.status === 401 || res.status === 403) {
+      cachedStatus = null;
+      cachedForUser = null;
+    } else if (!force && cachedStatus && cachedForUser === userKey) {
       // Offline/API failure: use the last known status for this same account.
       return cachedStatus;
     }

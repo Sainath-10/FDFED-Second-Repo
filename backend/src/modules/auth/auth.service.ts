@@ -144,7 +144,7 @@ export class AuthService {
     }
 
     const currentRole = String(existing.role || '').toLowerCase();
-    const isAdmin = !!(existing.adminType || ['admin', 'super-admin', 'super_admin', 'comp_admin', 'dispute_admin', 'revenue_admin'].includes(currentRole));
+    const isAdmin = !!(existing.adminType || ['admin', 'super-admin', 'super_admin', 'comp_admin', 'dispute_admin', 'revenue_admin', 'finance_moderator'].includes(currentRole));
 
     if (isAdmin) {
       throw new BadRequestException('User is already an admin');
@@ -166,7 +166,7 @@ export class AuthService {
     if (!user) throw new BadRequestException('Username not present');
 
     const currentRole = String(user.role || '').toLowerCase();
-    const isAdmin = !!(user.adminType || ['admin', 'super-admin', 'super_admin', 'comp_admin', 'dispute_admin', 'revenue_admin'].includes(currentRole));
+    const isAdmin = !!(user.adminType || ['admin', 'super-admin', 'super_admin', 'comp_admin', 'dispute_admin', 'revenue_admin', 'finance_moderator'].includes(currentRole));
 
     if (!isAdmin) {
       throw new BadRequestException('User is not an admin');

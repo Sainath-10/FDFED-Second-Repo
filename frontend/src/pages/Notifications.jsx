@@ -7,6 +7,7 @@
  * "Mark All Read".
  */
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import NexusTeamWorkflow from '../services/teamWorkflow.js';
 import { showToast } from '../lib/toast.js';
@@ -18,12 +19,27 @@ const TABS = [
   { id: 'pending', label: 'Pending' },
   { id: 'approved', label: 'Approved' },
   { id: 'rejected', label: 'Rejected' },
+  { id: 'info', label: 'Payments & updates' },
 ];
 
 const statusClassOf = (item) => {
   const s = item.status || 'pending';
+  if (s === 'info') return 'info';
   return s === 'approved' ? 'approved' : (s === 'rejected' ? 'rejected' : 'pending');
 };
+
+// Payment lifecycle notices: money moved (or will move) for this user.
+const MONEY_TYPES = ['winner-payout', 'organizer-revenue-released', 'refund-apology', 'registration-refunded', 'settlement-reversed-organizer', 'held-prize-distributed', 'registration-confirmed', 'prize-pool-confirmed', 'competition-cancelled-player', 'competition-cancelled-organizer'];
+// Notices the organizer acts on from the competition's Payments & Escrow page.
+const ORGANIZER_TYPES = ['competition-live', 'new-team-joined', 'prize-pool-confirmed', 'prize-pool-reminder', 'prize-pool-urgent', 'organizer-revenue-released', 'competition-cancelled-organizer', 'settlement-reversed-organizer', 'held-prize-distributed'];
+const infoLabelOf = (type) => (MONEY_TYPES.includes(type) ? 'PAYMENT' : 'UPDATE');
+function infoLinkOf(item) {
+  const compId = item.meta?.compId;
+  if (ORGANIZER_TYPES.includes(item.type) && compId) return { to: `/pages/competition-payment.html?id=${encodeURIComponent(compId)}`, label: 'Open Payments & Escrow' };
+  if (MONEY_TYPES.includes(item.type)) return { to: '/pages/my-payments.html', label: 'View my payments' };
+  if (compId) return { to: `/pages/competition-detail.html?id=${encodeURIComponent(compId)}`, label: 'View competition' };
+  return null;
+}
 
 export default function Notifications() {
   const { session } = useAuth();
@@ -46,7 +62,7 @@ export default function Notifications() {
   }, [session, version]);
 
   const counts = useMemo(() => {
-    const c = { all: items.length, pending: 0, approved: 0, rejected: 0 };
+    const c = { all: items.length, pending: 0, approved: 0, rejected: 0, info: 0 };
     items.forEach((i) => { c[statusClassOf(i)] += 1; });
     return c;
   }, [items]);
@@ -158,6 +174,8 @@ export default function Notifications() {
             const positiveLabel = isPayment
               ? `Pay ₹${Number(item.meta?.amount || 0).toLocaleString('en-IN')} & Join`
               : (isJoinRequest ? 'Accept Player' : (isCoOrgInvite ? 'Accept Co-Organizer' : 'Accept Invite'));
+            const isInfo = sc === 'info';
+            const infoLink = isInfo ? infoLinkOf(item) : null;
             const negativeLabel = isJoinRequest ? 'Reject Player' : (isCoOrgInvite ? 'Decline Co-Organizer' : 'Reject Invite');
 
             return (
@@ -170,13 +188,14 @@ export default function Notifications() {
                 data-notif-type={type}
               >
                 {!item.read && <div className="notif-dot"></div>}
-                <div className={`notif-status-label status-${sc}-bg`}>{sc.toUpperCase()}</div>
+                <div className={`notif-status-label status-${sc}-bg`}>{isInfo ? infoLabelOf(type) : sc.toUpperCase()}</div>
                 <div className="notif-content-wrap">
                   <div className="notif-title-row">
                     <h3>{item.title || 'Notification'}</h3>
                     <span className="notif-time-alt">{when}</span>
                   </div>
-                  <p className="notif-body-text">{item.body || ''}</p>
+                  <p className={`notif-body-text${isInfo ? ' notif-body-multiline' : ''}`}>{item.body || ''}</p>
+                  {infoLink && <Link className="notif-info-link" to={infoLink.to}>{infoLink.label} →</Link>}
                   {showActions && (
                     <div className="notif-actions-row">
                       <button className="btn-notif-accept" onClick={() => (isPayment ? setPayingFor(item) : processAction(item.id, 'accepted'))}>{positiveLabel}</button>
@@ -193,7 +212,7 @@ export default function Notifications() {
           <div id="notif-empty-state" style={{ padding: '48px 0', textAlign: 'center' }}>
             <div style={{ fontSize: 40, marginBottom: 12 }}>🔔</div>
             <h3 style={{ color: 'var(--text-white)', marginBottom: 8 }}>No notifications yet</h3>
-            <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>You'll be notified about team invites, competition updates, and match results here.</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>You'll be notified about team invites, competition updates, match results, payouts and refunds here.</p>
           </div>
         )}
       </div>

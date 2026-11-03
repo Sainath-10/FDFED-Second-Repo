@@ -189,6 +189,10 @@
 .status-pending-bg  { background: rgba(255, 170, 0, 0.15); color: #ffaa00; border: 1px solid rgba(255, 170, 0, 0.3); }
 .status-approved-bg { background: rgba(198, 255, 51, 0.15); color: var(--accent); border: 1px solid rgba(198, 255, 51, 0.3); }
 .status-rejected-bg { background: rgba(255, 50, 50, 0.15); color: #ff3232; border: 1px solid rgba(255, 50, 50, 0.3); }
+.status-info-bg     { background: rgba(100, 200, 255, 0.12); color: #64c8ff; border: 1px solid rgba(100, 200, 255, 0.3); }
+.notif-body-multiline { white-space: pre-line; }
+.notif-info-link { display: inline-block; margin-top: 10px; font-size: 13px; font-weight: 600; color: var(--accent); text-decoration: none; }
+.notif-info-link:hover, .notif-info-link:focus-visible { text-decoration: underline; }
 
 .notif-content-wrap {
   flex: 1;

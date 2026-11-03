@@ -8,7 +8,7 @@ import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
 import { FileLoggerService } from './common/logger/file-logger.service';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
 
   app.useBodyParser('json', { limit: '8mb' });
 

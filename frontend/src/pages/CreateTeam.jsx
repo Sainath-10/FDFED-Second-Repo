@@ -78,6 +78,11 @@ export default function CreateTeam() {
   const gateComp = localComp || serverComp
     ? { ...serverComp, ...localComp, visibility: serverComp?.visibility || localComp?.visibility }
     : null;
+  // Prefer the fresh server copy: the cached one may predate a date change or cancellation.
+  const registration = NexusData?.registrationState
+    ? NexusData.registrationState(serverComp ? NexusData.mapApiCompetition(serverComp) : localComp)
+    : { open: true };
+  const registrationBlocked = accessChecked && (serverComp || localComp) && !registration.open;
   const gate = useVerificationGate('create a team for a competition');
   const joinCodeGate = useJoinCodeGate(gateComp);
 
@@ -186,6 +191,7 @@ export default function CreateTeam() {
   function createTeam() {
     const compId = getCompIdFromPage();
     if (!compId) { showToast('Tournament context missing. Open this from a competition page.', 'error'); return; }
+    if (registrationBlocked) { showToast(`${registration.label}. ${registration.detail || ''}`.trim(), 'error'); return; }
     const teamName = name.trim();
     const teamTag = tag.trim();
     if (!teamName || !teamTag) { showToast('Please fill in both Team Name and Team Tag!', 'error'); return; }
@@ -247,6 +253,12 @@ export default function CreateTeam() {
         </svg>
         Back to Competitions
       </Link>
+
+      {registrationBlocked && (
+        <div role="alert" id="registration-closed-notice" style={{ maxWidth: 720, margin: '0 auto 20px', padding: '14px 18px', borderRadius: 12, border: '1px solid rgba(251,191,36,0.45)', background: 'rgba(251,191,36,0.08)', color: 'var(--text-light)', fontSize: 14, lineHeight: 1.55 }}>
+          <strong style={{ color: '#fbbf24' }}>{registration.label}.</strong> {registration.detail ? `${registration.detail}. ` : ''}New teams can't be registered for {serverComp?.name || localComp?.name || 'this competition'}.
+        </div>
+      )}
 
       <div className="header-center">
         <h1 className="page-title-neon">Create Your Team</h1>
@@ -313,7 +325,7 @@ export default function CreateTeam() {
 
         <div className="footer-actions">
           <button className="btn-action discard" onClick={() => window.history.back()}>DISCARD</button>
-          <button className="btn-action create" onClick={createTeam}>CREATE TEAM</button>
+          <button className="btn-action create" onClick={createTeam} disabled={registrationBlocked} style={registrationBlocked ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}>CREATE TEAM</button>
         </div>
       </div>
 
@@ -348,7 +360,7 @@ export default function CreateTeam() {
                 }}
                 style={{ flex: 2, padding: 12, background: '#c6ff33', border: 'none', color: '#000', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}
               >
-                ✔ Pay ₹{checkout.feeAmount.toLocaleString('en-IN')} &amp; Register Team
+                ✔ Mock pay ₹{checkout.feeAmount.toLocaleString('en-IN')} &amp; Register Team
               </button>
             </div>
           </div>

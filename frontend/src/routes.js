@@ -25,6 +25,7 @@ export const FALLBACK_PATH = '/';
 
 /** role -> landing route — absolute form of the `login.js` roleRoutes map. */
 export const ROLE_ROUTES = {
+  finance_moderator: '/pages/admin/finance.html',
   regular: '/pages/profile.html',
   participant: '/pages/profile.html',
   team_lead: '/pages/profile.html',
@@ -63,6 +64,7 @@ export const PROTECTED_ROUTES = [
   route('/pages/my-activity.html', 'My activity', 'participant'),
   route('/pages/profile.html', 'Profile', 'participant'),
   route('/pages/notifications.html', 'Notifications', 'participant'),
+  route('/pages/my-payments.html', 'My payments', 'participant'),
   route('/pages/competitions-participated.html', 'Competitions participated', 'participant'),
   route('/pages/create-team.html', 'Create team', 'participant'),
   route('/pages/join-teams.html', 'Join teams', 'participant'),
@@ -76,6 +78,7 @@ export const PROTECTED_ROUTES = [
 
 
  // Organizer
+  route('/pages/competition-payment.html', 'Competition payment', 'organizer'),
   route('/pages/create-competition.html', 'Create competition', 'organizer'),
   route('/pages/edit-competition.html', 'Edit competition', 'organizer'),
   route('/pages/organizer-revenue.html', 'Organizer revenue', 'organizer'),
@@ -94,6 +97,7 @@ export const PROTECTED_ROUTES = [
   route('/pages/dispute-escalation.html', 'Escalate dispute', 'disputes'),
 
  // Admin
+  route('/pages/admin/finance.html', 'Finance moderation', 'admin', ['finance_moderator', 'revenue_admin', 'super-admin']),
   route('/pages/admin/dashboard.html', 'Admin dashboard', 'admin', ADMIN_ROLES),
   route('/pages/admin/users.html', 'Users', 'admin', ADMIN_ROLES),
   route('/pages/admin/disputes.html', 'Disputes', 'admin', ADMIN_ROLES),

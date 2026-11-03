@@ -46,6 +46,9 @@ import AdminProfile from './admin/AdminProfile.jsx';
 import AdminRevenueConfig from './admin/AdminRevenueConfig.jsx';
 import AdminDisputes from './admin/AdminDisputes.jsx';
 import AdminRevenueTransactions from './admin/AdminRevenueTransactions.jsx';
+import CompetitionPayment from './CompetitionPayment.jsx';
+import MyPayments from './MyPayments.jsx';
+import FinanceModerator from './admin/FinanceModerator.jsx';
 import Admins from './super-admin/Admins.jsx';
 import AddAdmin from './super-admin/AddAdmin.jsx';
 import RevokeAdmin from './super-admin/RevokeAdmin.jsx';
@@ -70,6 +73,9 @@ export const PAGE_COMPONENTS = {
   '/pages/super-admin/admins.html': Admins,
   '/pages/super-admin/add-admin.html': AddAdmin,
   '/pages/super-admin/revoke-admin.html': RevokeAdmin,
+  '/pages/competition-payment.html': CompetitionPayment,
+  '/pages/my-payments.html': MyPayments,
+  '/pages/admin/finance.html': FinanceModerator,
   '/pages/admin/revenue-transactions.html': AdminRevenueTransactions,
   '/pages/admin/disputes.html': AdminDisputes,
   '/pages/admin/revenue-config.html': AdminRevenueConfig,

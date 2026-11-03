@@ -1,3 +1,7 @@
+import { EscrowAccountEntity } from './entities/escrow-account.entity';
+import { PaymentMailEntity } from './entities/payment-mail.entity';
+import { MockPaymentLifecycle1793750401000 } from './database/migrations/1793750401000-mock-payment-lifecycle';
+import { PaymentReversals1793750402000 } from './database/migrations/1793750402000-payment-reversals';
 import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -16,6 +20,9 @@ import { RevenueModule } from './modules/revenue/revenue.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { VerificationModule } from './modules/verification/verification.module';
 import { ChatModule } from './modules/chat/chat.module';
+import { PaymentsModule } from './modules/payments/payments.module';
+import { PaymentTransactionEntity } from './entities/payment-transaction.entity';
+import { PaymentFoundation1793750400000 } from './database/migrations/1793750400000-payment-foundation';
 import { SeederService } from './database/seeder.service';
 
 import { SecurityMiddleware, RateLimiterMiddleware, LoggingMiddleware } from './common/middleware';
@@ -80,12 +87,13 @@ import { ChatMessages1793664000000 } from './database/migrations/1793664000000-c
             AuditLogEntity,
             RefundRequestEntity,
             ChatMessageEntity,
+            PaymentTransactionEntity, EscrowAccountEntity, PaymentMailEntity,
           ],
           // §1.5 — schema changes are applied through migrations, never by
           // automatic synchronization. Set DB_SYNCHRONIZE=true only for a
           // throwaway local database.
           synchronize: config.get<string>('DB_SYNCHRONIZE') === 'true',
-          migrations: [WorkflowEnhancements1710000000000, MatchBrackets1793577600000, MatchResultRules1793577601000, ChatMessages1793664000000],
+          migrations: [WorkflowEnhancements1710000000000, MatchBrackets1793577600000, MatchResultRules1793577601000, ChatMessages1793664000000, PaymentFoundation1793750400000, MockPaymentLifecycle1793750401000, PaymentReversals1793750402000],
           migrationsRun: config.get<string>('DB_MIGRATIONS_RUN') !== 'false',
           logging: config.get<string>('NODE_ENV') === 'development' ? ['error', 'warn'] : false,
         };
@@ -118,6 +126,7 @@ import { ChatMessages1793664000000 } from './database/migrations/1793664000000-c
     AdminModule,
     VerificationModule,
     ChatModule,
+    PaymentsModule,
   ],
   providers: [SeederService],
 })

@@ -221,17 +221,15 @@ export class TeamsController {
   }
 
   @Patch(':id/status')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Update team registration status (Approve / Reject)' })
+  @ApiOperation({ summary: 'Update team registration status (Approve / Reject) — competition organizers / admins' })
   async setStatus(
     @Param('id') id: string,
-    @Body() body: { status: string },
+    @Body() body: { status: string; reason?: string },
     @CurrentUser() user?: any,
   ) {
-    const updater = user?.username || user?.id || 'organizer';
-    return this.teamsService.setStatus(id, body.status, updater);
+    return this.teamsService.setStatus(id, body.status, user, body.reason?.trim() || undefined);
   }
 
   @Post(':id/warnings')
@@ -245,13 +243,11 @@ export class TeamsController {
   }
 
   @Patch(':id/ban')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Ban a team from tournament' })
-  async banTeam(@Param('id') id: string, @CurrentUser() user?: any) {
-    const issuer = user?.username || user?.id || 'organizer';
-    return this.teamsService.banTeam(id, issuer);
+  @ApiOperation({ summary: 'Ban a team from tournament — competition organizers / admins' })
+  async banTeam(@Param('id') id: string, @Body() body: { reason?: string } = {}, @CurrentUser() user?: any) {
+    return this.teamsService.banTeam(id, user, body?.reason?.trim() || undefined);
   }
 
   @Post(':id/join-requests')

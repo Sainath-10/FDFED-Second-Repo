@@ -1,4 +1,7 @@
-import { Injectable, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { LifecycleService, managed } from '../payments/lifecycle.service';
+import { RevenueService } from '../revenue/revenue.service';
+import { platformFeeMinor, organizerTrusted, DEFAULT_MIN_ORGANIZER_TRUST } from '../payments/payment.rules';
+import { Optional, Injectable, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CompetitionRepository } from './repositories/competition.repository';
@@ -33,6 +36,8 @@ export class CompetitionsService {
     private teamRepository: Repository<TeamEntity>,
     private notificationsService: NotificationsService,
     private auditLog: AuditLogService,
+    private revenueService: RevenueService,
+    @Optional() private lifecycle?: LifecycleService,
   ) {}
 
   /** Mock-verification gate (§12.4). Backend enforcement — frontend UI alone is insufficient. */
@@ -53,7 +58,14 @@ export class CompetitionsService {
     authenticatedUserId?: string,
   ): Promise<ICompetition> {
     // §12.4 verification gate — enforced on the backend
-    if (authenticatedUserId) await this.assertVerified(authenticatedUserId, 'create or publish a competition');
+    if (authenticatedUserId) {
+      const organizer: any = await this.assertVerified(authenticatedUserId, 'create or publish a competition');
+      // §9.5 — repeated cancellations/fraud lower the trust score and block new competitions.
+      const minimum = Number(process.env.MIN_ORGANIZER_TRUST_SCORE ?? DEFAULT_MIN_ORGANIZER_TRUST);
+      if (!organizerTrusted(organizer.organizerTrustScore, minimum)) {
+        throw new ForbiddenException(`Your organizer trust score (${organizer.organizerTrustScore}) is below ${minimum} after cancelled or reversed competitions. Contact the finance team to review your account.`);
+      }
+    }
 
     const { name, description, startDate, endDate, coOrganizers, ...extras } = createCompetitionDto;
 
@@ -131,6 +143,11 @@ export class CompetitionsService {
     const regOpen = regOpenRaw ? new Date(regOpenRaw) : null;
     const regClose = regCloseRaw ? new Date(regCloseRaw) : null;
 
+    const prizeDistributionMinor = ((extras as any).prizes || []).map((p: any) => Math.round(parsePrizeAmount(p.amount) * 100)).filter((amount: number) => amount > 0);
+    if (prizeDistributionMinor.length && prizeDistributionMinor.reduce((a: number,b: number)=>a+b,0) !== Math.round(resolvedPrize*100)) throw new BadRequestException('Prize positions must add up to the total prize pool.');
+    const feeConfig = await this.revenueService.getConfig();
+    const feeMinor = platformFeeMinor(resolvedPrize, Number(feeConfig.percentage), Number(feeConfig.minCost));
+
     // All-or-nothing: validation errors above must not leave a partially published competition.
     const competition = await this.competitionRepository.create(
       name.trim(),
@@ -142,6 +159,7 @@ export class CompetitionsService {
       {
         ...competitionExtras,
         prize: resolvedPrize,
+        prizeDistributionMinor: prizeDistributionMinor.length ? prizeDistributionMinor : [Math.round(resolvedPrize * 100)],
         visibility,
         joinCode,
         registrationOpenAt: regOpen,
@@ -149,6 +167,10 @@ export class CompetitionsService {
         // §2.2 — competitions are auto-approved regardless of prize size; the
         // >₹50,000 administrative approval requirement is removed.
         approvalStatus: 'approved',
+        status: 'draft',
+        organizerPaid: false,
+        paymentStatus: 'AWAITING_PLATFORM_FEE',
+        platformFee: feeMinor / 100,
       },
     );
 
@@ -177,6 +199,7 @@ export class CompetitionsService {
   async getCompetitionById(id: string): Promise<ICompetition> {
     const comp = await this.competitionRepository.findById(id);
     if (!comp) return comp;
+    if (comp.paymentStatus === 'AWAITING_PLATFORM_FEE') throw new NotFoundException('Competition is not published yet.');
     // §2.4 — never expose a private competition's join code on the public
     // detail endpoint. The organizer-only /competitions/:id/join-code route
     // is the single authorized reveal path.
@@ -226,6 +249,7 @@ export class CompetitionsService {
 
     const comp = await this.competitionRepository.findById(competitionId);
     if (!comp) throw new NotFoundException(`Competition ${competitionId} not found`);
+    if (comp.paymentStatus === 'AWAITING_PLATFORM_FEE') throw new ForbiddenException('Platform fee payment is pending.');
     if (comp.visibility === 'private') {
       if (!joinCode || String(joinCode).trim().toUpperCase() !== String(comp.joinCode || '').toUpperCase()) {
         throw new BadRequestException('Invalid join code. Please check the code with your organizer and try again.');
@@ -237,7 +261,7 @@ export class CompetitionsService {
 
   async getAllCompetitions(): Promise<ICompetition[]> {
     const competitions = await this.competitionRepository.findAll();
-    return competitions.map((comp) => this.withoutJoinCode(comp));
+    return competitions.filter(comp => comp.paymentStatus !== 'AWAITING_PLATFORM_FEE').map((comp) => this.withoutJoinCode(comp));
   }
 
   async getCompetitionsByUser(userId: string): Promise<ICompetition[]> {
@@ -245,9 +269,9 @@ export class CompetitionsService {
     return competitions.map((comp) => this.withoutJoinCode(comp));
   }
 
-  async getCompetitionsByOrganizer(userId: string): Promise<ICompetition[]> {
+  async getCompetitionsByOrganizer(userId: string, requesterUsername?: string): Promise<ICompetition[]> {
     const competitions = await this.competitionRepository.findByOrganizer(userId);
-    return competitions.map((comp) => this.withoutJoinCode(comp));
+    return competitions.filter(comp => comp.paymentStatus !== 'AWAITING_PLATFORM_FEE' || comp.createdBy === requesterUsername || (comp.organizers || []).includes(requesterUsername)).map((comp) => this.withoutJoinCode(comp));
   }
 
   async addCoOrganizer(id: string, organizerId: string, requesterUsername: string): Promise<ICompetition> {
@@ -261,7 +285,24 @@ export class CompetitionsService {
     if (String(user.username).toLowerCase() === String(comp.createdBy).toLowerCase()) {
       throw new BadRequestException('The creator is already the primary organizer.');
     }
+    await this.assertNotPlaying(id, [user.username]);
     return this.competitionRepository.addCoOrganizer(id, user.username);
+  }
+
+  /**
+   * Conflict of interest: an organizer enters results and receives the
+   * registration revenue, so nobody on an active team may also organize.
+   */
+  private async assertNotPlaying(competitionId: string, usernames: string[]) {
+    const teams = await this.teamRepository.find({ where: { competitionId } });
+    const wanted = new Set(usernames.map((u) => String(u || '').toLowerCase()));
+    const playing = teams
+      .filter((t) => !['banned', 'rejected', 'disbanded'].includes(t.status))
+      .flatMap((t) => t.memberUsernames || [])
+      .filter((name) => wanted.has(String(name).toLowerCase()));
+    if (playing.length) {
+      throw new BadRequestException(`${Array.from(new Set(playing)).map((n) => `@${n}`).join(', ')} already play in this competition and cannot also organize it.`);
+    }
   }
 
   async removeCoOrganizer(id: string, organizerId: string, requesterUsername: string): Promise<ICompetition> {
@@ -304,6 +345,9 @@ export class CompetitionsService {
         throw new BadRequestException('The prize pool cannot be modified after the competition is created.');
       }
       throw new BadRequestException(`Field(s) ${obsoleteTouched.join(', ')} are no longer editable.`);
+    }
+    if (comp.paymentStatus && comp.paymentStatus !== 'LEGACY' && updateCompetitionDto.entryFeeAmount !== undefined && Number(updateCompetitionDto.entryFeeAmount) !== Number(comp.entryFeeAmount)) {
+      throw new BadRequestException('Entry fee is fixed for payment-managed competitions.');
     }
     if ((updateCompetitionDto as any).entryFeeAmount !== undefined) {
       const feeError = validateEntryFee(comp.feeType, (updateCompetitionDto as any).entryFeeAmount);
@@ -353,6 +397,7 @@ export class CompetitionsService {
           throw new BadRequestException(errors.map((e) => e.message).join(' '));
         }
         nextOrganizers = Array.from(new Set([comp.createdBy, ...coOrganizers].filter(Boolean)));
+        await this.assertNotPlaying(id, nextOrganizers.filter((name) => !(comp.organizers || []).includes(name)));
       }
     }
 
@@ -397,6 +442,9 @@ export class CompetitionsService {
     if (updateCompetitionDto.description !== undefined) updates.description = updateCompetitionDto.description;
     if (updateCompetitionDto.game !== undefined) (updates as any).game = updateCompetitionDto.game;
     if (updateCompetitionDto.type !== undefined) (updates as any).type = updateCompetitionDto.type;
+    if (updateCompetitionDto.status && comp.paymentStatus && comp.paymentStatus !== 'LEGACY' && updateCompetitionDto.status !== comp.status) {
+      throw new BadRequestException('Payment-managed competition status cannot be changed through the edit endpoint.');
+    }
     if (updateCompetitionDto.status) updates.status = updateCompetitionDto.status;
     if (nextOrganizers !== undefined) (updates as any).organizers = nextOrganizers;
     if (updateCompetitionDto.endDate) updates.endDate = new Date(updateCompetitionDto.endDate);
@@ -473,6 +521,10 @@ export class CompetitionsService {
       throw new ForbiddenException('Only an organizer of this competition (or an admin) can end it.');
     }
 
+    if (comp.paymentStatus && comp.paymentStatus !== 'LEGACY') {
+      if (!this.lifecycle) throw new BadRequestException('Payment settlement is unavailable.');
+      return this.lifecycle.end(id, { username: requesterUsername, role: requesterRole });
+    }
     if (String(comp.status).toLowerCase() === 'completed') {
       throw new BadRequestException('This competition has already ended.');
     }
@@ -494,6 +546,7 @@ export class CompetitionsService {
   async deleteCompetition(id: string, requesterUsername: string, requesterRole: string): Promise<void> {
     const comp = await this.competitionRepository.findById(id);
     if (!comp) throw new NotFoundException(`Competition with ID ${id} not found`);
+    if (comp.paymentStatus && comp.paymentStatus !== 'LEGACY') throw new BadRequestException('Payment-managed competitions must be retained for reconciliation.');
     // Super-admin enforced at the route; organizer-level delete is not permitted else.
     await this.competitionRepository.delete(id);
     await this.auditLog.record('COMPETITION_DELETED', {
@@ -506,7 +559,7 @@ export class CompetitionsService {
 
   async getActiveCompetitions(): Promise<ICompetition[]> {
     const competitions = await this.competitionRepository.findByStatus('active');
-    return competitions.map((comp) => this.withoutJoinCode(comp));
+    return competitions.filter(comp => comp.paymentStatus !== 'AWAITING_PLATFORM_FEE').map((comp) => this.withoutJoinCode(comp));
   }
 
   async setApproval(id: string, decision: string, adminUsername: string): Promise<ICompetition> {

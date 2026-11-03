@@ -6,7 +6,7 @@
  * - identical account merge (seed/demo accounts + stored accounts)
  * - identical `normalizeRole` (UI-facing: super_admin -> super-admin)
  * - identical login / signup / logout / session-restoration logic
- * - identical offline localStorage fallback when the API is unreachable
+ * - backend-authoritative login; no offline authenticated sessions
  * - identical role-redirect resolution (getRoleProfilePath)
  *
  * Navigation is intentionally NOT performed here (the code used
@@ -304,61 +304,14 @@ export async function login(options) {
   const result = await AuthAPI.login(opts.username, opts.password);
 
   if (!result.ok) {
-    const local = authenticate(opts.username, opts.password);
-    if (!local) {
- // Check if account exists
-      const account = getAccounts().find(
-        (entry) => normalize(entry.username) === normalize(opts.username) || normalize(entry.email) === normalize(opts.username),
-      );
-      if (account && account.banned) {
-        return { ok: false, error: 'Your account has been permanently banned for platform violations.' };
-      }
-
- // If account exists locally but password did not match -> WRONG PASSWORD!
-      if (account) {
-        return { ok: false, error: 'Wrong password entered. Please check your password and try again.' };
-      }
-
-      const errLower = String(result.error || '').toLowerCase();
-      if (errLower.includes('password') || errLower.includes('credential') || errLower.includes('unauthorized') || errLower.includes('401')) {
-        return { ok: false, error: 'Wrong password entered. Please check your password and try again.' };
-      }
-
-      if (errLower.includes('no user') || errLower.includes('not found') || errLower.includes('404')) {
-        return { ok: false, error: 'No account found with that username or email.' };
-      }
-
-      if (errLower.includes('failed') || errLower.includes('network')) {
-        return { ok: false, error: 'Wrong password or invalid credentials entered. Please try again.' };
-      }
-
-      return {
-        ok: false,
-        error: result.error || 'Wrong password entered. Please check your password and try again.',
-      };
-    }
-
- // Offline/local fallback login
-    const localAccount = getAccounts().find((entry) => normalize(entry.username) === normalize(local.username));
-    const sessionObj = {
-      username: local.username,
-      role: normalizeRole(local.role),
-      displayName: local.displayName,
-      email: local.email || '',
-      joinedAt: localAccount && localAccount.createdAt ? localAccount.createdAt : null,
-      lastLoginAt: Date.now(),
-      loggedInAt: Date.now(),
-    };
-    clearAccountScopedState();
-    setSession(sessionObj);
-
-    const localRedirect = getRoleProfilePath(local.role, opts.roleRoutes) || opts.fallbackPath || '../index.html';
-
+    // Backend-protected workflows require a real JWT. A local account match
+    // must never turn a rejected/offline login into an authenticated session.
+    clearSession();
     return {
-      ok: true,
-      message: 'Login successful! (offline)',
-      user: sessionObj,
-      redirectPath: localRedirect,
+      ok: false,
+      error: result.status === 0
+        ? 'Cannot reach the server. Start the backend and try logging in again.'
+        : result.error || 'Login failed. Please check your credentials.',
     };
   }
 

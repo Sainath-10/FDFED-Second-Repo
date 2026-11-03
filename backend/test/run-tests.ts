@@ -371,6 +371,7 @@ async function competitionServiceTests() {
   const users = [
     { id: 'u1', username: 'alice', email: 'alice@nexus.gg', verificationStatus: 'verified' },
     { id: 'u2', username: 'bob', email: 'bob@nexus.gg', verificationStatus: 'unverified' },
+    { id: 'u3', username: 'carol', email: 'carol@nexus.gg', verificationStatus: 'verified', organizerTrustScore: 40 },
   ];
 
   function makeService(comp: any, teams: any[] = [], spy: { updateCalls?: number } = null) {
@@ -402,6 +403,7 @@ async function competitionServiceTests() {
       teamRepository as any,
       notifications as any,
       noopAudit as any,
+      { getConfig: async () => ({ percentage: 7, minCost: 50 }) } as any,
     );
   }
 
@@ -417,6 +419,37 @@ async function competitionServiceTests() {
   await test('unverified users cannot create competitions', async () => {
     const service = makeService(null);
     await expectThrow(() => service.createCompetition(validDto, 'bob', 'u2'), ForbiddenException, 'verification is required');
+  });
+
+  await test('a registered player cannot also be made a co-organizer', async () => {
+    const comp: any = { id: 'c1', name: 'Cup', createdBy: 'alice', organizers: ['alice'], status: 'active', paymentStatus: 'OPEN_FOR_REGISTRATION', startDate: future, endDate: new Date(+future + 86400000) };
+    const service = makeService(comp, [{ id: 't1', competitionId: 'c1', status: 'approved', memberUsernames: ['bob'] }]);
+    await expectThrow(() => service.addCoOrganizer('c1', 'bob', 'alice'), BadRequestException, 'cannot also organize');
+  });
+
+  await test('organizers below the trust threshold cannot create competitions', async () => {
+    await expectThrow(() => makeService(null).createCompetition(validDto, 'carol', 'u3'), ForbiddenException, 'trust score');
+  });
+
+  await test('creation ignores client payment flags and computes the fee on the server', async () => {
+    const comp: any = await makeService(null).createCompetition({ ...validDto, prize: 10000, organizerPaid: true, platformFee: 1, status: 'active' }, 'alice', 'u1');
+    assert.equal(comp.organizerPaid, false);
+    assert.equal(comp.platformFee, 700);
+    assert.equal(comp.status, 'draft');
+    assert.equal(comp.paymentStatus, 'AWAITING_PLATFORM_FEE');
+  });
+
+  await test('unpaid drafts are private, resumable by their organizer and cannot bypass the payment gate', async () => {
+    const comp: any = { id: 'c1', name: 'Draft Cup', createdBy: 'alice', organizers: ['alice'], status: 'draft', paymentStatus: 'AWAITING_PLATFORM_FEE', startDate: future, endDate: new Date(+future + 86400000) };
+    const service = makeService(comp);
+    assert.equal((await service.getAllCompetitions()).length, 0);
+    assert.equal((await service.getCompetitionsByOrganizer('alice', 'bob')).length, 0);
+    assert.equal((await service.getCompetitionsByOrganizer('alice', 'alice')).length, 1);
+    await assert.rejects(() => service.getCompetitionById('c1'), /not published/);
+    await expectThrow(() => service.updateCompetition('c1', { status: 'active' } as any, 'alice', 'participant'), BadRequestException, 'cannot be changed');
+    await expectThrow(() => service.participate('c1', undefined, { id: 'u1', username: 'alice' }), ForbiddenException, 'payment is pending');
+    await expectThrow(() => service.endCompetition('c1', 'alice', 'participant'), BadRequestException, 'settlement');
+    await expectThrow(() => service.deleteCompetition('c1', 'alice', 'super_admin'), BadRequestException, 'retained');
   });
 
   await test('valid co-organizer usernames are accepted and notified', async () => {

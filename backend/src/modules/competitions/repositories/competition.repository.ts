@@ -158,7 +158,7 @@ export class CompetitionRepository {
     for (const c of demoComps) {
       const existing = await this.repo.findOne({ where: { name: c.name } });
       if (!existing) {
-        await this.create(c.name, c.description, c.startDate, c.endDate, c.createdBy, [], c.extras);
+        await this.create(c.name, c.description, c.startDate, c.endDate, c.createdBy, [], { ...c.extras, paymentStatus: 'LEGACY' });
         console.log(`✓ Seeded competition: ${c.name}`);
       }
     }

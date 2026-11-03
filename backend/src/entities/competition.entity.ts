@@ -95,6 +95,12 @@ export class CompetitionEntity {
   @Column({ default: false })
   organizerPaid: boolean;
 
+  @Column({ default: 'AWAITING_PLATFORM_FEE' })
+  paymentStatus: string;
+
+  @Column({ type: 'uuid', nullable: true })
+  platformFeeTransactionId: string;
+
   /**
    * Competition visibility (§2.4): 'public' joins need no code; 'private'
    * competitions require the organizer-generated joinCode to register a team.
@@ -112,6 +118,13 @@ export class CompetitionEntity {
 
   @Column({ type: 'timestamptz', nullable: true, default: null })
   registrationCloseAt: Date | null;
+
+  @Column({ default: false }) prizePoolPaid: boolean;
+  @Column({ type: 'timestamptz', nullable: true }) prizePoolPaidAt: Date;
+  @Column({ type: 'jsonb', default: '[]' }) prizeDistributionMinor: number[];
+  @Column({ default: false }) financeHold: boolean;
+  @Column({ type: 'text', nullable: true }) abandonedReason: string;
+  @Column({ type: 'timestamptz', nullable: true }) endedAt: Date;
 
   @CreateDateColumn()
   createdAt: Date;

@@ -15,6 +15,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { VerificationAPI, formatAadhaarInput, isValidAadhaarFormat } from '../services/verificationApi.js';
+import { clearSession } from '../services/auth.js';
 import '../styles/pages/verification.css';
 
 export default function VerificationModal({ open, onClose, onVerified, purpose }) {
@@ -22,6 +23,7 @@ export default function VerificationModal({ open, onClose, onVerified, purpose }
   const [aadhaar, setAadhaar] = useState('');
   const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
+  const [needsLogin, setNeedsLogin] = useState(false);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const firstFieldRef = useRef(null);
@@ -29,6 +31,7 @@ export default function VerificationModal({ open, onClose, onVerified, purpose }
   useEffect(() => {
     if (!open) return;
     setStep(1);
+    setNeedsLogin(false);
     setAadhaar('');
     setOtp('');
     setError('');
@@ -66,6 +69,7 @@ export default function VerificationModal({ open, onClose, onVerified, purpose }
     try {
       const res = await VerificationAPI.requestOtp(aadhaar.replace(/\D/g, ''));
       if (!res.ok) {
+        setNeedsLogin(res.status === 401);
         setError(describeFailure(res));
         return;
       }
@@ -91,6 +95,7 @@ export default function VerificationModal({ open, onClose, onVerified, purpose }
     try {
       const res = await VerificationAPI.verify(otp);
       if (!res.ok) {
+        setNeedsLogin(res.status === 401);
         setError(describeFailure(res));
         return;
       }
@@ -130,6 +135,10 @@ export default function VerificationModal({ open, onClose, onVerified, purpose }
         <h2 style={{ marginBottom: 4 }}>Aadhaar Verification</h2>
         <p style={{ color: '#9aa4b2', marginBottom: 14, fontSize: 13.5 }}>{purposeLine}</p>
 
+        {needsLogin && <p role="alert">
+          Sign in again to refresh your session, then request the mock OTP.
+          {' '}<a href="/pages/login.html" onClick={() => { clearSession(); VerificationAPI.resetCache(); }}>Log in again</a>
+        </p>}
         {done ? (
           <div className="verify-loading" id="verification-success">
             <span aria-hidden="true" style={{ fontSize: 22 }}>✅</span>

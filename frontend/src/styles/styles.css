@@ -757,6 +757,17 @@ body:has(#sidebar-mount) #footer-mount {
   box-shadow: 0 10px 15px -3px rgba(231, 0, 11, 0.5);
 }
 
+.comp-badge.cancelled {
+  background: #3a3a3a;
+  color: #f87171;
+  border: 1px solid rgba(248, 113, 113, 0.5);
+}
+
+.comp-badge.ended {
+  background: #2a2a2a;
+  color: var(--text-muted);
+}
+
 .comp-badge.hot {
   background: var(--orange);
   box-shadow: 0 10px 15px -3px rgba(245, 73, 0, 0.5);
