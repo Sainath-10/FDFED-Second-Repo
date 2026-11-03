@@ -8,9 +8,9 @@ import {
 /**
  * Server-side audit trail for important workflow actions:
  * roster changes, disbands, refund requests/results, scheduling,
- * verification events and disputes.
+ * refund outcomes and disputes.
  *
- * Never log Aadhaar numbers, OTPs, tokens or other sensitive identity data here.
+ * Never log identity document numbers, OTPs, tokens or other sensitive identity data here.
  */
 @Entity('audit_logs')
 export class AuditLogEntity {

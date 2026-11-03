@@ -1,0 +1,1839 @@
+﻿================================================================================
+CHANGES COMPARED FROM COMMIT 39e3458 TO CURRENT WORKSPACE STATE
+Base Commit : 39e3458d3ce657afd6aa7fd74814514aece6810f ((feat) : Added chat feature)
+Target      : Current Working Directory State (branch react-fixed)
+Generated At: 2026-11-03 22:26:49
+================================================================================
+
+SUMMARY OF CHANGED FILES:
+ WORKFLOW_COMPLETION_REPORT.md                      |   3 +
+ backend/src/app.module.ts                          |   5 +-
+ backend/src/common/audit/audit.service.ts          |   2 +-
+ .../common/middleware/rate-limiter.middleware.ts   |   2 +-
+ backend/src/entities/audit-log.entity.ts           |   4 +-
+ backend/src/entities/user.entity.ts                |  23 ---
+ backend/src/modules/auth/auth.controller.ts        |   4 +-
+ backend/src/modules/auth/auth.service.ts           |   5 -
+ backend/src/modules/auth/dto/auth.dto.ts           |   3 -
+ .../competitions/competitions.controller.ts        |   6 +-
+ .../modules/competitions/competitions.service.ts   |  18 --
+ backend/src/modules/teams/teams.service.ts         |  26 ---
+ .../modules/verification/dto/verification.dto.ts   |  19 ---
+ .../verification/verification.controller.ts        |  54 ------
+ .../modules/verification/verification.module.ts    |  12 --
+ .../modules/verification/verification.service.ts   | 129 --------------
+ backend/test/run-tests.ts                          | 113 +++---------
+ frontend/src/components/VerificationModal.jsx      | 190 ---------------------
+ frontend/src/context/AuthContext.jsx               |   3 -
+ frontend/src/hooks/useVerificationGate.jsx         |  89 ----------
+ frontend/src/pages/CompInfo.jsx                    |  15 +-
+ frontend/src/pages/CreateCompetition.jsx           |  21 +--
+ frontend/src/pages/CreateTeam.jsx                  |  18 +-
+ frontend/src/pages/JoinTeams.jsx                   |  12 +-
+ frontend/src/pages/Profile.jsx                     |  50 +-----
+ frontend/src/services/api.js                       |  45 ++---
+ frontend/src/services/verificationApi.js           |  91 ----------
+ frontend/src/styles/pages/verification.css         | 140 ---------------
+ 28 files changed, 75 insertions(+), 1027 deletions(-)
+ backend/src/database/migrations/1793846400000-remove-aadhaar-verification.ts | 26 ++++++++++++++++++++++++++
+
+================================================================================
+FULL UNIFIED DIFF:
+================================================================================
+
+diff --git a/WORKFLOW_COMPLETION_REPORT.md b/WORKFLOW_COMPLETION_REPORT.md
+index 5359875..b2972da 100644
+--- a/WORKFLOW_COMPLETION_REPORT.md
++++ b/WORKFLOW_COMPLETION_REPORT.md
+@@ -1,5 +1,8 @@
+ # NEXUS ESPORTS ΓÇö Workflow Enhancements Completion Report
+ 
++> Historical record. The simulated Aadhaar verification this document describes has since been
++> removed from the codebase, and this document is retained for audit history only.
++
+ Branch: `react-fixed` (branched from `react-final`)
+ Last verified: 2026-10-23
+ 
+diff --git a/backend/src/app.module.ts b/backend/src/app.module.ts
+index daf7439..251b848 100644
+--- a/backend/src/app.module.ts
++++ b/backend/src/app.module.ts
+@@ -14,7 +14,6 @@ import { PoliciesModule } from './modules/policies/policies.module';
+ import { MatchesModule } from './modules/matches/matches.module';
+ import { RevenueModule } from './modules/revenue/revenue.module';
+ import { AdminModule } from './modules/admin/admin.module';
+-import { VerificationModule } from './modules/verification/verification.module';
+ import { ChatModule } from './modules/chat/chat.module';
+ import { SeederService } from './database/seeder.service';
+ 
+@@ -39,6 +38,7 @@ import { WorkflowEnhancements1710000000000 } from './database/migrations/1710000
+ import { MatchBrackets1793577600000 } from './database/migrations/1793577600000-match-brackets';
+ import { MatchResultRules1793577601000 } from './database/migrations/1793577601000-match-result-rules';
+ import { ChatMessages1793664000000 } from './database/migrations/1793664000000-chat-messages';
++import { RemoveAadhaarVerification1793846400000 } from './database/migrations/1793846400000-remove-aadhaar-verification';
+ 
+ @Module({
+   imports: [
+@@ -85,7 +85,7 @@ import { ChatMessages1793664000000 } from './database/migrations/1793664000000-c
+           // automatic synchronization. Set DB_SYNCHRONIZE=true only for a
+           // throwaway local database.
+           synchronize: config.get<string>('DB_SYNCHRONIZE') === 'true',
+-          migrations: [WorkflowEnhancements1710000000000, MatchBrackets1793577600000, MatchResultRules1793577601000, ChatMessages1793664000000],
++          migrations: [WorkflowEnhancements1710000000000, MatchBrackets1793577600000, MatchResultRules1793577601000, ChatMessages1793664000000, RemoveAadhaarVerification1793846400000],
+           migrationsRun: config.get<string>('DB_MIGRATIONS_RUN') !== 'false',
+           logging: config.get<string>('NODE_ENV') === 'development' ? ['error', 'warn'] : false,
+         };
+@@ -116,7 +116,6 @@ import { ChatMessages1793664000000 } from './database/migrations/1793664000000-c
+     MatchesModule,
+     RevenueModule,
+     AdminModule,
+-    VerificationModule,
+     ChatModule,
+   ],
+   providers: [SeederService],
+diff --git a/backend/src/common/audit/audit.service.ts b/backend/src/common/audit/audit.service.ts
+index a80935e..5c3fd61 100644
+--- a/backend/src/common/audit/audit.service.ts
++++ b/backend/src/common/audit/audit.service.ts
+@@ -5,7 +5,7 @@ import { AuditLogEntity } from '../../entities/audit-log.entity';
+ 
+ /**
+  * Records important workflow actions server-side (┬º14).
+- * NEVER record Aadhaar numbers, OTPs, tokens or sensitive identity data here.
++ * NEVER record identity document numbers, OTPs, tokens or sensitive identity data here.
+  */
+ @Injectable()
+ export class AuditLogService {
+diff --git a/backend/src/common/middleware/rate-limiter.middleware.ts b/backend/src/common/middleware/rate-limiter.middleware.ts
+index 9b6ed1a..915b6dd 100644
+--- a/backend/src/common/middleware/rate-limiter.middleware.ts
++++ b/backend/src/common/middleware/rate-limiter.middleware.ts
+@@ -28,7 +28,7 @@ export class RateLimiterMiddleware implements NestMiddleware {
+     const ip = req.ip || req.socket.remoteAddress || '127.0.0.1';
+     // Scope ordinary traffic by method and endpoint. A single IP-wide bucket
+     // lets harmless page/status requests exhaust the allowance for unrelated
+-    // actions such as requesting a verification OTP.
++    // write actions.
+     const pathname = String(req.originalUrl || req.url || '/')
+       .split('?')[0]
+       .replace(/\/+$/, '') || '/';
+diff --git a/backend/src/entities/audit-log.entity.ts b/backend/src/entities/audit-log.entity.ts
+index 23ca3df..d106ac6 100644
+--- a/backend/src/entities/audit-log.entity.ts
++++ b/backend/src/entities/audit-log.entity.ts
+@@ -8,9 +8,9 @@ import {
+ /**
+  * Server-side audit trail for important workflow actions:
+  * roster changes, disbands, refund requests/results, scheduling,
+- * verification events and disputes.
++ * refund outcomes and disputes.
+  *
+- * Never log Aadhaar numbers, OTPs, tokens or other sensitive identity data here.
++ * Never log identity document numbers, OTPs, tokens or other sensitive identity data here.
+  */
+ @Entity('audit_logs')
+ export class AuditLogEntity {
+diff --git a/backend/src/entities/user.entity.ts b/backend/src/entities/user.entity.ts
+index ec58d18..a4249b0 100644
+--- a/backend/src/entities/user.entity.ts
++++ b/backend/src/entities/user.entity.ts
+@@ -42,29 +42,6 @@ export class UserEntity {
+   @Column({ nullable: true, type: 'text' })
+   bio: string;
+ 
+-  /**
+-   * Mock verification status ('unverified' | 'verified').
+-   * NOTE: This is a simulated workflow flag, NOT real UIDAI/KYC proof of identity.
+-   * It is used to gate competition create/join workflows.
+-   */
+-  @Column({ name: 'verificationStatus', type: 'varchar', default: 'unverified' })
+-  verificationStatus: string;
+-
+-  @Column({ name: 'verifiedAt', type: 'timestamptz', nullable: true, default: null })
+-  verifiedAt: Date | null;
+-
+-  /** Masked representation only (e.g. XXXX XXXX 1234) ΓÇö the full Aadhaar number is never stored, logged or sent anywhere. */
+-  @Column({ name: 'aadhaarMasked', type: 'varchar', nullable: true, default: null })
+-  aadhaarMasked: string | null;
+-
+-  /**
+-   * Requires mock verification before publishing a competition (┬º13.1).
+-   * Same mock flag as verificationStatus; separate column so organizer-specific
+-   * product rules can diverge from participant verification later.
+-   */
+-  @Column({ name: 'organizerVerificationStatus', type: 'varchar', default: 'unverified' })
+-  organizerVerificationStatus: string;
+-
+   @CreateDateColumn({ name: 'createdAt' })
+   createdAt: Date;
+ 
+diff --git a/backend/src/modules/auth/auth.controller.ts b/backend/src/modules/auth/auth.controller.ts
+index 2e935e3..f92e201 100644
+--- a/backend/src/modules/auth/auth.controller.ts
++++ b/backend/src/modules/auth/auth.controller.ts
+@@ -45,7 +45,7 @@ export class AuthController {
+   @Get('me')
+   @UseGuards(JwtAuthGuard)
+   @ApiBearerAuth()
+-  @ApiOperation({ summary: 'Get current authenticated user (fresh from DB, includes mock verification status)' })
++  @ApiOperation({ summary: 'Get current authenticated user (fresh from DB)' })
+   async getMe(@Request() req: any) {
+     const fresh = await this.authService.getUserById(req.user.id);
+     if (!fresh) return req.user;
+@@ -55,8 +55,6 @@ export class AuthController {
+       email: fresh.email,
+       role: fresh.role,
+       adminType: fresh.adminType,
+-      verificationStatus: fresh.verificationStatus || 'unverified',
+-      verifiedAt: fresh.verifiedAt || null,
+       profilePicUrl: fresh.profilePicUrl || null,
+       bio: fresh.bio || null,
+     };
+diff --git a/backend/src/modules/auth/auth.service.ts b/backend/src/modules/auth/auth.service.ts
+index f70d526..d9757fc 100644
+--- a/backend/src/modules/auth/auth.service.ts
++++ b/backend/src/modules/auth/auth.service.ts
+@@ -41,8 +41,6 @@ export class AuthService {
+         email: user.email,
+         username: user.username,
+         role: user.role,
+-        verificationStatus: (user as any).verificationStatus || 'unverified',
+-        organizerVerificationStatus: (user as any).organizerVerificationStatus || 'unverified',
+       },
+       message: 'Registration successful. You can now log in.',
+     };
+@@ -90,9 +88,6 @@ export class AuthService {
+         role: user.role,
+         adminType: user.adminType || user.role,
+         revokedReason: revokedReason,
+-        verificationStatus: user.verificationStatus || 'unverified',
+-        organizerVerificationStatus: user.organizerVerificationStatus || 'unverified',
+-        verifiedAt: user.verifiedAt || null,
+       } as any,
+       access_token: accessToken,
+       message: 'Login successful',
+diff --git a/backend/src/modules/auth/dto/auth.dto.ts b/backend/src/modules/auth/dto/auth.dto.ts
+index 44f3efc..2dc4aa9 100644
+--- a/backend/src/modules/auth/dto/auth.dto.ts
++++ b/backend/src/modules/auth/dto/auth.dto.ts
+@@ -73,9 +73,6 @@ export class AuthResponseDto {
+     email: string;
+     username: string;
+     role: UserRole;
+-    verificationStatus?: string;
+-    organizerVerificationStatus?: string;
+-    verifiedAt?: Date | null;
+   };
+ 
+   @ApiProperty({
+diff --git a/backend/src/modules/competitions/competitions.controller.ts b/backend/src/modules/competitions/competitions.controller.ts
+index 39fdf99..23d78cd 100644
+--- a/backend/src/modules/competitions/competitions.controller.ts
++++ b/backend/src/modules/competitions/competitions.controller.ts
+@@ -30,7 +30,7 @@ export class CompetitionsController {
+   @HttpCode(201)
+   @ApiOperation({
+     summary: 'Create and auto-approve a new competition',
+-    description: 'Any authenticated, verified user can create a competition. The authenticated user becomes the owner/organizer.',
++    description: 'Any authenticated user can create a competition. The authenticated user becomes the owner/organizer.',
+   })
+   @ApiResponse({
+     status: 201,
+@@ -102,8 +102,8 @@ export class CompetitionsController {
+     description: 'Private competitions require a valid join code; public competitions never require one (┬º2.4).',
+   })
+   async joinValidate(@Body() dto: JoinValidateDto, @CurrentUser() user?: any) {
+-    // ┬º12.4 ΓÇö the authenticated account (id + username) is used for the
+-    // backend-enforced mock-verification gate; never trust the request body.
++    // The authenticated account (id + username) comes from the JWT; never
++    // trust the request body.
+     return this.competitionsService.participate(dto.competitionId, dto.joinCode, user);
+   }
+ 
+diff --git a/backend/src/modules/competitions/competitions.service.ts b/backend/src/modules/competitions/competitions.service.ts
+index 425facf..c8df633 100644
+--- a/backend/src/modules/competitions/competitions.service.ts
++++ b/backend/src/modules/competitions/competitions.service.ts
+@@ -35,26 +35,11 @@ export class CompetitionsService {
+     private auditLog: AuditLogService,
+   ) {}
+ 
+-  /** Mock-verification gate (┬º12.4). Backend enforcement ΓÇö frontend UI alone is insufficient. */
+-  private async assertVerified(userId: string, context: string) {
+-    const user = await this.userRepository.findById(userId);
+-    if (!user) throw new BadRequestException('Authenticated user no longer exists.');
+-    if (String(user.verificationStatus || '').toLowerCase() !== 'verified') {
+-      throw new ForbiddenException(
+-        `Simulated Aadhaar verification is required before you can ${context}. Open your Profile ΓåÆ Verification to complete the (simulated) verification flow.`,
+-      );
+-    }
+-    return user;
+-  }
+-
+   async createCompetition(
+     createCompetitionDto: CreateCompetitionDto,
+     createdBy: string = 'system',
+     authenticatedUserId?: string,
+   ): Promise<ICompetition> {
+-    // ┬º12.4 verification gate ΓÇö enforced on the backend
+-    if (authenticatedUserId) await this.assertVerified(authenticatedUserId, 'create or publish a competition');
+-
+     const { name, description, startDate, endDate, coOrganizers, ...extras } = createCompetitionDto;
+ 
+     if (!name || name.trim().length < 3) {
+@@ -216,13 +201,10 @@ export class CompetitionsService {
+     joinCode: string | undefined,
+     user: any,
+   ): Promise<{ ok: boolean; message: string }> {
+-    // ┬º12.4 ΓÇö joining requires the persisted (simulated) verification status.
+-    // Frontend gating alone is not sufficient: direct API calls are rejected here.
+     const userId = typeof user === 'string' ? null : user?.id;
+     if (!userId) {
+       throw new ForbiddenException('Authentication is required to join a competition.');
+     }
+-    await this.assertVerified(userId, 'join a competition');
+ 
+     const comp = await this.competitionRepository.findById(competitionId);
+     if (!comp) throw new NotFoundException(`Competition ${competitionId} not found`);
+diff --git a/backend/src/modules/teams/teams.service.ts b/backend/src/modules/teams/teams.service.ts
+index 903885f..92bd8dc 100644
+--- a/backend/src/modules/teams/teams.service.ts
++++ b/backend/src/modules/teams/teams.service.ts
+@@ -46,23 +46,6 @@ export class TeamsService {
+     return team;
+   }
+ 
+-  /**
+-   * Mock-verification gate (┬º12.4). Backend-enforced for every joining path:
+-   * team creation, member add, invite acceptance and join-request approval.
+-   */
+-  private async assertVerified(user: any, context: string) {
+-    const authUserId = user?.id;
+-    const byId = authUserId ? await this.userRepository.findById(authUserId) : null;
+-    const verifier = byId
+-      ? String(byId.verificationStatus || '').toLowerCase()
+-      : null;
+-    if (verifier !== 'verified') {
+-      throw new ForbiddenException(
+-        `Simulated Aadhaar verification is required before you can ${context}. Open your Profile ΓåÆ Verification to complete the (simulated) verification flow.`,
+-      );
+-    }
+-  }
+-
+   /** Authoritative persisted payment record check (┬º6.1). */
+   private async participantHasPaid(competitionId: string, username: string): Promise<boolean> {
+     if (!competitionId || !username) return false;
+@@ -80,9 +63,6 @@ export class TeamsService {
+     const { name, competitionId, members, joinCode } = createTeamDto;
+     const leaderId = user?.username || user?.id || 'system';
+ 
+-    // ┬º12.4 ΓÇö unverified users cannot join/create through direct API requests
+-    await this.assertVerified(user, 'create a team for a competition');
+-
+     const competition = await this.competitionRepository.findById(competitionId);
+     if (!competition) {
+       throw new NotFoundException(`Competition with ID ${competitionId} not found`);
+@@ -480,8 +460,6 @@ export class TeamsService {
+     // backend-derived username; the frontend value is never trusted
+     const fromUsername = String(user?.username || '').trim();
+     if (!fromUsername) throw new ForbiddenException('User context required');
+-    await this.assertVerified(user, 'request to join a team');
+-
+     const team = await this.teamRepository.findById(teamId);
+     if (!team) throw new NotFoundException(`Team with ID ${teamId} not found`);
+     if (team.status === 'disbanded') {
+@@ -640,8 +618,6 @@ export class TeamsService {
+     if (req.status !== 'awaiting_payment') {
+       throw new BadRequestException('The team lead has to accept your request before you can pay.');
+     }
+-    await this.assertVerified(user, 'pay the entry fee');
+-
+     const team = await this.teamRepository.findById(req.teamId);
+     if (!team) throw new NotFoundException(`Team with ID ${req.teamId} not found`);
+     const competition = await this.competitionRepository.findById(team.competitionId);
+@@ -663,7 +639,6 @@ export class TeamsService {
+   }
+ 
+   async createInvite(teamId: string, competitionId: string, toUsername: string, fromUsername: string, user: any) {
+-    await this.assertVerified(user, 'invite a player to a team');
+     const team = await this.verifyTeamOwnership(teamId, user);
+     if (team.status === 'disbanded') {
+       throw new BadRequestException('This team has been disbanded.');
+@@ -798,7 +773,6 @@ export class TeamsService {
+ 
+     let team = await this.teamRepository.findById(invite.teamId);
+     if (decision === 'accepted') {
+-      await this.assertVerified(user, 'accept a team invitation');
+       if (!team) throw new NotFoundException(`Team with ID ${invite.teamId} not found`);
+       if (team.status === 'disbanded') {
+         throw new BadRequestException('This team has been disbanded; the invitation is no longer valid.');
+diff --git a/backend/src/modules/verification/dto/verification.dto.ts b/backend/src/modules/verification/dto/verification.dto.ts
+deleted file mode 100644
+index e42c901..0000000
+--- a/backend/src/modules/verification/dto/verification.dto.ts
++++ /dev/null
+@@ -1,19 +0,0 @@
+-import { ApiProperty } from '@nestjs/swagger';
+-
+-export class RequestOtpDto {
+-  @ApiProperty({ description: '12-digit Aadhaar number (simulated). Never stored in full.' })
+-  aadhaarNumber: string;
+-}
+-
+-export class VerifyOtpDto {
+-  @ApiProperty({ description: 'OTP ΓÇö any non-empty value completes the simulated flow. Never stored.' })
+-  otp: string;
+-}
+-
+-export class VerificationStatusResponseDto {
+-  @ApiProperty({ enum: ['unverified', 'verified'] }) verificationStatus: string;
+-  @ApiProperty({ enum: ['unverified', 'verified'] }) organizerVerificationStatus: string;
+-  @ApiProperty({ required: false, nullable: true }) verifiedAt?: Date | null;
+-  @ApiProperty({ required: false, nullable: true }) aadhaarMasked?: string | null;
+-  @ApiProperty() simulated: boolean;
+-}
+diff --git a/backend/src/modules/verification/verification.controller.ts b/backend/src/modules/verification/verification.controller.ts
+deleted file mode 100644
+index f2ffbbf..0000000
+--- a/backend/src/modules/verification/verification.controller.ts
++++ /dev/null
+@@ -1,54 +0,0 @@
+-import {
+-  Controller,
+-  Get,
+-  Post,
+-  Body,
+-  UseGuards,
+-  Request,
+-  HttpCode,
+-} from '@nestjs/common';
+-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+-import { IsString } from 'class-validator';
+-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+-import { VerificationService } from './verification.service';
+-import { RequestOtpDto, VerifyOtpDto, VerificationStatusResponseDto } from './dto/verification.dto';
+-
+-export class AadhaarRequestDto {
+-  @IsString()
+-  aadhaarNumber: string;
+-}
+-
+-export class AadhaarVerifyDto {
+-  @IsString()
+-  otp: string;
+-}
+-
+-@ApiTags('Verification')
+-@ApiBearerAuth()
+-@Controller('verification')
+-export class VerificationController {
+-  constructor(private verificationService: VerificationService) {}
+-
+-  @Get('status')
+-  @UseGuards(JwtAuthGuard)
+-  @ApiOperation({ summary: 'Get current user verification status (mock/simulated Aadhaar flow)' })
+-  async getStatus(@Request() req: any): Promise<VerificationStatusResponseDto> {
+-    return this.verificationService.getStatus(req.user.id, req.user.username);
+-  }
+-
+-  @Post('aadhaar/request-otp')
+-  @UseGuards(JwtAuthGuard)
+-  @HttpCode(200)
+-  @ApiOperation({ summary: 'Simulated step 1: validate 12-digit Aadhaar format (no real UIDAI call)' })
+-  async requestOtp(@Request() req: any, @Body() dto: AadhaarRequestDto) {
+-    return this.verificationService.requestOtp(req.user.id, dto.aadhaarNumber);
+-  }
+-
+-  @Post('aadhaar/verify')
+-  @UseGuards(JwtAuthGuard)
+-  @HttpCode(200)
+-  @ApiOperation({ summary: 'Simulated step 2: complete mock verification with a non-empty OTP' })
+-  async verify(@Request() req: any, @Body() dto: AadhaarVerifyDto) {
+-    return this.verificationService.verify(req.user.id, dto.otp);
+-  }
+-}
+diff --git a/backend/src/modules/verification/verification.module.ts b/backend/src/modules/verification/verification.module.ts
+deleted file mode 100644
+index 2e27045..0000000
+--- a/backend/src/modules/verification/verification.module.ts
++++ /dev/null
+@@ -1,12 +0,0 @@
+-import { Module } from '@nestjs/common';
+-import { VerificationService } from './verification.service';
+-import { VerificationController } from './verification.controller';
+-import { AuthModule } from '../auth/auth.module';
+-
+-@Module({
+-  imports: [AuthModule],
+-  controllers: [VerificationController],
+-  providers: [VerificationService],
+-  exports: [VerificationService],
+-})
+-export class VerificationModule {}
+diff --git a/backend/src/modules/verification/verification.service.ts b/backend/src/modules/verification/verification.service.ts
+deleted file mode 100644
+index 558f22c..0000000
+--- a/backend/src/modules/verification/verification.service.ts
++++ /dev/null
+@@ -1,129 +0,0 @@
+-import { Injectable, BadRequestException, ServiceUnavailableException } from '@nestjs/common';
+-import { UserRepository } from '../auth/repositories/user.repository';
+-import { AuditLogService } from '../../common/audit/audit.service';
+-
+-/**
+- * MOCK AADHAAR VERIFICATION (┬º12) ΓÇö SIMULATED, labelled as such everywhere.
+- *
+- * - Step 1 (requestOtp): validates the 12-digit FORMAT only. A 12-digit format
+- *   check does not prove that a number is authentic or belongs to the user.
+- * - Step 2 (verify): accepts any non-empty OTP ΓÇö identity is NOT established.
+- * - The full Aadhaar number is never stored/logged/sent anywhere; only a masked
+- *   representation (XXXX XXXX <last4>) may be persisted. OTP values are never
+- *   persisted.
+- * - This is an application workflow flag, not a security boundary against fraud.
+- *   A compliant identity-verification provider can replace this flow later: the
+- *   provider-specific logic is isolated to this service.
+- */
+-@Injectable()
+-export class VerificationService {
+-  constructor(
+-    private userRepository: UserRepository,
+-    private auditLog: AuditLogService,
+-  ) {}
+-
+-  private maskAadhaar(digits: string): string {
+-    // keep last 4 digits only; masked representation, full number never stored
+-    return `XXXX XXXX ${digits.slice(-4)}`;
+-  }
+-
+-  /**
+-   * Explicit test/mock boundary. Mock mode is the default outside production;
+-   * production must configure a real provider (or an explicitly named test
+-   * environment) instead of silently accepting arbitrary Aadhaar/OTP values.
+-   */
+-  private mockModeEnabled(): boolean {
+-    const configured = String(process.env.VERIFICATION_MODE || '').toLowerCase();
+-    if (configured === 'mock') return true;
+-    if (configured === 'provider') return false;
+-    return process.env.NODE_ENV !== 'production';
+-  }
+-
+-  private assertVerificationMode(): void {
+-    if (!this.mockModeEnabled()) {
+-      throw new ServiceUnavailableException(
+-        'Identity verification is not configured. Contact the platform administrator.',
+-      );
+-    }
+-  }
+-
+-  async getStatus(userId: string, username: string) {
+-    const user = await this.userRepository.findById(userId);
+-    if (!user) userNotFound();
+-    return {
+-      // For organizers, the organizer-specific flag applies; base status for participants.
+-      verificationStatus: user.verificationStatus,
+-      organizerVerificationStatus: user.organizerVerificationStatus || user.verificationStatus,
+-      verifiedAt: user.verifiedAt,
+-      aadhaarMasked: user.aadhaarMasked,
+-      simulated: this.mockModeEnabled(),
+-    };
+-  }
+-
+-  async requestOtp(userId: string, aadhaarNumber: string) {
+-    this.assertVerificationMode();
+-    const clean = String(aadhaarNumber || '').replace(/\D/g, '');
+-    if (clean.length !== 12) {
+-      throw new BadRequestException('Please enter a valid 12-digit Aadhaar number.');
+-    }
+-    const user = await this.userRepository.findById(userId);
+-    if (!user) userNotFound();
+-
+-    // Simulated step: an actual UIDAI integration would initiate the OTP here.
+-    // We deliberately do NOT generate, send, or store any OTP.
+-    await this.auditLog.record('VERIFICATION_OTP_REQUESTED', {
+-      actor: user.username,
+-      entityType: 'user',
+-      entityId: user.id,
+-      details: 'Simulated Aadhaar OTP step initiated (12-digit format validated only).',
+-      // metadata intentionally excludes the Aadhaar number
+-    });
+-
+-    return {
+-      ok: true,
+-      simulated: true,
+-      message: 'Format validated. Mock verification: enter any non-empty OTP to complete the simulated flow. This is NOT real UIDAI verification.',
+-      masked: this.maskAadhaar(clean),
+-    };
+-  }
+-
+-  async verify(userId: string, otp: string) {
+-    this.assertVerificationMode();
+-    const clean = String(otp || '').trim();
+-    if (!clean) {
+-      throw new BadRequestException('Please enter the OTP to complete verification.');
+-    }
+-
+-    const user = await this.userRepository.findById(userId);
+-    if (!user) userNotFound();
+-    if (user.verificationStatus === 'verified') {
+-      return { ok: true, alreadyVerified: true, verificationStatus: 'verified' };
+-    }
+-
+-    // Any non-empty OTP completes the SIMULATED flow. No real authentication.
+-    const updated = await this.userRepository.update(userId, {
+-      verificationStatus: 'verified',
+-      organizerVerificationStatus: 'verified',
+-      verifiedAt: new Date(),
+-    } as any);
+-
+-    await this.auditLog.record('ACCOUNT_VERIFIED_MOCK', {
+-      actor: user.username,
+-      entityType: 'user',
+-      entityId: user.id,
+-      details: 'Simulated Aadhaar verification completed (mock flow; not real KYC).',
+-    });
+-
+-    return {
+-      ok: true,
+-      simulated: true,
+-      verificationStatus: 'verified',
+-      verifiedAt: (updated as any)?.verifiedAt || new Date(),
+-      message: 'Verification complete (simulated).',
+-    };
+-  }
+-}
+-
+-function userNotFound(): never {
+-  throw new BadRequestException('Authenticated user no longer exists.');
+-}
+diff --git a/backend/test/run-tests.ts b/backend/test/run-tests.ts
+index 80f1416..f9b6476 100644
+--- a/backend/test/run-tests.ts
++++ b/backend/test/run-tests.ts
+@@ -5,14 +5,11 @@
+  *
+  * These are service-level unit tests with in-memory fakes for the TypeORM
+  * repositories, so they exercise the real business rules without requiring a
+- * PostgreSQL instance. No Aadhaar/OTP values are logged.
++ * PostgreSQL instance. No identity document or OTP values are logged.
+  */
+ import 'reflect-metadata';
+ import assert = require('node:assert/strict');
+-import { BadRequestException, ForbiddenException, ServiceUnavailableException } from '@nestjs/common';
+-
+-// The mock verification provider must be explicitly configured in tests too.
+-process.env.VERIFICATION_MODE = 'mock';
++import { BadRequestException, ForbiddenException } from '@nestjs/common';
+ 
+ import {
+   MAX_PRIZE_POOL,
+@@ -38,7 +35,6 @@ import {
+   findScheduleConflicts,
+   scheduleFixtures,
+ } from '../src/common/tournament/tournament.utils';
+-import { VerificationService } from '../src/modules/verification/verification.service';
+ import { CompetitionsService } from '../src/modules/competitions/competitions.service';
+ import { CompetitionsController } from '../src/modules/competitions/competitions.controller';
+ import { ROLES_KEY } from '../src/common/decorators/roles.decorator';
+@@ -92,21 +88,21 @@ async function middlewareTests() {
+     const response = () => ({ setHeader: () => undefined }) as any;
+     const next = () => undefined;
+ 
+-    // Exhaust GET /verification/status for this IP.
++    // Exhaust GET /competitions for this IP.
+     for (let i = 0; i < 100; i += 1) {
+       limiter.use({
+-        ip: '127.0.0.1', method: 'GET', originalUrl: '/verification/status',
++        ip: '127.0.0.1', method: 'GET', originalUrl: '/competitions',
+         socket: {},
+       } as any, response(), next);
+     }
+     assert.throws(() => limiter.use({
+-      ip: '127.0.0.1', method: 'GET', originalUrl: '/verification/status',
++      ip: '127.0.0.1', method: 'GET', originalUrl: '/competitions',
+       socket: {},
+     } as any, response(), next), /Rate limit exceeded/i);
+ 
+-    // The unrelated OTP action must retain its own allowance.
++    // An unrelated POST action must retain its own allowance.
+     assert.doesNotThrow(() => limiter.use({
+-      ip: '127.0.0.1', method: 'POST', originalUrl: '/verification/aadhaar/request-otp',
++      ip: '127.0.0.1', method: 'POST', originalUrl: '/teams',
+       socket: {},
+     } as any, response(), next));
+   });
+@@ -297,80 +293,13 @@ async function tournamentTests() {
+   });
+ }
+ 
+-// ΓöÇΓöÇΓöÇ Verification (┬º12) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+-async function verificationTests() {
+-  console.log('\nVerification (simulated)');
+-
+-  function makeService() {
+-    const user: any = { id: 'u1', username: 'alice', verificationStatus: 'unverified', organizerVerificationStatus: 'unverified' };
+-    const updates: any[] = [];
+-    const userRepository = {
+-      findById: async () => user,
+-      update: async (_id: string, patch: any) => { updates.push(patch); Object.assign(user, patch); return user; },
+-    };
+-    const audit = { record: async () => undefined };
+-    return { service: new VerificationService(userRepository as any, audit as any), user, updates };
+-  }
+-
+-  await test('new accounts default to unverified', async () => {
+-    const { service } = makeService();
+-    const status = await service.getStatus('u1', 'alice');
+-    assert.equal(status.verificationStatus, 'unverified');
+-    assert.equal(status.simulated, true);
+-  });
+-
+-  await test('invalid Aadhaar formats are rejected', async () => {
+-    const { service } = makeService();
+-    await expectThrow(() => service.requestOtp('u1', '1234'), BadRequestException, '12-digit');
+-    await expectThrow(() => service.requestOtp('u1', '12345678901a'), BadRequestException, '12-digit');
+-  });
+-
+-  await test('12-digit formats are accepted without storing the number', async () => {
+-    const { service, updates } = makeService();
+-    const result = await service.requestOtp('u1', '1234 5678 9012');
+-    assert.equal(result.ok, true);
+-    assert.equal(result.masked, 'XXXX XXXX 9012');
+-    assert.equal(updates.length, 0); // step 1 persists nothing
+-  });
+-
+-  await test('empty OTP is rejected and a non-empty mock OTP verifies', async () => {
+-    const { service, updates } = makeService();
+-    await expectThrow(() => service.verify('u1', ''), BadRequestException, 'OTP');
+-    const result = await service.verify('u1', '123456');
+-    assert.equal(result.verificationStatus, 'verified');
+-    assert.equal(updates.length, 1);
+-    const persisted = updates[0];
+-    assert.equal(persisted.verificationStatus, 'verified');
+-    assert.equal(Object.prototype.hasOwnProperty.call(persisted, 'aadhaarNumber'), false);
+-    assert.equal(Object.prototype.hasOwnProperty.call(persisted, 'otp'), false);
+-  });
+-
+-  await test('verified users are not asked to verify again', async () => {
+-    const { service, user } = makeService();
+-    user.verificationStatus = 'verified';
+-    const result = await service.verify('u1', 'anything');
+-    assert.equal(result.alreadyVerified, true);
+-  });
+-
+-  await test('provider mode refuses to pretend mock verification succeeded', async () => {
+-    const { service } = makeService();
+-    process.env.VERIFICATION_MODE = 'provider';
+-    await expectThrow(
+-      () => service.requestOtp('u1', '123456789012'),
+-      ServiceUnavailableException,
+-      'not configured',
+-    );
+-    process.env.VERIFICATION_MODE = 'mock';
+-  });
+-}
+-
+-// ΓöÇΓöÇΓöÇ CompetitionsService (┬º2, ┬º3, ┬º12.4) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
++// ΓöÇΓöÇΓöÇ CompetitionsService (┬º2, ┬º3) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+ async function competitionServiceTests() {
+   console.log('\nCompetitionsService');
+ 
+   const users = [
+-    { id: 'u1', username: 'alice', email: 'alice@nexus.gg', verificationStatus: 'verified' },
+-    { id: 'u2', username: 'bob', email: 'bob@nexus.gg', verificationStatus: 'unverified' },
++    { id: 'u1', username: 'alice', email: 'alice@nexus.gg' },
++    { id: 'u2', username: 'bob', email: 'bob@nexus.gg' },
+   ];
+ 
+   function makeService(comp: any, teams: any[] = [], spy: { updateCalls?: number } = null) {
+@@ -407,16 +336,18 @@ async function competitionServiceTests() {
+ 
+   const validDto: any = {
+     name: 'Winter Clash',
+-    description: 'A competitive winter tournament for verified teams.',
++    description: 'A competitive winter tournament for esports teams.',
+     startDate: future.toISOString(),
+     endDate: new Date(future.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+     type: 'league',
+     game: 'Valorant',
+   };
+ 
+-  await test('unverified users cannot create competitions', async () => {
++  await test('competitions can be created without any identity verification', async () => {
+     const service = makeService(null);
+-    await expectThrow(() => service.createCompetition(validDto, 'bob', 'u2'), ForbiddenException, 'verification is required');
++    const comp: any = await service.createCompetition(validDto, 'bob', 'u2');
++    assert.equal(comp.createdBy, 'bob');
++    assert.equal(comp.approvalStatus, 'approved');
+   });
+ 
+   await test('valid co-organizer usernames are accepted and notified', async () => {
+@@ -505,11 +436,10 @@ async function competitionServiceTests() {
+     });
+   });
+ 
+-  await test('joining enforces verification and private join codes', async () => {
++  await test('joining enforces private join codes without any identity verification', async () => {
+     const service = makeService({ id: 'c1', name: 'Private Cup', visibility: 'private', joinCode: 'SECRET42' });
+-    await expectThrow(() => service.participate('c1', 'SECRET42', { id: 'u2', username: 'bob' }), ForbiddenException, 'verification is required');
+     await expectThrow(() => service.participate('c1', 'WRONG', { id: 'u1', username: 'alice' }), BadRequestException, 'Invalid join code');
+-    const ok = await service.participate('c1', 'SECRET42', { id: 'u1', username: 'alice' });
++    const ok = await service.participate('c1', 'SECRET42', { id: 'u2', username: 'bob' });
+     assert.equal(ok.ok, true);
+   });
+ 
+@@ -800,7 +730,6 @@ async function teamServiceTests() {
+       findById: async () => ({
+         id: 'u1', username: 'alice',
+         role: opts.userRole || UserRole.PARTICIPANT,
+-        verificationStatus: opts.userState || 'verified',
+       }),
+       findByUsername: async (name: string) => (name === 'ghost' ? null : ({
+         id: `u-${name}`, username: name, email: `${name}@nexus.gg`,
+@@ -871,9 +800,10 @@ async function teamServiceTests() {
+     return { service, team, competition, saved, mutations, invites, joinRequest };
+   }
+ 
+-  await test('unverified users cannot create teams', async () => {
+-    const { service } = makeService({ userState: 'unverified' });
+-    await expectThrow(() => service.createTeam({ name: 'Bravo', competitionId: 'c1' } as any, { id: 'u1', username: 'alice' }), ForbiddenException, 'verification is required');
++  await test('teams can be created without any identity verification', async () => {
++    const { service, mutations } = makeService();
++    await service.createTeam({ name: 'Bravo', competitionId: 'c1' } as any, { id: 'u1', username: 'alice' });
++    assert.ok(mutations.find((m) => m.op === 'create'));
+   });
+ 
+   await test('new teams are auto-approved on creation', async () => {
+@@ -1574,7 +1504,6 @@ async function main() {
+   await competitionRuleTests();
+   await middlewareTests();
+   await tournamentTests();
+-  await verificationTests();
+   await competitionServiceTests();
+   await teamServiceTests();
+   await matchServiceTests();
+diff --git a/frontend/src/components/VerificationModal.jsx b/frontend/src/components/VerificationModal.jsx
+deleted file mode 100644
+index d352471..0000000
+--- a/frontend/src/components/VerificationModal.jsx
++++ /dev/null
+@@ -1,190 +0,0 @@
+-/**
+- * NEXUS ESPORTS ΓÇö Shared Simulated Aadhaar Verification Modal (┬º12)
+- *
+- * Reusable two-step dialog:
+- *   Step 1 ΓÇö 12-digit Aadhaar FORMAT check (front-end mirror of the backend rule).
+- *   Step 2 ΓÇö non-empty OTP completes the SIMULATED flow.
+- *
+- * Labelled "simulated" everywhere: this does NOT provide KYC, identity
+- * authentication or legal proof of identity. Values are sent only to the
+- * verification endpoint and never logged or stored in full.
+- *
+- * Used from the Profile page and as the verification gate before creating or
+- * joining a competition ΓÇö onVerified() lets the caller resume the original
+- * pending action with the preserved state (competition id, form values, etc.).
+- */
+-import { useEffect, useRef, useState } from 'react';
+-import { VerificationAPI, formatAadhaarInput, isValidAadhaarFormat } from '../services/verificationApi.js';
+-import '../styles/pages/verification.css';
+-
+-export default function VerificationModal({ open, onClose, onVerified, purpose }) {
+-  const [step, setStep] = useState(1);
+-  const [aadhaar, setAadhaar] = useState('');
+-  const [otp, setOtp] = useState('');
+-  const [error, setError] = useState('');
+-  const [busy, setBusy] = useState(false);
+-  const [done, setDone] = useState(false);
+-  const firstFieldRef = useRef(null);
+-
+-  useEffect(() => {
+-    if (!open) return;
+-    setStep(1);
+-    setAadhaar('');
+-    setOtp('');
+-    setError('');
+-    setBusy(false);
+-    setDone(false);
+-    setTimeout(() => firstFieldRef.current && firstFieldRef.current.focus(), 50);
+-  }, [open]);
+-
+-  if (!open) return null;
+-
+-  function close(cancelled) {
+-    // Esc/backdrop/X = cancellable safely at any step; no partial state persists.
+-    onClose && onClose(cancelled);
+-  }
+-
+-  function describeFailure(res) {
+-    const status = Number(res && res.status) || 0;
+-    if (status === 401) return 'Your session has expired. Please log in again.';
+-    if (status === 403) return 'You are not authorized to verify this account.';
+-    if (status === 400) return (res && res.error) || 'The details could not be validated. Please check and try again.';
+-    if (status >= 500) return 'The verification service is temporarily unavailable. Please try again.';
+-    if (!status) return 'Cannot reach the server. Check your connection and make sure the backend is running.';
+-    return (res && res.error) || 'Verification could not be completed. Please try again.';
+-  }
+-
+-  async function submitAadhaar(e) {
+-    e.preventDefault();
+-    if (busy) return;
+-    setError('');
+-    if (!isValidAadhaarFormat(aadhaar)) {
+-      setError('Please enter a valid 12-digit Aadhaar number.');
+-      return;
+-    }
+-    setBusy(true);
+-    try {
+-      const res = await VerificationAPI.requestOtp(aadhaar.replace(/\D/g, ''));
+-      if (!res.ok) {
+-        setError(describeFailure(res));
+-        return;
+-      }
+-      setAadhaar(formatAadhaarInput(aadhaar));
+-      setStep(2);
+-      setTimeout(() => firstFieldRef.current && firstFieldRef.current.focus(), 50);
+-    } catch (err) {
+-      setError(describeFailure(null));
+-    } finally {
+-      setBusy(false);
+-    }
+-  }
+-
+-  async function submitOtp(e) {
+-    e.preventDefault();
+-    if (busy) return;
+-    setError('');
+-    if (!String(otp).trim()) {
+-      setError('Please enter the OTP to continue.');
+-      return;
+-    }
+-    setBusy(true);
+-    try {
+-      const res = await VerificationAPI.verify(otp);
+-      if (!res.ok) {
+-        setError(describeFailure(res));
+-        return;
+-      }
+-      setDone(true);
+-      setTimeout(() => {
+-        onVerified && onVerified(true);
+-        onClose && onClose(true);
+-      }, 700);
+-    } catch (err) {
+-      setError(describeFailure(null));
+-    } finally {
+-      setBusy(false);
+-    }
+-  }
+-
+-  const purposeLine = purpose && purpose !== 'continue' ? `Required before you can ${purpose}.` : '';
+-
+-  return (
+-    <div
+-      className="modal-overlay open verification-modal-overlay"
+-      role="dialog"
+-      aria-modal="true"
+-      aria-label="Simulated Aadhaar verification"
+-      onClick={(e) => { if (e.target === e.currentTarget) close(false); }}
+-    >
+-      <div className="modal" id="verification-modal">
+-        <button
+-          type="button"
+-          aria-label="Close verification dialog"
+-          onClick={() => close(false)}
+-          style={{
+-            position: 'absolute', top: 14, right: 16, background: 'none', border: 'none',
+-            color: '#9aa4b2', fontSize: 20, cursor: 'pointer', lineHeight: 1,
+-          }}
+-        >Γ£ò</button>
+-
+-        <h2 style={{ marginBottom: 4 }}>Aadhaar Verification</h2>
+-        <p style={{ color: '#9aa4b2', marginBottom: 14, fontSize: 13.5 }}>{purposeLine}</p>
+-
+-        {done ? (
+-          <div className="verify-loading" id="verification-success">
+-            <span aria-hidden="true" style={{ fontSize: 22 }}>Γ£à</span>
+-            Verification complete. Updating your profileΓÇª
+-          </div>
+-        ) : step === 1 ? (
+-          <form id="verification-step-1" onSubmit={submitAadhaar} noValidate>
+-            <div className="verify-step-count">Step 1 of 2 ΓÇö Aadhaar Number</div>
+-            <p className="verify-intro">Enter your 12-digit Aadhaar number to continue.</p>
+-            <label className="verify-field-label" htmlFor="verification-aadhaar-input">Aadhaar number</label>
+-            <input
+-              ref={firstFieldRef}
+-              id="verification-aadhaar-input"
+-              className="verify-input"
+-              inputMode="numeric"
+-              autoComplete="off"
+-              placeholder="XXXX XXXX XXXX"
+-              maxLength={14}
+-              value={aadhaar}
+-              onChange={(e) => setAadhaar(formatAadhaarInput(e.target.value))}
+-            />
+-            {error && <div className="verify-error" id="verification-error" role="alert">{error}</div>}
+-            <div className="verify-actions">
+-              <button type="button" className="btn btn-ghost" id="verification-cancel" onClick={() => close(false)}>Cancel</button>
+-              <button type="submit" className="btn btn-primary" id="verification-request-otp" disabled={busy}>
+-                {busy ? 'ValidatingΓÇª' : 'Request OTP'}
+-              </button>
+-            </div>
+-          </form>
+-        ) : (
+-          <form id="verification-step-2" onSubmit={submitOtp} noValidate>
+-            <div className="verify-step-count">Step 2 of 2 ΓÇö OTP</div>
+-            <p className="verify-intro">Enter the OTP to verify your account.</p>
+-            <label className="verify-field-label" htmlFor="verification-otp-input">Enter OTP</label>
+-            <input
+-              ref={firstFieldRef}
+-              id="verification-otp-input"
+-              className="verify-input"
+-              inputMode="numeric"
+-              autoComplete="one-time-code"
+-              placeholder="ΓùÅ ΓùÅ ΓùÅ ΓùÅ ΓùÅ ΓùÅ"
+-              maxLength={10}
+-              value={otp}
+-              onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 10))}
+-            />
+-            {error && <div className="verify-error" id="verification-error" role="alert">{error}</div>}
+-            <div className="verify-actions">
+-              <button type="button" className="btn btn-ghost" onClick={() => { setStep(1); setError(''); }}>Back</button>
+-              <button type="submit" className="btn btn-primary" id="verification-verify" disabled={busy}>
+-                {busy ? 'VerifyingΓÇª' : 'Verify'}
+-              </button>
+-            </div>
+-          </form>
+-        )}
+-      </div>
+-    </div>
+-  );
+-}
+diff --git a/frontend/src/context/AuthContext.jsx b/frontend/src/context/AuthContext.jsx
+index 8d9078d..465edb8 100644
+--- a/frontend/src/context/AuthContext.jsx
++++ b/frontend/src/context/AuthContext.jsx
+@@ -10,7 +10,6 @@
+  */
+ import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+ import * as AuthService from '../services/auth.js';
+-import { VerificationAPI } from '../services/verificationApi.js';
+ 
+ const AuthContext = createContext(null);
+ 
+@@ -32,7 +31,6 @@ export function AuthProvider({ children }) {
+   const login = useCallback(async (options) => {
+     const result = await AuthService.login(options);
+     if (result.ok) {
+-      VerificationAPI.resetCache(); // never reuse another account's cached status
+       setSessionState(result.user || AuthService.getSession());
+     }
+     return result;
+@@ -45,7 +43,6 @@ export function AuthProvider({ children }) {
+ 
+   const logout = useCallback(() => {
+     AuthService.clearSession();
+-    VerificationAPI.resetCache();
+     setSessionState(null);
+   }, []);
+ 
+diff --git a/frontend/src/hooks/useVerificationGate.jsx b/frontend/src/hooks/useVerificationGate.jsx
+deleted file mode 100644
+index 4013e79..0000000
+--- a/frontend/src/hooks/useVerificationGate.jsx
++++ /dev/null
+@@ -1,89 +0,0 @@
+-/**
+- * NEXUS ESPORTS ΓÇö Verification gate hook (┬º12.4)
+- *
+- * Shared by competition create/join paths. Guarantees the pending action
+- * resumes after verification completes:
+- *   gate.run(action) ΓåÆ
+- *     - verified already? runs action() immediately.
+- *     - unverified? opens the shared VerificationModal, preserving the pending
+- *       action in a ref; when verification succeeds, resumes it automatically.
+- *
+- * The backend independently enforces the gate for direct API requests.
+- */
+-import { useCallback, useRef, useState } from 'react';
+-import VerificationModal from '../components/VerificationModal.jsx';
+-import { VerificationAPI, isVerified } from '../services/verificationApi.js';
+-
+-export default function useVerificationGate(purpose = 'continue') {
+-  const [open, setOpen] = useState(false);
+-  const [status, setStatus] = useState(null); // 'verified' | 'unverified' | null
+-  const pendingRef = useRef(null);
+-  const cancelRef = useRef(null);
+-
+-  /**
+-   * Returns true when verified. Always asks the backend (force refresh) so a
+-   * stale local flag can never override a persisted "unverified" response.
+-   */
+-  const check = useCallback(async () => {
+-    const res = await VerificationAPI.status(true);
+-    const verified = isVerified(res?.data || res?.verificationStatus);
+-    setStatus(verified ? 'verified' : 'unverified');
+-    return verified;
+-  }, []);
+-
+-  /**
+-   * Opens the shared verification dialog and resumes `action` after success.
+-   * `onCancel` (optional) lets the caller restore the UI it closed before
+-   * opening this dialog; it is never called after a successful verification.
+-   */
+-  const openGate = useCallback((action, onCancel) => {
+-    pendingRef.current = action;
+-    cancelRef.current = onCancel || null;
+-    setOpen(true);
+-  }, []);
+-
+-  /**
+-   * Runs `action` once verified. If unverified, stores the action and opens the
+-   * modal; after successful verification the same action is invoked so the
+-   * original form values / competition ids are preserved by the closure.
+-   */
+-  const run = useCallback(async (action) => {
+-    const verified = await check();
+-    if (verified) {
+-      await action();
+-      return true;
+-    }
+-    openGate(action);
+-    return false;
+-  }, [check, openGate]);
+-
+-  const modal = (
+-    <VerificationModal
+-      open={open}
+-      onClose={(completed) => {
+-        setOpen(false);
+-        if (completed) {
+-          // Resume the pending action only after the dialog has closed, so the
+-          // verification and checkout/publish modals never overlap.
+-          const pending = pendingRef.current;
+-          pendingRef.current = null;
+-          cancelRef.current = null;
+-          if (pending) Promise.resolve(pending()).catch(() => { /* action reports its own errors */ });
+-          return;
+-        }
+-        // Cancelled/failed ΓÇö no pending action runs and the caller's UI is
+-        // restored so the user never loses their entered data.
+-        pendingRef.current = null;
+-        const cancel = cancelRef.current;
+-        cancelRef.current = null;
+-        if (cancel) cancel();
+-      }}
+-      onVerified={() => {
+-        setStatus('verified');
+-      }}
+-      purpose={purpose}
+-    />
+-  );
+-
+-  return { check, run, openGate, gateModal: modal, status };
+-}
+diff --git a/frontend/src/pages/CompInfo.jsx b/frontend/src/pages/CompInfo.jsx
+index d791b81..b87eebd 100644
+--- a/frontend/src/pages/CompInfo.jsx
++++ b/frontend/src/pages/CompInfo.jsx
+@@ -11,7 +11,6 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+ import { useAuth } from '../context/AuthContext.jsx';
+ import NexusData from '../services/data.js';
+ import NexusTeamWorkflow from '../services/teamWorkflow.js';
+-import useVerificationGate from '../hooks/useVerificationGate.jsx';
+ import useJoinCodeGate from '../hooks/useJoinCodeGate.jsx';
+ import { DisputesAPI, MatchesAPI, TeamsAPI } from '../services/api.js';
+ import ChatRoom from '../components/ChatRoom.jsx';
+@@ -112,10 +111,6 @@ export default function CompInfo() {
+   const [disputeSubmitting, setDisputeSubmitting] = useState(false);
+   const [serverTeams, setServerTeams] = useState(null);
+ 
+-  // ┬º12.4 / ┬º2.4 ΓÇö shared gates: simulated verification before joining or
+-  // creating a team, and the organizer's code for private competitions.
+-  const gate = useVerificationGate('join or create a team in a competition');
+-
+   // Rosters change on other devices, so the Teams tab reads them from the backend.
+   const backendCompId = comp ? (comp.dbId || comp.id) : null;
+   useEffect(() => {
+@@ -221,8 +216,7 @@ export default function CompInfo() {
+       navigate(`/pages/comp-participant.html?id=${encodeURIComponent(myTeam.context.compId)}`);
+       return;
+     }
+-    // ┬º12.4 ΓÇö verification gate resumes this exact closure after verification.
+-    gate.run(async () => {
++    (async () => {
+       // ┬º2.4 ΓÇö private competitions require the backend-validated join code.
+       const code = await joinCodeGate.requireCode();
+       if (code === null) return; // cancelled ΓÇö no navigation, no duplicate records
+@@ -230,7 +224,7 @@ export default function CompInfo() {
+         try { sessionStorage.setItem(`nexus.joinCode.${comp.id}`, code); } catch (err) { /* ignore */ }
+       }
+       navigate(`/pages/join-teams.html?id=${comp.id}`);
+-    });
++    })();
+   }
+ 
+   function onCreate() {
+@@ -244,14 +238,14 @@ export default function CompInfo() {
+       }
+       return;
+     }
+-    gate.run(async () => {
++    (async () => {
+       const code = await joinCodeGate.requireCode();
+       if (code === null) return;
+       if (code) {
+         try { sessionStorage.setItem(`nexus.joinCode.${comp.id}`, code); } catch (err) { /* ignore */ }
+       }
+       navigate(`/pages/create-team.html?id=${comp.id}`);
+-    });
++    })();
+   }
+ 
+  // Button state
+@@ -776,7 +770,6 @@ export default function CompInfo() {
+         </div>
+       )}
+ 
+-      {gate.gateModal}
+       {joinCodeGate.modal}
+     </>
+   );
+diff --git a/frontend/src/pages/CreateCompetition.jsx b/frontend/src/pages/CreateCompetition.jsx
+index 235c860..7e71e0a 100644
+--- a/frontend/src/pages/CreateCompetition.jsx
++++ b/frontend/src/pages/CreateCompetition.jsx
+@@ -5,8 +5,7 @@
+  * live summary, co-organizer rows (validated against registered accounts),
+  * banner upload/preview, the strict QA validation rules, prize-pool cap
+  * (Γé╣10,00,000) and min entry fee Γé╣10, public/private visibility with a private
+- * join code, the theme-coloured platform-fee checkout modal, and the
+- * simulated-verification gate (┬º12.4) enforced before publishing.
++ * join code, and the theme-coloured platform-fee checkout modal.
+  */
+ import { useEffect, useMemo, useRef, useState } from 'react';
+ import { Link, useNavigate } from 'react-router-dom';
+@@ -14,7 +13,6 @@ import { useAuth } from '../context/AuthContext.jsx';
+ import NexusData from '../services/data.js';
+ import NexusTeamWorkflow from '../services/teamWorkflow.js';
+ import NexusAPI, { CompetitionsAPI } from '../services/api.js';
+-import useVerificationGate from '../hooks/useVerificationGate.jsx';
+ import { showToast } from '../lib/toast.js';
+ import { assetUrl } from '../lib/assets.js';
+ import '../styles/pages/create-competition.css';
+@@ -96,7 +94,6 @@ export default function CreateCompetition() {
+   const confirmingRef = useRef(false);
+   const [visibility, setVisibility] = useState('public'); // ┬º2.4 public | private
+   const [published, setPublished] = useState(null); // { comp, joinCode }
+-  const gate = useVerificationGate('create or publish a competition');
+ 
+  // Super-Admin platform settings (format availability + max-teams limit).
+   const platform = useMemo(() => {
+@@ -322,19 +319,6 @@ export default function CreateCompetition() {
+     const checkoutData = checkout;
+     try {
+       setPublishError('');
+-      // ┬º12.4 ΓÇö ask the authoritative server status first.
+-      const verified = await gate.check();
+-      if (!verified) {
+-        // Close the fee dialog BEFORE opening the verification dialog so the
+-        // two overlays can never be mounted at the same time. The pending
+-        // action keeps the checkout data and resumes it after verification.
+-        setCheckout(null);
+-        gate.openGate(
+-          () => publishCompetition(checkoutData),
+-          () => setCheckout(checkoutData), // cancelled/failed ΓÇö return to checkout
+-        );
+-        return;
+-      }
+       await publishCompetition(checkoutData);
+     } finally {
+       confirmingRef.current = false;
+@@ -520,7 +504,7 @@ export default function CreateCompetition() {
+                   </select>
+                   <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>
+                     {visibility === 'private'
+-                      ? 'A unique join code is generated when you publish. Only participants with the correct code can register ΓÇö share it with verified teams only.'
++                      ? 'A unique join code is generated when you publish. Only participants with the correct code can register ΓÇö share it only with the teams you want to join.'
+                       : 'Public competitions never ask for a join code and are discoverable on the Competitions page.'}
+                   </p>
+                 </div>
+@@ -712,7 +696,6 @@ export default function CreateCompetition() {
+         </div>
+       )}
+ 
+-      {gate.gateModal}
+     </>
+   );
+ }
+diff --git a/frontend/src/pages/CreateTeam.jsx b/frontend/src/pages/CreateTeam.jsx
+index f6279c3..a7b3c5f 100644
+--- a/frontend/src/pages/CreateTeam.jsx
++++ b/frontend/src/pages/CreateTeam.jsx
+@@ -13,7 +13,6 @@ import NexusData from '../services/data.js';
+ import NexusTeamWorkflow from '../services/teamWorkflow.js';
+ import { CompetitionsAPI, TeamsAPI } from '../services/api.js';
+ import { useAuth } from '../context/AuthContext.jsx';
+-import useVerificationGate from '../hooks/useVerificationGate.jsx';
+ import useJoinCodeGate from '../hooks/useJoinCodeGate.jsx';
+ import { showToast } from '../lib/toast.js';
+ import { AVATAR_ACCEPT, fileToAvatarDataUrl } from '../lib/imageAvatar.js';
+@@ -78,7 +77,6 @@ export default function CreateTeam() {
+   const gateComp = localComp || serverComp
+     ? { ...serverComp, ...localComp, visibility: serverComp?.visibility || localComp?.visibility }
+     : null;
+-  const gate = useVerificationGate('create a team for a competition');
+   const joinCodeGate = useJoinCodeGate(gateComp);
+ 
+   const backendCompId = localComp?.dbId || gateCompId;
+@@ -99,8 +97,7 @@ export default function CreateTeam() {
+     return () => { cancelled = true; };
+   }, [backendCompId]);
+ 
+-  // ┬º2.4 ΓÇö a private competition's join code comes before the team form. The code
+-  // check needs a verified account, so verification is resolved first.
++  // ┬º2.4 ΓÇö a private competition's join code comes before the team form.
+   useEffect(() => {
+     if (!accessChecked || accessStartedRef.current) return;
+     accessStartedRef.current = true;
+@@ -112,10 +109,7 @@ export default function CreateTeam() {
+       if (code === null) leave();
+       else setUnlocked(true);
+     };
+-    gate.check().then((verified) => {
+-      if (verified) requestCode();
+-      else gate.openGate(requestCode, leave);
+-    });
++    requestCode();
+   }, [accessChecked]);
+   const [inviteLink, setInviteLink] = useState(() => buildInviteLink(getCompIdFromPage(), context && context.teamId ? context.teamId : ''));
+ 
+@@ -197,8 +191,8 @@ export default function CreateTeam() {
+       return;
+     }
+ 
+-    // ┬º12.4 ΓÇö verification gate, then ┬º2.4 private join code, then creation.
+-    gate.run(async () => {
++    // ┬º2.4 ΓÇö private join code, then creation.
++    (async () => {
+       const joinCode = await joinCodeGate.requireCode();
+       if (joinCode === null) return;
+ 
+@@ -211,7 +205,7 @@ export default function CreateTeam() {
+       } else {
+         await submitTeam(compId, teamName, teamTag, logoSvg, joinCode || '');
+       }
+-    });
++    })();
+   }
+ 
+   if (!unlocked) {
+@@ -233,7 +227,6 @@ export default function CreateTeam() {
+           </p>
+         </div>
+ 
+-        {gate.gateModal}
+         {joinCodeGate.modal}
+       </main>
+     );
+@@ -355,7 +348,6 @@ export default function CreateTeam() {
+         </div>
+       )}
+ 
+-      {gate.gateModal}
+       {joinCodeGate.modal}
+     </main>
+   );
+diff --git a/frontend/src/pages/JoinTeams.jsx b/frontend/src/pages/JoinTeams.jsx
+index e745d8b..cbbf75a 100644
+--- a/frontend/src/pages/JoinTeams.jsx
++++ b/frontend/src/pages/JoinTeams.jsx
+@@ -12,7 +12,6 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+ import { useAuth } from '../context/AuthContext.jsx';
+ import NexusData from '../services/data.js';
+ import NexusTeamWorkflow from '../services/teamWorkflow.js';
+-import useVerificationGate from '../hooks/useVerificationGate.jsx';
+ import useJoinCodeGate from '../hooks/useJoinCodeGate.jsx';
+ import { TeamsAPI } from '../services/api.js';
+ import { showToast } from '../lib/toast.js';
+@@ -56,8 +55,7 @@ export default function JoinTeams() {
+     [id, version],
+   );
+ 
+- // ┬º12.4 / ┬º2.4 ΓÇö shared gates for direct URLs (join-teams.html?id=...).
+- const gate = useVerificationGate('join a team in a competition');
++ // ┬º2.4 ΓÇö shared join-code gate for direct URLs (join-teams.html?id=...).
+  const joinCodeGate = useJoinCodeGate(comp);
+ 
+  // Rejected competitions are archived.
+@@ -125,8 +123,7 @@ export default function JoinTeams() {
+       showToast('Unable to send request right now.', 'error');
+       return;
+     }
+-    // ┬º12.4 ΓÇö verification is enforced before the request is created.
+-    gate.run(() => proceedJoinTeam(teamId));
++    proceedJoinTeam(teamId);
+   }
+ 
+   async function confirmPayment() {
+@@ -146,7 +143,7 @@ export default function JoinTeams() {
+     if (directJoinAttempted.current || !comp || !preferredTeamId) return;
+     directJoinAttempted.current = true;
+     if (!session || !NexusTeamWorkflow || typeof NexusTeamWorkflow.directJoinTeam !== 'function') return;
+-    gate.run(async () => {
++    (async () => {
+       const code = await joinCodeGate.requireCode();
+       if (code === null) return;
+       const result = NexusTeamWorkflow.directJoinTeam({ compId: comp.id, teamId: preferredTeamId, joinCode: code || '' });
+@@ -158,7 +155,7 @@ export default function JoinTeams() {
+       navigate(isCaptain
+         ? `/pages/team/team-roster.html?compId=${encodeURIComponent(compKey)}&teamId=${encodeURIComponent(teamKey)}`
+         : `/pages/comp-participant.html?id=${encodeURIComponent(compKey)}`);
+-    });
++    })();
+     // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, [comp, preferredTeamId, session, navigate]);
+ 
+@@ -332,7 +329,6 @@ export default function JoinTeams() {
+         />
+       )}
+ 
+-      {gate.gateModal}
+       {joinCodeGate.modal}
+     </main>
+   );
+diff --git a/frontend/src/pages/Profile.jsx b/frontend/src/pages/Profile.jsx
+index 7ff8f67..7adb624 100644
+--- a/frontend/src/pages/Profile.jsx
++++ b/frontend/src/pages/Profile.jsx
+@@ -3,9 +3,8 @@
+  *
+  * header + bio, 5 tabs (match history,
+  * stats, sessions, account, preferences), the live my-teams / upcoming-matches
+- * sidebar computed from competition data, the edit-profile / email / password
+- * modals, and the ┬º12 Account Verification section (persisted backend status,
+- * simulated Aadhaar flow opened from the shared VerificationModal).
++ * sidebar computed from competition data, and the edit-profile / email /
++ * password modals.
+  */
+ import { useEffect, useMemo, useState } from 'react';
+ import { useNavigate } from 'react-router-dom';
+@@ -13,8 +12,6 @@ import { useAuth } from '../context/AuthContext.jsx';
+ import NexusData from '../services/data.js';
+ import { showToast } from '../lib/toast.js';
+ import { assetUrl } from '../lib/assets.js';
+-import { VerificationAPI, isVerified } from '../services/verificationApi.js';
+-import VerificationModal from '../components/VerificationModal.jsx';
+ import '../styles/pages/profile.css';
+ 
+ const PTABS = [
+@@ -66,22 +63,6 @@ export default function Profile() {
+   const [emailInput, setEmailInput] = useState(session ? (session.email || '') : '');
+   const [pwd, setPwd] = useState({ current: '', next: '', confirm: '' });
+ 
+-  // ┬º12.1 ΓÇö account verification (persisted backend status, simulated flow)
+-  const [verifyOpen, setVerifyOpen] = useState(false);
+-  const [verificationStatus, setVerificationStatus] = useState(null); // null until loaded
+-  const verified = isVerified(verificationStatus);
+-  const organizerVerified = String(
+-    (verificationStatus && (verificationStatus.organizerVerificationStatus || verificationStatus.verificationStatus)) || '',
+-  ).toLowerCase() === 'verified';
+-  useEffect(() => {
+-    let active = true;
+-    VerificationAPI.status().then((res) => {
+-      if (active && res?.ok !== false && res?.data) setVerificationStatus(res.data);
+-      else if (active && res?.ok !== false && res) setVerificationStatus(res);
+-    }).catch(() => { /* offline: leave as unverified rather than claiming verified */ });
+-    return () => { active = false; };
+-  }, []);
+-
+   const derived = useMemo(() => {
+     const myTeams = [];
+     const upcoming = [];
+@@ -319,23 +300,6 @@ export default function Profile() {
+                       </div>
+                     </div>
+                     <div className="settings-divider"></div>
+-                    <div id="profile-verification-section" className="settings-item-row">
+-                      <div className="settings-label-info">
+-                        <h3>Account Verification</h3>
+-                        <p>Verify your Aadhaar to create or join competitions. Your verification status is saved to your account.</p>
+-                        <p style={{ fontSize: 12, color: '#94a3b8' }}>
+-                          Organizer eligibility: <strong style={{ color: organizerVerified ? '#C6FF33' : '#f87171' }}>{organizerVerified ? 'Verified' : 'Unverified'}</strong>
+-                        </p>
+-                      </div>
+-                      <div className="settings-action-input-wrap">
+-                        {verified ? (
+-                          <span id="verification-status-badge" className="verify-status-chip verified" aria-live="polite">Γ£ö Verified{verificationStatus && verificationStatus.aadhaarMasked ? ` ┬╖ ${verificationStatus.aadhaarMasked}` : ''}</span>
+-                        ) : (
+-                          <button id="verify-aadhaar-btn" className="btn-update-pill" onClick={() => setVerifyOpen(true)}>Verify Aadhaar</button>
+-                        )}
+-                      </div>
+-                    </div>
+-                    <div className="settings-divider"></div>
+                     <div className="settings-item-row">
+                       <div className="settings-label-info">
+                         <h3>Two factor Authentication</h3>
+@@ -455,16 +419,6 @@ export default function Profile() {
+         </div>
+       </div>
+ 
+-      <VerificationModal
+-        open={verifyOpen}
+-        onClose={() => setVerifyOpen(false)}
+-        onVerified={() => {
+-          setVerificationStatus({ verificationStatus: 'verified' });
+-          showToast('Verification complete.');
+-        }}
+-        purpose="continue"
+-      />
+-
+       <div className={`modal-overlay${passwordOpen ? ' open' : ''}`} id="password-modal" onClick={(e) => { if (e.target.id === 'password-modal') setPasswordOpen(false); }}>
+         <div className="modal modal-relative">
+           <h2>Update Password</h2>
+diff --git a/frontend/src/services/api.js b/frontend/src/services/api.js
+index 01be1f3..ad6fb50 100644
+--- a/frontend/src/services/api.js
++++ b/frontend/src/services/api.js
+@@ -41,10 +41,32 @@ export function removeToken() {
+   } catch (err) {}
+ }
+ 
++const RETIRED_IDENTITY_FIELDS = ['verificationStatus', 'organizerVerificationStatus', 'verifiedAt', 'aadhaarMasked'];
++
++/**
++ * Drops account properties left behind by the retired Aadhaar flow so stale
++ * local statuses can never influence the current UI. Persists the cleaned copy
++ * back to the same storage key; auth tokens and every other field are kept.
++ */
++function dropRetiredIdentityFields(user, storageKey) {
++  if (!user || typeof user !== 'object') return user;
++  let stripped = false;
++  RETIRED_IDENTITY_FIELDS.forEach((field) => {
++    if (Object.prototype.hasOwnProperty.call(user, field)) {
++      delete user[field];
++      stripped = true;
++    }
++  });
++  if (stripped) {
++    try { localStorage.setItem(storageKey, JSON.stringify(user)); } catch (err) {}
++  }
++  return user;
++}
++
+ export function getUser() {
+   try {
+     const raw = localStorage.getItem(USER_KEY);
+-    return raw ? JSON.parse(raw) : null;
++    return raw ? dropRetiredIdentityFields(JSON.parse(raw), USER_KEY) : null;
+   } catch (err) {
+     return null;
+   }
+@@ -53,7 +75,7 @@ export function getUser() {
+ function getStoredSession() {
+   try {
+     const raw = localStorage.getItem(SESSION_KEY);
+-    return raw ? JSON.parse(raw) : null;
++    return raw ? dropRetiredIdentityFields(JSON.parse(raw), SESSION_KEY) : null;
+   } catch (err) {
+     return null;
+   }
+@@ -232,25 +254,6 @@ export const AuthAPI = {
+   },
+ };
+ 
+-// ============ VERIFICATION API (┬º12 ΓÇö simulated Aadhaar flow) ============
+-export const VerificationEndpoints = {
+-  async status() {
+-    return makeRequest('/verification/status', { method: 'GET' });
+-  },
+-  async requestOtp(aadhaarNumber) {
+-    return makeRequest('/verification/aadhaar/request-otp', {
+-      method: 'POST',
+-      body: JSON.stringify({ aadhaarNumber }),
+-    });
+-  },
+-  async verify(otp) {
+-    return makeRequest('/verification/aadhaar/verify', {
+-      method: 'POST',
+-      body: JSON.stringify({ otp }),
+-    });
+-  },
+-};
+-
+ // ============ COMPETITIONS API ============
+ export const CompetitionsAPI = {
+   async getAll() {
+diff --git a/frontend/src/services/verificationApi.js b/frontend/src/services/verificationApi.js
+deleted file mode 100644
+index 11fd73a..0000000
+--- a/frontend/src/services/verificationApi.js
++++ /dev/null
+@@ -1,91 +0,0 @@
+-/**
+- * NEXUS ESPORTS ΓÇö Verification API + gate helpers (┬º12)
+- *
+- * SIMULATED AADHAAR VERIFICATION:
+- * - Step 1 validates the 12-digit FORMAT only ΓÇö format checks prove nothing
+- *   about authenticity/ownership.
+- * - Step 2 accepts any non-empty OTP (mock). No real OTP is sent/stored.
+- * - Status is persisted on the BACKEND (authoritative). localStorage is never
+- *   the source of truth ΓÇö we only keep an in-session copy for rendering.
+- * - Never stores/logs the full Aadhaar number or OTP.
+- * - The gateway is isolated here so a compliant identity-verification provider
+- *   can replace the flow later.
+- */
+-import { makeRequest, getUser, setUser } from './api.js';
+-
+-/** Cached in-session status, scoped to the authenticated username. */
+-let cachedStatus = null;
+-let cachedForUser = null;
+-
+-function currentUserKey() {
+-  const user = getUser();
+-  return String(user && user.username || '').toLowerCase();
+-}
+-
+-export const VerificationAPI = {
+-  async status(force = false) {
+-    const userKey = currentUserKey();
+-    if (!force && cachedStatus && cachedForUser === userKey) return cachedStatus;
+-    const res = await makeRequest('/verification/status', { method: 'GET' });
+-    if (res.ok && res.data) {
+-      // A successful server response is authoritative ΓÇö even when it says
+-      // "unverified" ΓÇö so it always replaces any cached/local value.
+-      cachedStatus = res.data;
+-      cachedForUser = userKey;
+-      // keep the authenticated session copy in sync (best-effort)
+-      const user = getUser();
+-      if (user && res.data.verificationStatus) {
+-        setUser({ ...user, verificationStatus: res.data.verificationStatus });
+-      }
+-    } else if (cachedStatus && cachedForUser === userKey) {
+-      // Offline/API failure: use the last known status for this same account.
+-      return cachedStatus;
+-    }
+-    return res;
+-  },
+-
+-  async requestOtp(aadhaarNumber) {
+-    return makeRequest('/verification/aadhaar/request-otp', {
+-      method: 'POST',
+-      body: JSON.stringify({ aadhaarNumber }),
+-    });
+-  },
+-
+-  async verify(otp) {
+-    const res = await makeRequest('/verification/aadhaar/verify', {
+-      method: 'POST',
+-      body: JSON.stringify({ otp }),
+-    });
+-    if (res.ok) {
+-      cachedStatus = { ...(cachedStatus || {}), verificationStatus: 'verified', simulated: true };
+-      cachedForUser = currentUserKey();
+-      const user = getUser();
+-      if (user) setUser({ ...user, verificationStatus: 'verified' });
+-    }
+-    return res;
+-  },
+-
+-  /** Clears the in-session cache (e.g. on logout / user switch). */
+-  resetCache() {
+-    cachedStatus = null;
+-    cachedForUser = null;
+-  },
+-};
+-
+-export function isVerified(status) {
+-  return String(status?.verificationStatus || status || '').toLowerCase() === 'verified';
+-}
+-
+-/** Formats a raw Aadhaar input into "1234 5678 9012" while the user types. */
+-export function formatAadhaarInput(raw) {
+-  const digits = String(raw || '').replace(/\D/g, '').slice(0, 12);
+-  return digits.replace(/(\d{4})(?=\d)/g, '$1 ').trim();
+-}
+-
+-/**
+- * Local 12-digit format pre-check mirroring the backend rule. Never claims
+- * authenticity ΓÇö only that the input has exactly 12 digits.
+- */
+-export function isValidAadhaarFormat(raw) {
+-  return /^\d{12}$/.test(String(raw || '').replace(/\D/g, ''));
+-}
+diff --git a/frontend/src/styles/pages/verification.css b/frontend/src/styles/pages/verification.css
+deleted file mode 100644
+index 619631f..0000000
+--- a/frontend/src/styles/pages/verification.css
++++ /dev/null
+@@ -1,140 +0,0 @@
+-/**
+- * NEXUS ESPORTS ΓÇö Verification styles (shared modal + profile status)
+- * Uses the existing design system vars ΓÇö no separate design system.
+- */
+-
+-/*
+- * The shared modal system has two `.modal-overlay` definitions and the later
+- * one uses z-index 200. The verification dialog must always sit above checkout
+- * overlays (z-index 99999) when it is intentionally shown.
+- */
+-.modal-overlay.open.verification-modal-overlay {
+-  z-index: 100050;
+-}
+-
+-.verify-intro {
+-  color: var(--text-secondary, #9aa4b2);
+-  font-size: 13px;
+-  line-height: 1.55;
+-  margin: 4px 0 0;
+-}
+-
+-.verify-step-count {
+-  font-size: 11px;
+-  letter-spacing: 2px;
+-  color: var(--text-muted, #64748b);
+-  text-transform: uppercase;
+-  margin-bottom: 6px;
+-}
+-
+-.verify-field-label {
+-  display: block;
+-  font-size: 12px;
+-  letter-spacing: 1.2px;
+-  color: var(--text-muted, #64748b);
+-  text-transform: uppercase;
+-  margin: 16px 0 8px;
+-}
+-
+-.verify-input,
+-.verify-otp-row .verify-input {
+-  width: 100%;
+-  background: #0a0a0a;
+-  border: 1px solid #1f2a3a;
+-  border-radius: 10px;
+-  color: #fff;
+-  padding: 12px 14px;
+-  font-size: 15px;
+-  letter-spacing: 2px;
+-  outline: none;
+-  transition: border-color 0.15s;
+-}
+-.verify-input:focus { border-color: var(--accent, #c6ff33); }
+-
+-.verify-error {
+-  color: #ff6b6b;
+-  font-size: 12.5px;
+-  margin-top: 8px;
+-}
+-
+-.verify-actions {
+-  display: flex;
+-  gap: 12px;
+-  margin-top: 22px;
+-}
+-.verify-actions .btn { flex: 1; }
+-
+-.verify-loading {
+-  display: flex;
+-  align-items: center;
+-  justify-content: center;
+-  gap: 10px;
+-  padding: 28px 0;
+-  color: var(--text-secondary, #9aa4b2);
+-  font-size: 13.5px;
+-}
+-
+-.verify-spinner {
+-  width: 18px;
+-  height: 18px;
+-  border-radius: 50%;
+-  border: 2px solid rgba(255, 255, 255, 0.15);
+-  border-top-color: var(--accent, #c6ff33);
+-  animation: verify-spin 0.7s linear infinite;
+-}
+-@keyframes verify-spin { to { transform: rotate(360deg); } }
+-
+-/* Profile verification section */
+-.profile-verification {
+-  display: flex;
+-  flex-direction: column;
+-  gap: 14px;
+-  background: #0e0e0e;
+-  border: 1px solid #1f2a3a;
+-  border-radius: 16px;
+-  padding: 20px;
+-  margin-top: 16px;
+-}
+-.profile-verification-top {
+-  display: flex;
+-  align-items: center;
+-  justify-content: space-between;
+-  gap: 12px;
+-  flex-wrap: wrap;
+-}
+-.profile-verification-label {
+-  font-size: 12px;
+-  letter-spacing: 2px;
+-  color: var(--text-muted, #64748b);
+-  text-transform: uppercase;
+-  font-weight: 700;
+-}
+-.verify-status-chip {
+-  display: inline-flex;
+-  align-items: center;
+-  gap: 6px;
+-  border-radius: 999px;
+-  padding: 5px 12px;
+-  font-size: 12px;
+-  font-weight: 700;
+-  letter-spacing: 0.5px;
+-}
+-.verify-status-chip.verified {
+-  background: rgba(198, 255, 51, 0.12);
+-  color: var(--accent, #c6ff33);
+-  border: 1px solid rgba(198, 255, 51, 0.4);
+-}
+-.verify-status-chip.unverified {
+-  background: rgba(255, 107, 107, 0.1);
+-  color: #ff6b6b;
+-  border: 1px solid rgba(255, 107, 107, 0.35);
+-}
+-.profile-verification-note {
+-  font-size: 12.5px;
+-  color: var(--text-muted, #9aa4b2);
+-  line-height: 1.55;
+-}
+-
+-@media (max-width: 640px) {
+-  .verify-actions { flex-direction: column; }
+-}
+diff --git a/backend/src/database/migrations/1793846400000-remove-aadhaar-verification.ts b/backend/src/database/migrations/1793846400000-remove-aadhaar-verification.ts
+new file mode 100644
+index 0000000..e5c6df1
+--- /dev/null
++++ b/backend/src/database/migrations/1793846400000-remove-aadhaar-verification.ts
+@@ -0,0 +1,26 @@
++import { MigrationInterface, QueryRunner } from 'typeorm';
++
++/**
++ * Removes the retired simulated identity-verification columns from "users".
++ *
++ * Only these verification columns are dropped. Credentials, roles, profile
++ * fields, bans, warnings and every other account column are left untouched, so
++ * existing accounts keep working and no unrelated data is destroyed.
++ */
++export class RemoveAadhaarVerification1793846400000 implements MigrationInterface {
++  name = 'RemoveAadhaarVerification1793846400000';
++
++  async up(runner: QueryRunner): Promise<void> {
++    await runner.query(`ALTER TABLE "users" DROP COLUMN IF EXISTS "organizerVerificationStatus"`);
++    await runner.query(`ALTER TABLE "users" DROP COLUMN IF EXISTS "aadhaarMasked"`);
++    await runner.query(`ALTER TABLE "users" DROP COLUMN IF EXISTS "verifiedAt"`);
++    await runner.query(`ALTER TABLE "users" DROP COLUMN IF EXISTS "verificationStatus"`);
++  }
++
++  async down(runner: QueryRunner): Promise<void> {
++    await runner.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "verificationStatus" varchar DEFAULT 'unverified'`);
++    await runner.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "verifiedAt" timestamptz`);
++    await runner.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "aadhaarMasked" varchar`);
++    await runner.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "organizerVerificationStatus" varchar DEFAULT 'unverified'`);
++  }
++}

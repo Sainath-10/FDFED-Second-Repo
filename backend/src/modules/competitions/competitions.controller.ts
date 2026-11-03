@@ -30,7 +30,7 @@ export class CompetitionsController {
   @HttpCode(201)
   @ApiOperation({
     summary: 'Create and auto-approve a new competition',
-    description: 'Any authenticated, verified user can create a competition. The authenticated user becomes the owner/organizer.',
+    description: 'Any authenticated user can create a competition. The authenticated user becomes the owner/organizer.',
   })
   @ApiResponse({
     status: 201,
@@ -102,8 +102,8 @@ export class CompetitionsController {
     description: 'Private competitions require a valid join code; public competitions never require one (§2.4).',
   })
   async joinValidate(@Body() dto: JoinValidateDto, @CurrentUser() user?: any) {
-    // §12.4 — the authenticated account (id + username) is used for the
-    // backend-enforced mock-verification gate; never trust the request body.
+    // The authenticated account (id + username) comes from the JWT; never
+    // trust the request body.
     return this.competitionsService.participate(dto.competitionId, dto.joinCode, user);
   }
 

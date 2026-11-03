@@ -5,14 +5,11 @@
  *
  * These are service-level unit tests with in-memory fakes for the TypeORM
  * repositories, so they exercise the real business rules without requiring a
- * PostgreSQL instance. No Aadhaar/OTP values are logged.
+ * PostgreSQL instance. No identity document or OTP values are logged.
  */
 import 'reflect-metadata';
 import assert = require('node:assert/strict');
-import { BadRequestException, ForbiddenException, ServiceUnavailableException } from '@nestjs/common';
-
-// The mock verification provider must be explicitly configured in tests too.
-process.env.VERIFICATION_MODE = 'mock';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 
 import {
   MAX_PRIZE_POOL,
@@ -38,7 +35,6 @@ import {
   findScheduleConflicts,
   scheduleFixtures,
 } from '../src/common/tournament/tournament.utils';
-import { VerificationService } from '../src/modules/verification/verification.service';
 import { CompetitionsService } from '../src/modules/competitions/competitions.service';
 import { CompetitionsController } from '../src/modules/competitions/competitions.controller';
 import { ROLES_KEY } from '../src/common/decorators/roles.decorator';
@@ -92,21 +88,21 @@ async function middlewareTests() {
     const response = () => ({ setHeader: () => undefined }) as any;
     const next = () => undefined;
 
-    // Exhaust GET /verification/status for this IP.
+    // Exhaust GET /competitions for this IP.
     for (let i = 0; i < 100; i += 1) {
       limiter.use({
-        ip: '127.0.0.1', method: 'GET', originalUrl: '/verification/status',
+        ip: '127.0.0.1', method: 'GET', originalUrl: '/competitions',
         socket: {},
       } as any, response(), next);
     }
     assert.throws(() => limiter.use({
-      ip: '127.0.0.1', method: 'GET', originalUrl: '/verification/status',
+      ip: '127.0.0.1', method: 'GET', originalUrl: '/competitions',
       socket: {},
     } as any, response(), next), /Rate limit exceeded/i);
 
-    // The unrelated OTP action must retain its own allowance.
+    // An unrelated POST action must retain its own allowance.
     assert.doesNotThrow(() => limiter.use({
-      ip: '127.0.0.1', method: 'POST', originalUrl: '/verification/aadhaar/request-otp',
+      ip: '127.0.0.1', method: 'POST', originalUrl: '/teams',
       socket: {},
     } as any, response(), next));
   });
@@ -297,80 +293,13 @@ async function tournamentTests() {
   });
 }
 
-// ─── Verification (§12) ──────────────────────────────────────────────────────
-async function verificationTests() {
-  console.log('\nVerification (simulated)');
-
-  function makeService() {
-    const user: any = { id: 'u1', username: 'alice', verificationStatus: 'unverified', organizerVerificationStatus: 'unverified' };
-    const updates: any[] = [];
-    const userRepository = {
-      findById: async () => user,
-      update: async (_id: string, patch: any) => { updates.push(patch); Object.assign(user, patch); return user; },
-    };
-    const audit = { record: async () => undefined };
-    return { service: new VerificationService(userRepository as any, audit as any), user, updates };
-  }
-
-  await test('new accounts default to unverified', async () => {
-    const { service } = makeService();
-    const status = await service.getStatus('u1', 'alice');
-    assert.equal(status.verificationStatus, 'unverified');
-    assert.equal(status.simulated, true);
-  });
-
-  await test('invalid Aadhaar formats are rejected', async () => {
-    const { service } = makeService();
-    await expectThrow(() => service.requestOtp('u1', '1234'), BadRequestException, '12-digit');
-    await expectThrow(() => service.requestOtp('u1', '12345678901a'), BadRequestException, '12-digit');
-  });
-
-  await test('12-digit formats are accepted without storing the number', async () => {
-    const { service, updates } = makeService();
-    const result = await service.requestOtp('u1', '1234 5678 9012');
-    assert.equal(result.ok, true);
-    assert.equal(result.masked, 'XXXX XXXX 9012');
-    assert.equal(updates.length, 0); // step 1 persists nothing
-  });
-
-  await test('empty OTP is rejected and a non-empty mock OTP verifies', async () => {
-    const { service, updates } = makeService();
-    await expectThrow(() => service.verify('u1', ''), BadRequestException, 'OTP');
-    const result = await service.verify('u1', '123456');
-    assert.equal(result.verificationStatus, 'verified');
-    assert.equal(updates.length, 1);
-    const persisted = updates[0];
-    assert.equal(persisted.verificationStatus, 'verified');
-    assert.equal(Object.prototype.hasOwnProperty.call(persisted, 'aadhaarNumber'), false);
-    assert.equal(Object.prototype.hasOwnProperty.call(persisted, 'otp'), false);
-  });
-
-  await test('verified users are not asked to verify again', async () => {
-    const { service, user } = makeService();
-    user.verificationStatus = 'verified';
-    const result = await service.verify('u1', 'anything');
-    assert.equal(result.alreadyVerified, true);
-  });
-
-  await test('provider mode refuses to pretend mock verification succeeded', async () => {
-    const { service } = makeService();
-    process.env.VERIFICATION_MODE = 'provider';
-    await expectThrow(
-      () => service.requestOtp('u1', '123456789012'),
-      ServiceUnavailableException,
-      'not configured',
-    );
-    process.env.VERIFICATION_MODE = 'mock';
-  });
-}
-
-// ─── CompetitionsService (§2, §3, §12.4) ─────────────────────────────────────
+// ─── CompetitionsService (§2, §3) ────────────────────────────────────────────
 async function competitionServiceTests() {
   console.log('\nCompetitionsService');
 
   const users = [
-    { id: 'u1', username: 'alice', email: 'alice@nexus.gg', verificationStatus: 'verified' },
-    { id: 'u2', username: 'bob', email: 'bob@nexus.gg', verificationStatus: 'unverified' },
+    { id: 'u1', username: 'alice', email: 'alice@nexus.gg' },
+    { id: 'u2', username: 'bob', email: 'bob@nexus.gg' },
   ];
 
   function makeService(comp: any, teams: any[] = [], spy: { updateCalls?: number } = null) {
@@ -407,16 +336,18 @@ async function competitionServiceTests() {
 
   const validDto: any = {
     name: 'Winter Clash',
-    description: 'A competitive winter tournament for verified teams.',
+    description: 'A competitive winter tournament for esports teams.',
     startDate: future.toISOString(),
     endDate: new Date(future.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString(),
     type: 'league',
     game: 'Valorant',
   };
 
-  await test('unverified users cannot create competitions', async () => {
+  await test('competitions can be created without any identity verification', async () => {
     const service = makeService(null);
-    await expectThrow(() => service.createCompetition(validDto, 'bob', 'u2'), ForbiddenException, 'verification is required');
+    const comp: any = await service.createCompetition(validDto, 'bob', 'u2');
+    assert.equal(comp.createdBy, 'bob');
+    assert.equal(comp.approvalStatus, 'approved');
   });
 
   await test('valid co-organizer usernames are accepted and notified', async () => {
@@ -505,11 +436,10 @@ async function competitionServiceTests() {
     });
   });
 
-  await test('joining enforces verification and private join codes', async () => {
+  await test('joining enforces private join codes without any identity verification', async () => {
     const service = makeService({ id: 'c1', name: 'Private Cup', visibility: 'private', joinCode: 'SECRET42' });
-    await expectThrow(() => service.participate('c1', 'SECRET42', { id: 'u2', username: 'bob' }), ForbiddenException, 'verification is required');
     await expectThrow(() => service.participate('c1', 'WRONG', { id: 'u1', username: 'alice' }), BadRequestException, 'Invalid join code');
-    const ok = await service.participate('c1', 'SECRET42', { id: 'u1', username: 'alice' });
+    const ok = await service.participate('c1', 'SECRET42', { id: 'u2', username: 'bob' });
     assert.equal(ok.ok, true);
   });
 
@@ -800,7 +730,6 @@ async function teamServiceTests() {
       findById: async () => ({
         id: 'u1', username: 'alice',
         role: opts.userRole || UserRole.PARTICIPANT,
-        verificationStatus: opts.userState || 'verified',
       }),
       findByUsername: async (name: string) => (name === 'ghost' ? null : ({
         id: `u-${name}`, username: name, email: `${name}@nexus.gg`,
@@ -871,9 +800,10 @@ async function teamServiceTests() {
     return { service, team, competition, saved, mutations, invites, joinRequest };
   }
 
-  await test('unverified users cannot create teams', async () => {
-    const { service } = makeService({ userState: 'unverified' });
-    await expectThrow(() => service.createTeam({ name: 'Bravo', competitionId: 'c1' } as any, { id: 'u1', username: 'alice' }), ForbiddenException, 'verification is required');
+  await test('teams can be created without any identity verification', async () => {
+    const { service, mutations } = makeService();
+    await service.createTeam({ name: 'Bravo', competitionId: 'c1' } as any, { id: 'u1', username: 'alice' });
+    assert.ok(mutations.find((m) => m.op === 'create'));
   });
 
   await test('new teams are auto-approved on creation', async () => {
@@ -1574,7 +1504,6 @@ async function main() {
   await competitionRuleTests();
   await middlewareTests();
   await tournamentTests();
-  await verificationTests();
   await competitionServiceTests();
   await teamServiceTests();
   await matchServiceTests();

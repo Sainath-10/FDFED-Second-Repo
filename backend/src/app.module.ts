@@ -14,7 +14,6 @@ import { PoliciesModule } from './modules/policies/policies.module';
 import { MatchesModule } from './modules/matches/matches.module';
 import { RevenueModule } from './modules/revenue/revenue.module';
 import { AdminModule } from './modules/admin/admin.module';
-import { VerificationModule } from './modules/verification/verification.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { SeederService } from './database/seeder.service';
 
@@ -39,6 +38,7 @@ import { WorkflowEnhancements1710000000000 } from './database/migrations/1710000
 import { MatchBrackets1793577600000 } from './database/migrations/1793577600000-match-brackets';
 import { MatchResultRules1793577601000 } from './database/migrations/1793577601000-match-result-rules';
 import { ChatMessages1793664000000 } from './database/migrations/1793664000000-chat-messages';
+import { RemoveAadhaarVerification1793846400000 } from './database/migrations/1793846400000-remove-aadhaar-verification';
 
 @Module({
   imports: [
@@ -85,7 +85,7 @@ import { ChatMessages1793664000000 } from './database/migrations/1793664000000-c
           // automatic synchronization. Set DB_SYNCHRONIZE=true only for a
           // throwaway local database.
           synchronize: config.get<string>('DB_SYNCHRONIZE') === 'true',
-          migrations: [WorkflowEnhancements1710000000000, MatchBrackets1793577600000, MatchResultRules1793577601000, ChatMessages1793664000000],
+          migrations: [WorkflowEnhancements1710000000000, MatchBrackets1793577600000, MatchResultRules1793577601000, ChatMessages1793664000000, RemoveAadhaarVerification1793846400000],
           migrationsRun: config.get<string>('DB_MIGRATIONS_RUN') !== 'false',
           logging: config.get<string>('NODE_ENV') === 'development' ? ['error', 'warn'] : false,
         };
@@ -116,7 +116,6 @@ import { ChatMessages1793664000000 } from './database/migrations/1793664000000-c
     MatchesModule,
     RevenueModule,
     AdminModule,
-    VerificationModule,
     ChatModule,
   ],
   providers: [SeederService],

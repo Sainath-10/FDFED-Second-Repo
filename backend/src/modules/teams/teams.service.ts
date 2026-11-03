@@ -46,23 +46,6 @@ export class TeamsService {
     return team;
   }
 
-  /**
-   * Mock-verification gate (§12.4). Backend-enforced for every joining path:
-   * team creation, member add, invite acceptance and join-request approval.
-   */
-  private async assertVerified(user: any, context: string) {
-    const authUserId = user?.id;
-    const byId = authUserId ? await this.userRepository.findById(authUserId) : null;
-    const verifier = byId
-      ? String(byId.verificationStatus || '').toLowerCase()
-      : null;
-    if (verifier !== 'verified') {
-      throw new ForbiddenException(
-        `Simulated Aadhaar verification is required before you can ${context}. Open your Profile → Verification to complete the (simulated) verification flow.`,
-      );
-    }
-  }
-
   /** Authoritative persisted payment record check (§6.1). */
   private async participantHasPaid(competitionId: string, username: string): Promise<boolean> {
     if (!competitionId || !username) return false;
@@ -79,9 +62,6 @@ export class TeamsService {
   async createTeam(createTeamDto: CreateTeamDto, user: any): Promise<ITeam> {
     const { name, competitionId, members, joinCode } = createTeamDto;
     const leaderId = user?.username || user?.id || 'system';
-
-    // §12.4 — unverified users cannot join/create through direct API requests
-    await this.assertVerified(user, 'create a team for a competition');
 
     const competition = await this.competitionRepository.findById(competitionId);
     if (!competition) {
@@ -480,8 +460,6 @@ export class TeamsService {
     // backend-derived username; the frontend value is never trusted
     const fromUsername = String(user?.username || '').trim();
     if (!fromUsername) throw new ForbiddenException('User context required');
-    await this.assertVerified(user, 'request to join a team');
-
     const team = await this.teamRepository.findById(teamId);
     if (!team) throw new NotFoundException(`Team with ID ${teamId} not found`);
     if (team.status === 'disbanded') {
@@ -640,8 +618,6 @@ export class TeamsService {
     if (req.status !== 'awaiting_payment') {
       throw new BadRequestException('The team lead has to accept your request before you can pay.');
     }
-    await this.assertVerified(user, 'pay the entry fee');
-
     const team = await this.teamRepository.findById(req.teamId);
     if (!team) throw new NotFoundException(`Team with ID ${req.teamId} not found`);
     const competition = await this.competitionRepository.findById(team.competitionId);
@@ -663,7 +639,6 @@ export class TeamsService {
   }
 
   async createInvite(teamId: string, competitionId: string, toUsername: string, fromUsername: string, user: any) {
-    await this.assertVerified(user, 'invite a player to a team');
     const team = await this.verifyTeamOwnership(teamId, user);
     if (team.status === 'disbanded') {
       throw new BadRequestException('This team has been disbanded.');
@@ -798,7 +773,6 @@ export class TeamsService {
 
     let team = await this.teamRepository.findById(invite.teamId);
     if (decision === 'accepted') {
-      await this.assertVerified(user, 'accept a team invitation');
       if (!team) throw new NotFoundException(`Team with ID ${invite.teamId} not found`);
       if (team.status === 'disbanded') {
         throw new BadRequestException('This team has been disbanded; the invitation is no longer valid.');

@@ -11,7 +11,6 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import NexusData from '../services/data.js';
 import NexusTeamWorkflow from '../services/teamWorkflow.js';
-import useVerificationGate from '../hooks/useVerificationGate.jsx';
 import useJoinCodeGate from '../hooks/useJoinCodeGate.jsx';
 import { DisputesAPI, MatchesAPI, TeamsAPI } from '../services/api.js';
 import ChatRoom from '../components/ChatRoom.jsx';
@@ -111,10 +110,6 @@ export default function CompInfo() {
   const [dEvidence, setDEvidence] = useState('');
   const [disputeSubmitting, setDisputeSubmitting] = useState(false);
   const [serverTeams, setServerTeams] = useState(null);
-
-  // §12.4 / §2.4 — shared gates: simulated verification before joining or
-  // creating a team, and the organizer's code for private competitions.
-  const gate = useVerificationGate('join or create a team in a competition');
 
   // Rosters change on other devices, so the Teams tab reads them from the backend.
   const backendCompId = comp ? (comp.dbId || comp.id) : null;
@@ -221,8 +216,7 @@ export default function CompInfo() {
       navigate(`/pages/comp-participant.html?id=${encodeURIComponent(myTeam.context.compId)}`);
       return;
     }
-    // §12.4 — verification gate resumes this exact closure after verification.
-    gate.run(async () => {
+    (async () => {
       // §2.4 — private competitions require the backend-validated join code.
       const code = await joinCodeGate.requireCode();
       if (code === null) return; // cancelled — no navigation, no duplicate records
@@ -230,7 +224,7 @@ export default function CompInfo() {
         try { sessionStorage.setItem(`nexus.joinCode.${comp.id}`, code); } catch (err) { /* ignore */ }
       }
       navigate(`/pages/join-teams.html?id=${comp.id}`);
-    });
+    })();
   }
 
   function onCreate() {
@@ -244,14 +238,14 @@ export default function CompInfo() {
       }
       return;
     }
-    gate.run(async () => {
+    (async () => {
       const code = await joinCodeGate.requireCode();
       if (code === null) return;
       if (code) {
         try { sessionStorage.setItem(`nexus.joinCode.${comp.id}`, code); } catch (err) { /* ignore */ }
       }
       navigate(`/pages/create-team.html?id=${comp.id}`);
-    });
+    })();
   }
 
  // Button state
@@ -776,7 +770,6 @@ export default function CompInfo() {
         </div>
       )}
 
-      {gate.gateModal}
       {joinCodeGate.modal}
     </>
   );

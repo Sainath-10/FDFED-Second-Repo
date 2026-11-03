@@ -28,7 +28,7 @@ export class RateLimiterMiddleware implements NestMiddleware {
     const ip = req.ip || req.socket.remoteAddress || '127.0.0.1';
     // Scope ordinary traffic by method and endpoint. A single IP-wide bucket
     // lets harmless page/status requests exhaust the allowance for unrelated
-    // actions such as requesting a verification OTP.
+    // write actions.
     const pathname = String(req.originalUrl || req.url || '/')
       .split('?')[0]
       .replace(/\/+$/, '') || '/';

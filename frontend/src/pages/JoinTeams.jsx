@@ -12,7 +12,6 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import NexusData from '../services/data.js';
 import NexusTeamWorkflow from '../services/teamWorkflow.js';
-import useVerificationGate from '../hooks/useVerificationGate.jsx';
 import useJoinCodeGate from '../hooks/useJoinCodeGate.jsx';
 import { TeamsAPI } from '../services/api.js';
 import { showToast } from '../lib/toast.js';
@@ -56,8 +55,7 @@ export default function JoinTeams() {
     [id, version],
   );
 
- // §12.4 / §2.4 — shared gates for direct URLs (join-teams.html?id=...).
- const gate = useVerificationGate('join a team in a competition');
+ // §2.4 — shared join-code gate for direct URLs (join-teams.html?id=...).
  const joinCodeGate = useJoinCodeGate(comp);
 
  // Rejected competitions are archived.
@@ -125,8 +123,7 @@ export default function JoinTeams() {
       showToast('Unable to send request right now.', 'error');
       return;
     }
-    // §12.4 — verification is enforced before the request is created.
-    gate.run(() => proceedJoinTeam(teamId));
+    proceedJoinTeam(teamId);
   }
 
   async function confirmPayment() {
@@ -146,7 +143,7 @@ export default function JoinTeams() {
     if (directJoinAttempted.current || !comp || !preferredTeamId) return;
     directJoinAttempted.current = true;
     if (!session || !NexusTeamWorkflow || typeof NexusTeamWorkflow.directJoinTeam !== 'function') return;
-    gate.run(async () => {
+    (async () => {
       const code = await joinCodeGate.requireCode();
       if (code === null) return;
       const result = NexusTeamWorkflow.directJoinTeam({ compId: comp.id, teamId: preferredTeamId, joinCode: code || '' });
@@ -158,7 +155,7 @@ export default function JoinTeams() {
       navigate(isCaptain
         ? `/pages/team/team-roster.html?compId=${encodeURIComponent(compKey)}&teamId=${encodeURIComponent(teamKey)}`
         : `/pages/comp-participant.html?id=${encodeURIComponent(compKey)}`);
-    });
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [comp, preferredTeamId, session, navigate]);
 
@@ -332,7 +329,6 @@ export default function JoinTeams() {
         />
       )}
 
-      {gate.gateModal}
       {joinCodeGate.modal}
     </main>
   );

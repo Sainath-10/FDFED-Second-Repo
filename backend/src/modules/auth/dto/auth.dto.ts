@@ -73,9 +73,6 @@ export class AuthResponseDto {
     email: string;
     username: string;
     role: UserRole;
-    verificationStatus?: string;
-    organizerVerificationStatus?: string;
-    verifiedAt?: Date | null;
   };
 
   @ApiProperty({

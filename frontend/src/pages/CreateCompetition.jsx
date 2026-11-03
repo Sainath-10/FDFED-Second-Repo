@@ -5,8 +5,7 @@
  * live summary, co-organizer rows (validated against registered accounts),
  * banner upload/preview, the strict QA validation rules, prize-pool cap
  * (₹10,00,000) and min entry fee ₹10, public/private visibility with a private
- * join code, the theme-coloured platform-fee checkout modal, and the
- * simulated-verification gate (§12.4) enforced before publishing.
+ * join code, and the theme-coloured platform-fee checkout modal.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -14,7 +13,6 @@ import { useAuth } from '../context/AuthContext.jsx';
 import NexusData from '../services/data.js';
 import NexusTeamWorkflow from '../services/teamWorkflow.js';
 import NexusAPI, { CompetitionsAPI } from '../services/api.js';
-import useVerificationGate from '../hooks/useVerificationGate.jsx';
 import { showToast } from '../lib/toast.js';
 import { assetUrl } from '../lib/assets.js';
 import '../styles/pages/create-competition.css';
@@ -96,7 +94,6 @@ export default function CreateCompetition() {
   const confirmingRef = useRef(false);
   const [visibility, setVisibility] = useState('public'); // §2.4 public | private
   const [published, setPublished] = useState(null); // { comp, joinCode }
-  const gate = useVerificationGate('create or publish a competition');
 
  // Super-Admin platform settings (format availability + max-teams limit).
   const platform = useMemo(() => {
@@ -322,19 +319,6 @@ export default function CreateCompetition() {
     const checkoutData = checkout;
     try {
       setPublishError('');
-      // §12.4 — ask the authoritative server status first.
-      const verified = await gate.check();
-      if (!verified) {
-        // Close the fee dialog BEFORE opening the verification dialog so the
-        // two overlays can never be mounted at the same time. The pending
-        // action keeps the checkout data and resumes it after verification.
-        setCheckout(null);
-        gate.openGate(
-          () => publishCompetition(checkoutData),
-          () => setCheckout(checkoutData), // cancelled/failed — return to checkout
-        );
-        return;
-      }
       await publishCompetition(checkoutData);
     } finally {
       confirmingRef.current = false;
@@ -520,7 +504,7 @@ export default function CreateCompetition() {
                   </select>
                   <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>
                     {visibility === 'private'
-                      ? 'A unique join code is generated when you publish. Only participants with the correct code can register — share it with verified teams only.'
+                      ? 'A unique join code is generated when you publish. Only participants with the correct code can register — share it only with the teams you want to join.'
                       : 'Public competitions never ask for a join code and are discoverable on the Competitions page.'}
                   </p>
                 </div>
@@ -712,7 +696,6 @@ export default function CreateCompetition() {
         </div>
       )}
 
-      {gate.gateModal}
     </>
   );
 }

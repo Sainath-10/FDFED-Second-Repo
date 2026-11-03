@@ -13,7 +13,6 @@ import NexusData from '../services/data.js';
 import NexusTeamWorkflow from '../services/teamWorkflow.js';
 import { CompetitionsAPI, TeamsAPI } from '../services/api.js';
 import { useAuth } from '../context/AuthContext.jsx';
-import useVerificationGate from '../hooks/useVerificationGate.jsx';
 import useJoinCodeGate from '../hooks/useJoinCodeGate.jsx';
 import { showToast } from '../lib/toast.js';
 import { AVATAR_ACCEPT, fileToAvatarDataUrl } from '../lib/imageAvatar.js';
@@ -78,7 +77,6 @@ export default function CreateTeam() {
   const gateComp = localComp || serverComp
     ? { ...serverComp, ...localComp, visibility: serverComp?.visibility || localComp?.visibility }
     : null;
-  const gate = useVerificationGate('create a team for a competition');
   const joinCodeGate = useJoinCodeGate(gateComp);
 
   const backendCompId = localComp?.dbId || gateCompId;
@@ -99,8 +97,7 @@ export default function CreateTeam() {
     return () => { cancelled = true; };
   }, [backendCompId]);
 
-  // §2.4 — a private competition's join code comes before the team form. The code
-  // check needs a verified account, so verification is resolved first.
+  // §2.4 — a private competition's join code comes before the team form.
   useEffect(() => {
     if (!accessChecked || accessStartedRef.current) return;
     accessStartedRef.current = true;
@@ -112,10 +109,7 @@ export default function CreateTeam() {
       if (code === null) leave();
       else setUnlocked(true);
     };
-    gate.check().then((verified) => {
-      if (verified) requestCode();
-      else gate.openGate(requestCode, leave);
-    });
+    requestCode();
   }, [accessChecked]);
   const [inviteLink, setInviteLink] = useState(() => buildInviteLink(getCompIdFromPage(), context && context.teamId ? context.teamId : ''));
 
@@ -197,8 +191,8 @@ export default function CreateTeam() {
       return;
     }
 
-    // §12.4 — verification gate, then §2.4 private join code, then creation.
-    gate.run(async () => {
+    // §2.4 — private join code, then creation.
+    (async () => {
       const joinCode = await joinCodeGate.requireCode();
       if (joinCode === null) return;
 
@@ -211,7 +205,7 @@ export default function CreateTeam() {
       } else {
         await submitTeam(compId, teamName, teamTag, logoSvg, joinCode || '');
       }
-    });
+    })();
   }
 
   if (!unlocked) {
@@ -233,7 +227,6 @@ export default function CreateTeam() {
           </p>
         </div>
 
-        {gate.gateModal}
         {joinCodeGate.modal}
       </main>
     );
@@ -355,7 +348,6 @@ export default function CreateTeam() {
         </div>
       )}
 
-      {gate.gateModal}
       {joinCodeGate.modal}
     </main>
   );

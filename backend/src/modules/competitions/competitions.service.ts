@@ -35,26 +35,11 @@ export class CompetitionsService {
     private auditLog: AuditLogService,
   ) {}
 
-  /** Mock-verification gate (§12.4). Backend enforcement — frontend UI alone is insufficient. */
-  private async assertVerified(userId: string, context: string) {
-    const user = await this.userRepository.findById(userId);
-    if (!user) throw new BadRequestException('Authenticated user no longer exists.');
-    if (String(user.verificationStatus || '').toLowerCase() !== 'verified') {
-      throw new ForbiddenException(
-        `Simulated Aadhaar verification is required before you can ${context}. Open your Profile → Verification to complete the (simulated) verification flow.`,
-      );
-    }
-    return user;
-  }
-
   async createCompetition(
     createCompetitionDto: CreateCompetitionDto,
     createdBy: string = 'system',
     authenticatedUserId?: string,
   ): Promise<ICompetition> {
-    // §12.4 verification gate — enforced on the backend
-    if (authenticatedUserId) await this.assertVerified(authenticatedUserId, 'create or publish a competition');
-
     const { name, description, startDate, endDate, coOrganizers, ...extras } = createCompetitionDto;
 
     if (!name || name.trim().length < 3) {
@@ -216,13 +201,10 @@ export class CompetitionsService {
     joinCode: string | undefined,
     user: any,
   ): Promise<{ ok: boolean; message: string }> {
-    // §12.4 — joining requires the persisted (simulated) verification status.
-    // Frontend gating alone is not sufficient: direct API calls are rejected here.
     const userId = typeof user === 'string' ? null : user?.id;
     if (!userId) {
       throw new ForbiddenException('Authentication is required to join a competition.');
     }
-    await this.assertVerified(userId, 'join a competition');
 
     const comp = await this.competitionRepository.findById(competitionId);
     if (!comp) throw new NotFoundException(`Competition ${competitionId} not found`);

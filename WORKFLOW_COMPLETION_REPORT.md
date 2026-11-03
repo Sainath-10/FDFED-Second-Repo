@@ -1,5 +1,8 @@
 # NEXUS ESPORTS — Workflow Enhancements Completion Report
 
+> Historical record. The simulated Aadhaar verification this document describes has since been
+> removed from the codebase, and this document is retained for audit history only.
+
 Branch: `react-fixed` (branched from `react-final`)
 Last verified: 2026-10-23
 

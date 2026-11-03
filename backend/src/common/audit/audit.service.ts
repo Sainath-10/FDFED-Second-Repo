@@ -5,7 +5,7 @@ import { AuditLogEntity } from '../../entities/audit-log.entity';
 
 /**
  * Records important workflow actions server-side (§14).
- * NEVER record Aadhaar numbers, OTPs, tokens or sensitive identity data here.
+ * NEVER record identity document numbers, OTPs, tokens or sensitive identity data here.
  */
 @Injectable()
 export class AuditLogService {

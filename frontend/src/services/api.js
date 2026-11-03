@@ -41,10 +41,32 @@ export function removeToken() {
   } catch (err) {}
 }
 
+const RETIRED_IDENTITY_FIELDS = ['verificationStatus', 'organizerVerificationStatus', 'verifiedAt', 'aadhaarMasked'];
+
+/**
+ * Drops account properties left behind by the retired Aadhaar flow so stale
+ * local statuses can never influence the current UI. Persists the cleaned copy
+ * back to the same storage key; auth tokens and every other field are kept.
+ */
+function dropRetiredIdentityFields(user, storageKey) {
+  if (!user || typeof user !== 'object') return user;
+  let stripped = false;
+  RETIRED_IDENTITY_FIELDS.forEach((field) => {
+    if (Object.prototype.hasOwnProperty.call(user, field)) {
+      delete user[field];
+      stripped = true;
+    }
+  });
+  if (stripped) {
+    try { localStorage.setItem(storageKey, JSON.stringify(user)); } catch (err) {}
+  }
+  return user;
+}
+
 export function getUser() {
   try {
     const raw = localStorage.getItem(USER_KEY);
-    return raw ? JSON.parse(raw) : null;
+    return raw ? dropRetiredIdentityFields(JSON.parse(raw), USER_KEY) : null;
   } catch (err) {
     return null;
   }
@@ -53,7 +75,7 @@ export function getUser() {
 function getStoredSession() {
   try {
     const raw = localStorage.getItem(SESSION_KEY);
-    return raw ? JSON.parse(raw) : null;
+    return raw ? dropRetiredIdentityFields(JSON.parse(raw), SESSION_KEY) : null;
   } catch (err) {
     return null;
   }
@@ -229,25 +251,6 @@ export const AuthAPI = {
 
   isAuthenticated() {
     return !!getToken() && !!getUser();
-  },
-};
-
-// ============ VERIFICATION API (§12 — simulated Aadhaar flow) ============
-export const VerificationEndpoints = {
-  async status() {
-    return makeRequest('/verification/status', { method: 'GET' });
-  },
-  async requestOtp(aadhaarNumber) {
-    return makeRequest('/verification/aadhaar/request-otp', {
-      method: 'POST',
-      body: JSON.stringify({ aadhaarNumber }),
-    });
-  },
-  async verify(otp) {
-    return makeRequest('/verification/aadhaar/verify', {
-      method: 'POST',
-      body: JSON.stringify({ otp }),
-    });
   },
 };
 
