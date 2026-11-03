@@ -441,7 +441,9 @@
 
   function userCanManageTeam(team, session) {
     if (!team || !session) return false;
-    return normalize(team.createdBy) === normalize(session.username);
+    return !['banned', 'disbanded', 'rejected'].includes(normalize(team.status))
+      && normalize(team.leaderId || team.createdBy) === normalize(session.username)
+      && (team.members || []).some(member => normalize(member.username) === normalize(session.username));
   }
 
   function createTeam(options) {
@@ -656,16 +658,19 @@
   // Adds backend roster entries the local copy is missing. Local-only members are
   // kept because other join paths still only record them in this browser.
   function mergeBackendRoster(team, serverTeam) {
-    const known = new Set(team.members.map(member => normalize(member.username)));
-    let changed = false;
-    (serverTeam.memberUsernames || []).forEach(username => {
-      if (!username || known.has(normalize(username))) return;
-      known.add(normalize(username));
-      team.members.push({ username, displayName: username, role: 'player', joinedAt: isoNow() });
-      changed = true;
-    });
+    const before = JSON.stringify(team);
+    const existing = new Map((team.members || []).map(member => [normalize(member.username), member]));
+    team.members = (serverTeam.memberUsernames || []).map(username => ({
+      ...(existing.get(normalize(username)) || { joinedAt: isoNow() }),
+      username, displayName: existing.get(normalize(username))?.displayName || username,
+      role: normalize(username) === normalize(serverTeam.leaderId) ? 'captain' : 'player',
+    }));
+    team.leaderId = serverTeam.leaderId;
+    team.createdBy = serverTeam.leaderId;
+    team.status = serverTeam.status;
+    team.name = serverTeam.name;
     team.players = team.members.length;
-    return changed;
+    return before !== JSON.stringify(team);
   }
 
   async function sendInvite(options) {

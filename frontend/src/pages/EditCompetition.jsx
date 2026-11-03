@@ -20,6 +20,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import NexusData from '../services/data.js';
 import { AuthAPI, CompetitionsAPI, getUser } from '../services/api.js';
+import { assetUrl } from '../lib/assets.js';
 import { showToast } from '../lib/toast.js';
 import '../styles/pages/edit-competition.css';
 
@@ -59,7 +60,11 @@ export default function EditCompetition() {
   const navigate = useNavigate();
   const id = params.get('id') || '';
 
-  const comp = useMemo(() => (id && NexusData ? NexusData.getCompetitionById(id) : null), [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const cachedComp = useMemo(() => (id && NexusData ? NexusData.getCompetitionById(id) : null), [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const [serverComp, setServerComp] = useState(null);
+  const [loadingComp, setLoadingComp] = useState(true);
+  const comp = serverComp || cachedComp;
 
   const creator = comp ? (comp.createdBy || comp.organizerId || 'organizer') : 'organizer';
   const initialCoOrgs = comp && Array.isArray(comp.organizers)
@@ -72,13 +77,30 @@ export default function EditCompetition() {
   const [type, setType] = useState(comp ? comp.type || 'league' : 'league');
   const [status, setStatus] = useState(comp ? comp.status || 'upcoming' : 'upcoming');
   const [coOrgs, setCoOrgs] = useState(initialCoOrgs.length ? initialCoOrgs : ['']);
-  const [bannerSrc, setBannerSrc] = useState(null);
+  const [bannerSrc, setBannerSrc] = useState(comp?.img || '');
+  const [bannerChanged, setBannerChanged] = useState(false);
+  const [bannerReading, setBannerReading] = useState(false);
   const [locked, setLocked] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [endOpen, setEndOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [ending, setEnding] = useState(false);
   const savingRef = useRef(false);
+  const bannerChangedRef = useRef(false);
+  useEffect(() => {
+    let cancelled = false;
+    CompetitionsAPI.getById(comp?.dbId || id).then(response => {
+      if (!cancelled && response.ok) {
+        const current = response.data;
+        setServerComp(current);
+        setName(current.name || ''); setDescription(current.description || ''); setGame(current.game || ''); setType(current.type || 'league'); setStatus(current.status || 'upcoming');
+        setCoOrgs((current.organizers || []).filter(name => name !== current.createdBy));
+        if (!bannerChangedRef.current) setBannerSrc(current.img || '');
+      }
+      if (!cancelled) setLoadingComp(false);
+    });
+    return () => { cancelled = true; };
+  }, [id]);
 
   const ended = !!(comp && (comp.ended || comp.status === 'completed'));
   const isLocked = locked || ended;
@@ -87,8 +109,8 @@ export default function EditCompetition() {
 
   useEffect(() => {
     if (!id) { navigate('/pages/my-activity.html'); return; }
-    if (!comp) { navigate('/pages/my-activity.html'); }
-  }, [id, comp, navigate]);
+    if (!comp && !loadingComp) { navigate('/pages/my-activity.html'); }
+  }, [id, comp, loadingComp, navigate]);
 
   if (!comp) return <main className="edit-main"><h1 className="edit-page-title">Edit Competition</h1></main>;
 
@@ -105,7 +127,7 @@ export default function EditCompetition() {
 
   async function saveChanges() {
     if (isLocked) { showToast('This competition has ended and can no longer be edited.', 'error'); return; }
-    if (savingRef.current) return;
+    if (savingRef.current || bannerReading) return;
     savingRef.current = true;
     setSaving(true);
     try {
@@ -182,10 +204,11 @@ export default function EditCompetition() {
       type: type || undefined,
       status: status || undefined,
       coOrganizers: cleanCoOrgs,
+      ...(bannerChanged ? { img: bannerSrc || '' } : {}),
     };
 
     try {
-      const res = await CompetitionsAPI.update(comp.id || id, payload);
+      const res = await CompetitionsAPI.update(comp.dbId || comp.id || id, payload);
       if (res.ok && res.data) {
         const updated = res.data;
         try {
@@ -205,24 +228,6 @@ export default function EditCompetition() {
       }
 
       const backendError = res.error || 'The backend rejected the update.';
-      if (/backend|network|Failed to fetch|is the backend/i.test(String(backendError))) {
-        // Offline fallback keeps the local record usable; it never overwrites
-        // dates, prize pool, or capacity because those fields are not in the form.
-        const updatedLocal = {
-          ...comp,
-          name: name.trim(),
-          description: String(description).trim(),
-          game: game || comp.game,
-          type: type || comp.type,
-          status: status || comp.status,
-          organizers: Array.from(new Set([creator, ...cleanCoOrgs])),
-          updatedBy: sessionName,
-        };
-        NexusData.updateCompetition(updatedLocal);
-        showToast('Saved locally (backend offline). Re-sync when the API is back.', 'success');
-        return;
-      }
-
       // Surface backend validation verbatim, including invalid co-organizer names.
       showToast(backendError, 'error');
     } catch (err) {
@@ -304,9 +309,13 @@ export default function EditCompetition() {
   function onBannerFile(event) {
     const file = event.target.files[0];
     if (!file) return;
+    if (!['image/jpeg', 'image/png'].includes(file.type)) { showToast('Choose a PNG or JPEG image.', 'error'); return; }
     if (file.size > 5 * 1024 * 1024) { showToast('File too large. Max 5MB.', 'error'); return; }
+    setBannerReading(true);
     const reader = new FileReader();
-    reader.onload = (ev) => { setBannerSrc(ev.target.result); showToast('Banner updated (preview only).', 'success'); };
+    reader.onerror = () => { setBannerReading(false); showToast('Could not read this image.', 'error'); };
+    reader.onloadend = () => setBannerReading(false);
+    reader.onload = (ev) => { setBannerSrc(ev.target.result); setBannerChanged(true); bannerChangedRef.current = true; showToast('Banner selected. Save changes to apply it.', 'success'); };
     reader.readAsDataURL(file);
   }
 
@@ -409,7 +418,7 @@ export default function EditCompetition() {
               </div>
               <div className="edit-banner-preview" id="edit-banner-preview">
                 {bannerSrc ? (
-                  <img src={bannerSrc} alt="Banner preview" style={{ width: '100%', height: 180, objectFit: 'cover', display: 'block', borderRadius: 10 }} />
+                  <img src={assetUrl(bannerSrc)} alt="Banner preview" style={{ width: '100%', height: 180, objectFit: 'cover', display: 'block', borderRadius: 10 }} />
                 ) : (
                   <div className="edit-banner-placeholder">
                     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#2a3a4a" strokeWidth="1.5" strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>
@@ -423,7 +432,7 @@ export default function EditCompetition() {
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 .49-3.51" /></svg>
                   Replace
                 </button>
-                <button className="edit-btn-outline edit-btn-danger-outline" id="btn-remove-banner" disabled={isLocked} onClick={() => setBannerSrc(null)}>
+                <button className="edit-btn-outline edit-btn-danger-outline" id="btn-remove-banner" disabled={isLocked} onClick={() => { setBannerSrc(''); setBannerChanged(true); bannerChangedRef.current = true; }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /></svg>
                   Remove
                 </button>
@@ -458,7 +467,7 @@ export default function EditCompetition() {
               </div>
             </div>
 
-            <button className="edit-btn-save edit-btn-save-full" id="btn-save-main" disabled={isLocked || saving} onClick={saveChanges}>
+            <button className="edit-btn-save edit-btn-save-full" id="btn-save-main" disabled={isLocked || loadingComp || saving || bannerReading} onClick={saveChanges}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg>
               {saving ? 'SAVING…' : 'SAVE CHANGES'}
             </button>

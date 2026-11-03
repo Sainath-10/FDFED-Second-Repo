@@ -27,7 +27,7 @@ const UPLOAD_SVG = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" 
 
 export default function TeamSettings() {
   const navigate = useNavigate();
-  const { ctx, refresh, canManage: hookCanManage, isEnded: hookIsEnded, isStarted: hookIsStarted } = useTeamContext();
+  const { ctx, checkingPermission, refresh, canManage: hookCanManage, isEnded: hookIsEnded, isStarted: hookIsStarted } = useTeamContext();
   const [name, setName] = useState(() => (ctx && ctx.team ? ctx.team.name || '' : ''));
   const [tag, setTag] = useState(() => (ctx && ctx.team ? ctx.team.tag || '' : ''));
   const [logo, setLogo] = useState('shield');
@@ -44,6 +44,8 @@ export default function TeamSettings() {
   const canManage = hookCanManage ?? !!(session && (session.username || '').toLowerCase() === (team.createdBy || '').toLowerCase());
   const isEnded = hookIsEnded ?? !!(comp.ended || comp.status === 'completed');
   const isStarted = hookIsStarted ?? hasCompetitionStarted(comp);
+
+  if (checkingPermission) return <main className="main-content"><p role="status">Checking team permissions...</p></main>;
 
   if (!canManage) {
     return <Navigate to={`/pages/team/team-roster.html?compId=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(team.id)}`} replace />;

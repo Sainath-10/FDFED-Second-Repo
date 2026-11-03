@@ -25,10 +25,13 @@ export function hasCompetitionStarted(comp, now = new Date()) {
  * pages, and exposes a `refresh()` to re-resolve after mutations.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { TeamsAPI } from '../services/api.js';
 import NexusTeamWorkflow from '../services/teamWorkflow.js';
 
 export function useTeamContext() {
   const [version, setVersion] = useState(0);
+  const [serverTeam, setServerTeam] = useState(null);
+  const [checkingPermission, setCheckingPermission] = useState(true);
 
   const ctx = useMemo(() => {
     if (!NexusTeamWorkflow || typeof NexusTeamWorkflow.resolveTeamContext !== 'function') return null;
@@ -41,22 +44,34 @@ export function useTeamContext() {
   const compId = ctx && ctx.comp ? ctx.comp.id : null;
   const teamId = ctx && ctx.team ? ctx.team.id : null;
   useEffect(() => {
-    if (!compId || !teamId || !NexusTeamWorkflow || typeof NexusTeamWorkflow.syncTeamFromBackend !== 'function') return undefined;
+    if (!compId || !teamId || !NexusTeamWorkflow || typeof NexusTeamWorkflow.syncTeamFromBackend !== 'function') { setCheckingPermission(false); return undefined; }
     let cancelled = false;
-    NexusTeamWorkflow.syncTeamFromBackend(compId, teamId)
-      .then((changed) => { if (changed && !cancelled) refresh(); })
-      .catch(() => {});
-    return () => { cancelled = true; };
+    setCheckingPermission(true);
+    async function sync() {
+      const response = await TeamsAPI.getById(ctx.team.dbId || teamId);
+      if (cancelled) return;
+      setServerTeam(response.ok ? response.data : null);
+      setCheckingPermission(false);
+      if (response.ok) {
+        const changed = await NexusTeamWorkflow.syncTeamFromBackend(compId, teamId);
+        if (changed && !cancelled) refresh();
+      }
+    }
+    sync().catch(() => { if (!cancelled) { setServerTeam(null); setCheckingPermission(false); } });
+    const timer = setInterval(() => sync().catch(() => { if (!cancelled) { setServerTeam(null); setCheckingPermission(false); } }), 10000);
+    const onFocus = () => sync().catch(() => { if (!cancelled) { setServerTeam(null); setCheckingPermission(false); } });
+    window.addEventListener('focus', onFocus);
+    return () => { cancelled = true; clearInterval(timer); window.removeEventListener('focus', onFocus); };
   }, [compId, teamId, refresh]);
 
   const canManage = useMemo(() => {
-    if (!ctx || !ctx.team || !ctx.session) return false;
-    const sessionUser = (ctx.session.username || '').toLowerCase();
-    const createdBy = (ctx.team.createdBy || '').toLowerCase();
-    const leader = (ctx.team.leaderId || ctx.team.leaderUsername || ctx.team.leader || '').toLowerCase();
-    const role = (ctx.session.role || '').toLowerCase();
-    return sessionUser === createdBy || sessionUser === leader || role === 'admin' || role === 'super_admin';
-  }, [ctx]);
+    if (!ctx?.session || !serverTeam || String(serverTeam.id) !== String(ctx.team.dbId || teamId)) return false;
+    const username = (ctx.session.username || '').toLowerCase();
+    if (['admin', 'super_admin'].includes(ctx.session.role)) return true;
+    return !['rejected', 'banned', 'disbanded'].includes(serverTeam.status)
+      && username === (serverTeam.leaderId || '').toLowerCase()
+      && (serverTeam.memberUsernames || []).some(name => name.toLowerCase() === username);
+  }, [ctx, serverTeam, teamId]);
 
   const isEnded = useMemo(() => {
     if (!ctx || !ctx.comp) return false;
@@ -65,7 +80,7 @@ export function useTeamContext() {
 
   const isStarted = useMemo(() => hasCompetitionStarted(ctx && ctx.comp), ctx ? [ctx.comp] : [ctx]);
 
-  return { ctx, refresh, canManage, isEnded, isStarted };
+  return { ctx, refresh, canManage, checkingPermission, isEnded, isStarted };
 }
 
 export default useTeamContext;

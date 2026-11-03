@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CompetitionsAPI, DisputesAPI, MatchesAPI } from '../services/api.js';
+import CompetitionOutcome from './CompetitionOutcome.jsx';
 
 function Initial({ name }) {
   return <span className="cd-inline-avatar">{String(name || '?').replace(/^@/, '').slice(0, 1).toUpperCase()}</span>;
 }
 
-export function StandingsSection({ competitionId, teams, matches }) {
+export function StandingsSection({ competitionId, teams, matches, outcome }) {
   const [rows, setRows] = useState([]);
   const [error, setError] = useState('');
   useEffect(() => {
@@ -18,10 +19,11 @@ export function StandingsSection({ competitionId, teams, matches }) {
     return () => { cancelled = true; };
   }, [competitionId, matches]);
   const byName = useMemo(() => new Map(teams.map((team) => [team.name, team])), [teams]);
-  return <section className="cd-content-panel"><div className="cd-section-heading"><div><h2>Standings</h2><p>Calculated from confirmed match results.</p></div></div>
+  return <section className="cd-content-panel"><div className="cd-section-heading"><div><h2>Standings</h2><p>Ranked by points, then wins, then team name. Playoff results do not change league standings.</p></div></div>
+    <CompetitionOutcome outcome={outcome} />
     {error && <p className="cd-editor-error" role="alert">{error}</p>}
     <div className="cd-inline-table cd-standings-table"><div className="cd-inline-table-head"><span>#</span><span>Team</span><span>Played</span><span>Won</span><span>Drawn</span><span>Lost</span><span>Points</span></div>
-      {rows.map((row, index) => <div className="cd-inline-table-row" key={row.team}><span className="cd-rank">{index + 1}</span><span className="cd-table-team"><Initial name={row.team} /><strong>{row.team}</strong><small>{byName.get(row.team)?.status || 'Registered'}</small></span><span>{row.mp}</span><span>{row.w}</span><span>{row.d}</span><span>{row.l}</span><strong>{row.pts}</strong></div>)}
+      {rows.map((row, index) => <div className="cd-inline-table-row" key={row.team}><span className="cd-rank">{index + 1}</span><span className="cd-table-team"><Initial name={row.team} /><strong>{row.team}{outcome?.winner === row.team && <em className="cd-outcome-tag">Winner</em>}{outcome?.runnerUp === row.team && <em className="cd-outcome-tag is-runner">Runner-up</em>}</strong><small>{byName.get(row.team)?.status || 'Registered'}</small></span><span>{row.mp}</span><span>{row.w}</span><span>{row.d}</span><span>{row.l}</span><strong>{row.pts}</strong></div>)}
     </div>{!rows.length && !error && <div className="cd-inline-empty">Standings will appear after the first confirmed result.</div>}</section>;
 }
 

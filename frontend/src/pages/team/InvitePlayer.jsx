@@ -15,11 +15,13 @@ import '../../styles/pages/team/invite-player.css';
 const ROLES = ['IGL', 'AWPer', 'Entry Fragger', 'Support', 'Rifler'];
 
 export default function InvitePlayer() {
-  const { ctx, canManage, isEnded } = useTeamContext();
+  const { ctx, checkingPermission, canManage, isEnded } = useTeamContext();
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [role, setRole] = useState('');
   const [message, setMessage] = useState('');
+
+  if (checkingPermission) return <main className="main-content"><p role="status">Checking team permissions...</p></main>;
 
   if (ctx && ctx.comp && ctx.team && (!canManage || isEnded)) {
     return <Navigate to={`/pages/team/team-roster.html?compId=${encodeURIComponent(ctx.comp.id)}&teamId=${encodeURIComponent(ctx.team.id)}`} replace />;

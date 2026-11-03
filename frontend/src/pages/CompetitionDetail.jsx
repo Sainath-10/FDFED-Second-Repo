@@ -5,7 +5,10 @@ import NexusData from '../services/data.js';
 import { CompetitionsAPI, MatchesAPI, TeamsAPI } from '../services/api.js';
 import { assetUrl } from '../lib/assets.js';
 import { groupFixtures, isFixtureWinner, normalizeFixture } from '../lib/fixtures.mjs';
+import { competitionOutcome } from '../lib/competitionOutcome.mjs';
+import CompetitionOutcome from '../components/CompetitionOutcome.jsx';
 import FixtureEditor from '../components/FixtureEditor.jsx';
+import PlayoffBracket from '../components/PlayoffBracket.jsx';
 import FixtureBracket from '../components/FixtureBracket.jsx';
 import FixtureSeeds from '../components/FixtureSeeds.jsx';
 import { DisputesSection, OrganizersSection, StandingsSection } from '../components/CompetitionInlineSections.jsx';
@@ -53,6 +56,7 @@ export default function CompetitionDetail() {
   const cached = useMemo(() => NexusData.getCompetitionById?.(id), [id, revision]);
   const apiId = cached?.dbId || id;
   const [remote, setRemote] = useState({ id: '', competition: null, matches: null, teams: null, errors: [], loading: true });
+  const [stage, setStage] = useState('league');
   const [view, setView] = useState('board');
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('all');
@@ -100,10 +104,13 @@ export default function CompetitionDetail() {
   // A successful empty API response is authoritative too; never resurrect cached matches.
   const matches = useMemo(() => (current.matches ?? cached?.matches ?? []).map(normalizeFixture), [current.matches, cached]);
   const teams = current.teams ?? cached?.teams ?? [];
-  const selected = matches.find((match) => match.id === selectedId);
-  const filtered = matches.filter((m) => (status === 'all' || m.status === status) && `${m.team1} ${m.team2} ${m.round}`.toLowerCase().includes(query.trim().toLowerCase()));
+  const playoffMatches = matches.filter(m => m.bracket?.kind === 'ipl');
+  const stageMatches = playoffMatches.length ? matches.filter(m => stage === 'playoffs' ? m.bracket?.kind === 'ipl' : m.bracket?.kind !== 'ipl') : matches;
+  const selected = stageMatches.find((match) => match.id === selectedId);
+  const filtered = stageMatches.filter((m) => (status === 'all' || m.status === status) && `${m.team1} ${m.team2} ${m.round}`.toLowerCase().includes(query.trim().toLowerCase()));
   const rounds = groupFixtures(filtered);
   const numbers = new Map(matches.map((m, index) => [m.id, index + 1]));
+  const outcome = competitionOutcome(matches);
   const completed = matches.filter((m) => m.status === 'completed').length;
   const playedCount = matches.filter((m) => m.status !== 'bye').length;
   const byeCount = matches.filter((m) => m.status === 'bye').length;
@@ -154,7 +161,6 @@ export default function CompetitionDetail() {
   if (!comp) return <main className="cd-page"><div className="cd-empty" role="status"><Icon name="bracket" size={36} /><h1>{current.loading ? 'Loading competition…' : 'Competition unavailable'}</h1><p>{current.errors.join(' ')}</p><Link className="cd-button" to="/pages/my-activity.html">Back to My Activity</Link></div></main>;
 
   const banner = assetUrl(comp.img || 'c4f97eccde97e10ac89b61ec5fb36fdce0ab2477.png');
-  const final = matches.find((m) => (m.bracket?.version === 2 ? m.bracket.nextMatchId === null : /^finals?$/i.test(m.round)) && m.status === 'completed' && m.winnerName);
   return <main className="cd-page">
     <div className="cd-breadcrumb"><Link to="/pages/my-activity.html">My activity</Link><span>/</span><span>Competition center</span></div>
     <header className="cd-hero" style={{ '--cover': `url("${banner}")` }}>
@@ -172,10 +178,14 @@ export default function CompetitionDetail() {
     {!!current.errors.length && <div className="cd-notice" role="alert"><div>{current.errors.map((error) => <p key={error}>{error}</p>)}{matches.length > 0 && <small>Showing the last available fixtures until refresh succeeds.</small>}</div><button className="cd-button" onClick={() => setRevision((v) => v + 1)} disabled={current.loading}>Retry</button></div>}
 
     {activeTab === 'fixtures' && <section className="cd-fixtures" aria-labelledby="cd-fixture-title">
-      <div className="cd-section-heading"><div><div className="cd-eyebrow cd-accent">THE ROAD TO THE TITLE</div><h2 id="cd-fixture-title">{isLeague ? 'League fixtures' : 'Tournament fixtures'}</h2><p>{isLeague ? 'Explore each round and follow your team.' : 'Follow the rounds. Select a match to see the details.'}</p></div>
+      <div className="cd-section-heading"><div><h2 id="cd-fixture-title">{outcome ? 'Winner and runner-up' : 'Fixtures'}</h2></div>
       </div>
+      <CompetitionOutcome outcome={outcome} />
       {building && <p className="cd-fixture-message" role="status">Building the full bracket and reserving match times…</p>}
       {buildError && <div className="cd-notice" role="alert"><p>{buildError}</p><button className="cd-button" disabled={building} onClick={() => buildFixtures(matches.length > 0 && singleElimination)}>Retry</button></div>}
+      {playoffMatches.length > 0 && <div className="cd-segment" role="tablist" aria-label="Competition stage" style={{ marginBottom: 18 }}>
+        {[['league', 'League stage'], ['playoffs', 'Playoffs']].map(([value, label]) => <button key={value} role="tab" aria-selected={stage === value} aria-pressed={stage === value} onClick={() => { setStage(value); setSelectedId(null); setQuery(''); setStatus('all'); }}>{label}</button>)}
+      </div>}
       <div className="cd-toolbar"><div className="cd-segment" aria-label="Fixture view">{[['board', 'bracket', 'Round board'], ['schedule', 'list', 'Schedule']].map(([value, icon, label]) => <button key={value} type="button" aria-pressed={view === value} onClick={() => setView(value)}><Icon name={icon} size={16} />{label}</button>)}</div>
         <label className="cd-search"><Icon name="search" size={17} /><input aria-label="Search teams or rounds" placeholder="Find a team or round…" value={query} onChange={(e) => setQuery(e.target.value)} /></label>
         <select aria-label="Filter match status" value={status} onChange={(e) => setStatus(e.target.value)}><option value="all">All matches</option><option value="ready">Ready to play</option><option value="pending">Awaiting teams</option><option value="bye">Byes</option><option value="scheduled">Scheduled</option><option value="live">Live now</option><option value="completed">Completed</option></select>
@@ -188,8 +198,10 @@ export default function CompetitionDetail() {
               {view === 'board' ? <>
                 <div className="cd-board-meta"><span>{rounds.length} {rounds.length === 1 ? 'round' : 'rounds'} <span className="cd-divider">/</span> {filtered.filter((match) => match.status !== 'bye').length} matches{byeCount > 0 && ` ? ${byeCount} byes`} {live > 0 && <b className="cd-live-count">{live} live</b>}</span><div className="cd-board-controls"><button aria-label="Scroll rounds left" onClick={() => boardRef.current?.scrollBy({ left: -310, behavior: 'smooth' })}>←</button><button aria-label="Scroll rounds right" onClick={() => boardRef.current?.scrollBy({ left: 310, behavior: 'smooth' })}>→</button><span /><button aria-label="Zoom out" disabled={zoom <= .8} onClick={() => setZoom((v) => Math.max(.8, v - .1))}>−</button><button aria-label="Reset zoom" onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button><button aria-label="Zoom in" disabled={zoom >= 1.3} onClick={() => setZoom((v) => Math.min(1.3, v + .1))}>+</button></div></div>
                 <div className="cd-board-scroll" ref={boardRef} tabIndex={0} role="region" aria-label="Scrollable fixture rounds">
-                  {matches.every((match) => match.bracket?.version === 2) && !query && status === 'all'
-                    ? <FixtureBracket matches={matches} selectedId={selectedId} onSelect={selectMatch} zoom={zoom} renderMatch={(match) => <MatchCard match={match} number={numbers.get(match.id)} selected={match.id === selectedId} onSelect={selectMatch} />} />
+                  {stage === 'playoffs' && playoffMatches.length > 0 && !query && status === 'all'
+                    ? <PlayoffBracket matches={stageMatches} zoom={zoom} renderMatch={(match) => <MatchCard match={match} number={numbers.get(match.id)} selected={match.id === selectedId} onSelect={selectMatch} />} />
+                    : stageMatches.every((match) => match.bracket?.version === 2) && !query && status === 'all'
+                    ? <FixtureBracket matches={stageMatches} selectedId={selectedId} onSelect={selectMatch} zoom={zoom} renderMatch={(match) => <MatchCard match={match} number={numbers.get(match.id)} selected={match.id === selectedId} onSelect={selectMatch} />} />
                     : <div className={`cd-board ${isLeague ? 'is-league' : 'is-knockout'}`} style={{ zoom }}>
                     {rounds.map((round, index) => <section className="cd-round" key={round.name} aria-label={round.name}><header><span className="cd-round-number">{String(index + 1).padStart(2, '0')}</span><div><h3>{round.name}</h3><small>{round.matches.length} {round.matches.length === 1 ? 'match' : 'matches'}</small></div>{!isLeague && index < rounds.length - 1 && <Icon name="arrow" size={16} />}</header><div className="cd-round-cards">{round.matches.map((match) => <MatchCard key={match.id} match={match} number={numbers.get(match.id)} selected={match.id === selectedId} onSelect={selectMatch} />)}</div></section>)}
                     {!isLeague && <div className="cd-title-stage"><div className="cd-trophy"><Icon name="trophy" size={34} /></div><span className="cd-eyebrow">CHAMPION</span><h3>{final?.winnerName || 'Who takes the title?'}</h3><p>{final ? 'Final result confirmed' : 'Winners advance along the bracket. Byes go straight to the next round.'}</p></div>}
@@ -198,15 +210,14 @@ export default function CompetitionDetail() {
                 </div><div className="cd-board-caption"><span><i className="cd-legend-line" />Rounds shown in competition order</span><span>Scroll to explore · Click a match for details</span></div>
               </> : <div className="cd-schedule">{rounds.map((round) => <section key={round.name}><h3>{round.name}<span>{round.matches.length} matches</span></h3><div className="cd-schedule-grid">{round.matches.map((match) => <MatchCard key={match.id} match={match} selected={match.id === selectedId} number={numbers.get(match.id)} onSelect={selectMatch} />)}</div></section>)}</div>}
             </div>
-            {selected && <aside className="cd-detail" ref={detailRef} tabIndex={-1} aria-label="Selected match details" onKeyDown={(e) => { if (e.key === 'Escape') setSelectedId(null); }}><div className="cd-detail-heading"><span className="cd-eyebrow">MATCH {String(numbers.get(selected.id)).padStart(2, '0')}</span><button aria-label="Close match details" onClick={() => setSelectedId(null)}>×</button></div><h3>{selected.round}</h3><Status value={selected.status} /><div className="cd-detail-versus"><div><Avatar name={selected.team1} /><strong>{selected.team1}</strong></div><span>{selected.status === 'completed' ? `${selected.score1 ?? '—'} : ${selected.score2 ?? '—'}` : 'VS'}</span><div><Avatar name={selected.team2} /><strong>{selected.team2}</strong></div></div><dl><div><dt>Date</dt><dd>{selected.date}</dd></div><div><dt>Time</dt><dd>{selected.time || 'To be confirmed'}</dd></div><div><dt>Format</dt><dd>{comp.format || comp.type}</dd></div>{selected.winnerName && <div><dt>Winner</dt><dd>{selected.winnerName}</dd></div>}</dl>{selected.notes && <p className="cd-detail-notes">{selected.notes}</p>}{canManage && !ended && !['completed', 'bye'].includes(selected.status) && <FixtureEditor key={selected.id} match={selected} matches={matches} competition={comp} isLeague={isLeague} onSaved={savedMatch} />}{selected.resultDetails?.hostWinnerId && <p className="cd-detail-hint">Host's offline choice: {selected.winnerName}</p>}{selected.status === 'bye' && <p className="cd-detail-hint">This team advances automatically. No match is played.</p>}<p className="cd-detail-hint">Times are shown in your local time zone.</p></aside>}
+            {selected && <aside className="cd-detail" ref={detailRef} tabIndex={-1} aria-label="Selected match details" onKeyDown={(e) => { if (e.key === 'Escape') setSelectedId(null); }}><div className="cd-detail-heading"><span className="cd-eyebrow">MATCH {String(numbers.get(selected.id)).padStart(2, '0')}</span><button aria-label="Close match details" onClick={() => setSelectedId(null)}>×</button></div><h3>{selected.round}</h3><Status value={selected.status} /><div className="cd-detail-versus"><div><Avatar name={selected.team1} /><strong>{selected.team1}</strong></div><span>{selected.status === 'completed' ? `${selected.score1 ?? '—'} : ${selected.score2 ?? '—'}` : 'VS'}</span><div><Avatar name={selected.team2} /><strong>{selected.team2}</strong></div></div><dl><div><dt>Date</dt><dd>{selected.date}</dd></div><div><dt>Time</dt><dd>{selected.time || 'To be confirmed'}</dd></div><div><dt>Format</dt><dd>{comp.format || comp.type}</dd></div>{selected.winnerName && <div><dt>Winner</dt><dd>{selected.winnerName}</dd></div>}</dl>{selected.notes && <p className="cd-detail-notes">{selected.notes}</p>}{canManage && !ended && !['completed', 'bye'].includes(selected.status) && <FixtureEditor key={selected.id} match={selected} matches={matches} competition={comp} isLeague={isLeague && selected.bracket?.kind !== 'ipl'} onSaved={savedMatch} />}{selected.resultDetails?.hostWinnerId && <p className="cd-detail-hint">Host's offline choice: {selected.winnerName}</p>}{selected.status === 'bye' && <p className="cd-detail-hint">This team advances automatically. No match is played.</p>}<p className="cd-detail-hint">Times are shown in your local time zone.</p></aside>}
           </div>}
-      {final && <div className="cd-champion" role="status"><Icon name="trophy" /><span>Champion</span><strong>{final.winnerName}</strong></div>}
       <div className="cd-progress"><span>{completed} of {playedCount} matches completed</span><div role="progressbar" aria-label="Competition progress" aria-valuenow={playedCount ? Math.round(completed / playedCount * 100) : 0} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${playedCount ? completed / playedCount * 100 : 0}%` }} /></div><strong>{playedCount ? Math.round(completed / playedCount * 100) : 0}%</strong></div>
     </section>}
 
     {activeTab === 'teams' && <section className="cd-content-panel"><div className="cd-section-heading"><div><h2>Registered teams</h2><p>{teams.length} teams in this competition</p></div>{canManage && !ended && <Link className="cd-button" to={route('comp-manage-teams')}>Manage teams <Icon name="arrow" size={15} /></Link>}</div>{canManage && singleElimination && <FixtureSeeds key={`${apiId}:${seedOrder.join(',')}`} teams={eligibleTeams} initialOrder={seedOrder} error={buildError} locked={ended || matches.some((match) => ['completed', 'live'].includes(match.status))} busy={building} onApply={(order) => buildFixtures(matches.length > 0, order)} />}<div className="cd-team-grid">{teams.map((team) => <Link className="cd-team-tile" key={team.id || team.name} to={`/pages/team/team-roster.html?${new URLSearchParams({ compId: apiId, teamId: team.dbId || team.id })}`}><Avatar name={team.name} /><div><h3>{team.name}</h3><p>{team.memberUsernames?.length ?? team.members?.length ?? team.players ?? 0} players · {team.status || 'Registered'}</p></div><Icon name="arrow" size={16} /></Link>)}</div>{!teams.length && <div className="cd-empty"><h3>No teams registered yet</h3><p>Teams will appear here after registration.</p></div>}</section>}
     {activeTab === 'overview' && <section className="cd-content-panel"><div className="cd-section-heading"><div><h2>About the competition</h2><p>{comp.description || 'Competition details and organizers.'}</p></div></div><dl className="cd-overview-grid">{[['Game', comp.game], ['Format', comp.format || comp.type], ['Starts', comp.startDate ? new Date(comp.startDate).toLocaleDateString() : comp.dates], ['Ends', comp.endDate ? new Date(comp.endDate).toLocaleDateString() : null], ['Prize pool', comp.prizePool || (comp.prize ? `₹${Number(comp.prize).toLocaleString('en-IN')}` : 'No prize pool')], ['Entry', comp.entryFee || (comp.entryFeeAmount ? `₹${comp.entryFeeAmount}` : 'Free')], ['Team capacity', comp.maxTeams], ['Organizers', organizers.map((name) => `@${name}`).join(', ')]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value || 'Not specified'}</dd></div>)}</dl></section>}
-    {activeTab === 'standings' && <StandingsSection competitionId={apiId} teams={teams} matches={matches} />}
+    {activeTab === 'standings' && <StandingsSection competitionId={apiId} teams={teams} matches={matches} outcome={outcome} />}
     {activeTab === 'organizers' && canManage && <OrganizersSection competition={{ ...comp, id: apiId }} onChanged={() => setRevision((value) => value + 1)} />}
     {activeTab === 'disputes' && canManage && <DisputesSection competitionId={apiId} />}
   </main>;

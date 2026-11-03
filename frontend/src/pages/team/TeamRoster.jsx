@@ -16,7 +16,7 @@ import { assetUrl } from '../../lib/assets.js';
 import '../../styles/pages/team/team-roster.css';
 
 export default function TeamRoster() {
-  const { ctx, refresh } = useTeamContext();
+  const { ctx, refresh, canManage } = useTeamContext();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -32,7 +32,6 @@ export default function TeamRoster() {
 
   const { comp, team, session, context } = ctx;
   const members = NexusTeamWorkflow.getTeamRoster(comp.id, team.id) || [];
-  const canManage = !!(session && (session.username || '').toLowerCase() === (team.createdBy || '').toLowerCase());
   const maxPlayers = comp.maxPlayersPerTeam || 5;
   const isEnded = !!(comp.ended || comp.status === 'completed');
   // §6.2 — one shared competition-started check across all roster rules

@@ -15,7 +15,7 @@ import { showToast } from '../../lib/toast.js';
 import '../../styles/pages/team/add-players.css';
 
 export default function AddPlayers() {
-  const { ctx, refresh, canManage: hookCanManage, isEnded: hookIsEnded } = useTeamContext();
+  const { ctx, checkingPermission, refresh, canManage: hookCanManage, isEnded: hookIsEnded } = useTeamContext();
   const [query, setQuery] = useState('');
   const [direct, setDirect] = useState('');
   const [players, setPlayers] = useState([]);
@@ -50,6 +50,8 @@ export default function AddPlayers() {
   const { comp, team, session, context } = ctx;
   const canManage = hookCanManage ?? !!(session && (session.username || '').toLowerCase() === (team.createdBy || '').toLowerCase());
   const isEnded = hookIsEnded ?? !!(comp.ended || comp.status === 'completed');
+
+  if (checkingPermission) return <main className="main-content"><p role="status">Checking team permissions...</p></main>;
 
   if (!canManage || isEnded) {
     return <Navigate to={`/pages/team/team-roster.html?compId=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(team.id)}`} replace />;

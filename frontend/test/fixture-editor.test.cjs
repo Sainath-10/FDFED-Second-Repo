@@ -5,8 +5,10 @@ const Module = require('node:module');
 const React = require('react');
 const { create, act } = require('react-test-renderer');
 const { build } = require('esbuild');
+const { competitionOutcome } = require('../src/lib/competitionOutcome.mjs');
 let FixtureEditor;
 let FixtureBracket;
+let PlayoffBracket;
 const calls = [];
 const api = {
   recordResult: async (...args) => { calls.push(['result', ...args]); return { ok: true, data: { id: args[0], status: 'completed' } }; },
@@ -31,6 +33,11 @@ before(async () => {
   bracketModule.filename = path.join(__dirname, 'compiled-bracket.cjs'); bracketModule.paths = module.paths;
   bracketModule._compile(bracketBundle.outputFiles[0].text, bracketModule.filename);
   FixtureBracket = bracketModule.exports.default;
+  const playoffBundle = await build({ entryPoints: [path.join(__dirname, '../src/components/PlayoffBracket.jsx')], bundle: true, write: false, platform: 'node', format: 'cjs', jsx: 'automatic', external: ['react', 'react/jsx-runtime'] });
+  const playoffModule = new Module(path.join(__dirname, 'compiled-playoffs.cjs'), module);
+  playoffModule.filename = path.join(__dirname, 'compiled-playoffs.cjs'); playoffModule.paths = module.paths;
+  playoffModule._compile(playoffBundle.outputFiles[0].text, playoffModule.filename);
+  PlayoffBracket = playoffModule.exports.default;
 });
 
 const match = { id: 'm1', team1Id: 'a', team2Id: 'b', team1: 'Alpha', team2: 'Beta', status: 'scheduled', durationMinutes: 60, scheduledAt: new Date('2026-02-10T10:00').toISOString() };
@@ -148,4 +155,48 @@ test('bracket columns and winner links render from persisted rounds, positions, 
   act(()=>link.props.onClick());
   assert.deepEqual(selected,['2-1']);
   act(()=>tree.unmount());
+});
+
+
+test('playoff graph renders all four stages with the Q1 loser route', () => {
+  const fixtures = [
+    { id: 'q1', round: 'Qualifier 1', bracket: { nextMatchId: 'final', loserMatchId: 'q2' } },
+    { id: 'e', round: 'Eliminator', bracket: { nextMatchId: 'q2' } },
+    { id: 'q2', round: 'Qualifier 2', bracket: { nextMatchId: 'final' } },
+    { id: 'final', round: 'Final', bracket: { nextMatchId: null } },
+  ];
+  let tree;
+  act(() => { tree = create(React.createElement(PlayoffBracket, {matches:fixtures, renderMatch:m => React.createElement('button',null,m.id)})); });
+  assert.deepEqual(tree.root.findAllByType('h3').map(n => n.children.join('')), ['Qualifier 1','Eliminator','Qualifier 2','Final']);
+  assert.equal(tree.root.findAllByType('path').length, 4);
+  assert.equal(tree.root.findAllByType('path').filter(n => n.props.strokeDasharray).length, 1);
+  act(() => tree.unmount());
+});
+
+test('a pending playoff cannot be scored or scheduled', () => {
+  const editor = mount({match:{...match,team2Id:null,status:'pending',bracket:{kind:'ipl'}}});
+  assert.equal(editor.button('Enter result').props.disabled, true);
+  assert.equal(editor.button('Edit date & time').props.disabled, true);
+  act(() => editor.tree.unmount());
+});
+
+test('single elimination declares the final winner and the other finalist as runner-up', () => {
+  const fixtures = [
+    { id: 'semi', round: 'Semifinal', status: 'completed', winnerId: 'a', bracket: {version: 2, nextMatchId: 'final'} },
+    { id: 'final', round: 'Final', status: 'completed', team1Id: 'a', team1: 'Alpha', team2Id: 'b', team2: 'Beta', winnerId: 'b', winnerName: 'Beta', bracket: {version: 2, nextMatchId: null} },
+  ];
+  assert.deepEqual(competitionOutcome(fixtures), { winner: 'Beta', runnerUp: 'Alpha', finalId: 'final' });
+  fixtures[1].status = 'ready';
+  assert.equal(competitionOutcome(fixtures), null);
+});
+
+test('league playoff honors a tied final decided by the host, regardless of league rank', () => {
+  const fixtures = [
+    { id: 'league', round: 'Round 1', status: 'completed', team1: 'Top Seed', winnerId: 'top' },
+    { id: 'q1', round: 'Qualifier 1', status: 'completed', bracket: {kind: 'ipl', nextMatchId: 'final'} },
+    { id: 'final', round: 'Final', status: 'completed', score: '20-20', team1Id: 'top', team1: 'Top Seed', team2Id: 'lower', team2: 'Lower Seed', winnerId: 'lower', winnerName: 'Lower Seed', bracket: {kind: 'ipl', nextMatchId: null} },
+  ];
+  assert.deepEqual(competitionOutcome(fixtures), { winner: 'Lower Seed', runnerUp: 'Top Seed', finalId: 'final' });
+  fixtures[2].status = 'pending';
+  assert.equal(competitionOutcome(fixtures), null);
 });

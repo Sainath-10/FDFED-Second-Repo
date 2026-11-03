@@ -19,7 +19,7 @@ function formatSentTime(value) {
 }
 
 export default function InvitationsSent() {
-  const { ctx, refresh, canManage: hookCanManage, isEnded: hookIsEnded } = useTeamContext();
+  const { ctx, checkingPermission, refresh, canManage: hookCanManage, isEnded: hookIsEnded } = useTeamContext();
 
   if (!ctx || !ctx.comp || !ctx.team) {
     return <main className="main-content"><h1 className="page-title">Team</h1></main>;
@@ -28,6 +28,8 @@ export default function InvitationsSent() {
   const { comp, team, session, context } = ctx;
   const canManage = hookCanManage ?? !!(session && (session.username || '').toLowerCase() === (team.createdBy || '').toLowerCase());
   const isEnded = hookIsEnded ?? !!(comp.ended || comp.status === 'completed');
+
+  if (checkingPermission) return <main className="main-content"><p role="status">Checking team permissions...</p></main>;
 
   if (!canManage) {
     return <Navigate to={`/pages/team/team-roster.html?compId=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(team.id)}`} replace />;

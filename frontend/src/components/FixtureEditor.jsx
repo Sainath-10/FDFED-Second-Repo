@@ -54,7 +54,7 @@ export default function FixtureEditor({ match, matches, competition, isLeague, o
   }
 
   return <div className="cd-editor">
-    {!mode && <div className="cd-editor-actions"><button className="cd-button cd-primary" disabled={!ready || busy} onClick={() => changeMode('result')}>Enter result</button><button className="cd-button" disabled={busy || match.status === 'live'} onClick={() => changeMode('schedule')}>Edit date & time</button></div>}
+    {!mode && <div className="cd-editor-actions"><button className="cd-button cd-primary" disabled={!ready || busy} onClick={() => changeMode('result')}>Enter result</button><button className="cd-button" disabled={busy || match.status === 'live' || (match.bracket?.kind === 'ipl' && !ready)} onClick={() => changeMode('schedule')}>Edit date & time</button></div>}
     {!ready && <p className="cd-detail-hint">Result entry opens when both teams advance into this match.</p>}
     {mode && <form onSubmit={save}>
       <h4>{mode === 'result' ? 'Record final score' : 'Edit date & time'}</h4>
