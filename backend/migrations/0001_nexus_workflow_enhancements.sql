@@ -1,5 +1,5 @@
--- NEXUS ESPORTS — schema changes for the competition / team / verification /
--- tournament workflow enhancements.
+-- NEXUS ESPORTS — schema changes for the competition / team / tournament
+-- workflow enhancements.
 --
 -- Development uses TypeORM `synchronize: true` (app.module.ts). Production must
 -- run migrations; this file captures exactly the columns/tables that
@@ -7,14 +7,6 @@
 --   psql "$DATABASE_URL" -f backend/migrations/0001_nexus_workflow_enhancements.sql
 --
 -- Idempotent (IF NOT EXISTS / IF NOT EXISTS-style guards) so re-runs are safe.
-
--- ─── users: verification status (§12.3) ───────────────────────────────────────
-ALTER TABLE users ADD COLUMN IF NOT EXISTS "verificationStatus" varchar DEFAULT 'unverified';
-ALTER TABLE users ADD COLUMN IF NOT EXISTS "verifiedAt" timestamptz;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS "aadhaarMasked" varchar;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS "organizerVerificationStatus" varchar DEFAULT 'unverified';
-COMMENT ON COLUMN users."verificationStatus" IS
-  'SIMULATED workflow flag (mock Aadhaar flow) — NOT UIDAI/KYC identity proof.';
 
 -- ─── competitions: visibility / registration window (§2.4, §3.4) ──────────────
 ALTER TABLE competitions ADD COLUMN IF NOT EXISTS visibility varchar DEFAULT 'public';
@@ -41,7 +33,7 @@ CREATE TABLE IF NOT EXISTS refund_requests (
   "updatedAt"      timestamptz NOT NULL DEFAULT now()
 );
 
--- ─── audit_logs (§14 — workflow audit trail; never stores Aadhaar/OTP) ────────
+-- ─── audit_logs (§14 — workflow audit trail; never stores credentials) ───────
 CREATE TABLE IF NOT EXISTS audit_logs (
   id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "actionType" varchar NOT NULL,

@@ -29,7 +29,7 @@ const MAIN_NAV = [
   { id: 'competitions', label: 'Competitions', to: '/pages/competitions.html', icon: TrophyIcon },
   { id: 'activity', label: 'Activity', to: '/pages/my-activity.html', icon: ActivityIcon, protected: true },
   { id: 'notifications', label: 'Notifications', to: '/pages/notifications.html', icon: BellIcon, protected: true },
-  { id: 'reports', label: 'My Reports', to: '/pages/my-reports.html', icon: ShieldIcon, protected: true },
+  { id: 'reports', label: 'Reports', to: '/pages/my-reports.html', icon: ShieldIcon, protected: true },
   { id: 'profile', label: 'Profile', to: '/pages/profile.html', icon: ProfileIcon, protected: true },
   { id: 'about', label: 'About', to: '/pages/about.html', icon: InfoIcon },
 ];
@@ -42,10 +42,10 @@ const ORGANISER_REPORTS_ITEM = {
   icon: ShieldIcon,
 };
 
-/** Community Moderator sidebar: Dashboard, Reports, Profile only. */
+/** Community Moderator sidebar: Reports, Activity, and Profile (Profile at the bottom). */
 const MODERATOR_NAV = [
-  { id: 'dashboard', label: 'Dashboard', to: '/pages/moderator/dashboard.html', icon: HomeIcon, end: true },
-  { id: 'reports', label: 'Reports', to: '/pages/moderator/reports.html', icon: ShieldIcon },
+  { id: 'reports', label: 'Reports', to: '/pages/moderator/reports.html', icon: ShieldIcon, end: true },
+  { id: 'activity', label: 'Activity', to: '/pages/moderator/activity.html', icon: ActivityIcon },
   { id: 'profile', label: 'Profile', to: '/pages/moderator/profile.html', icon: ProfileIcon },
 ];
 
@@ -81,7 +81,6 @@ const ADMIN_NAV = {
 // No Disputes entry — the Super Admin has no dispute authority (see Business Rules).
 const SUPER_ADMIN_NAV = [
   { id: 'dashboard', label: 'Dashboard', to: '/pages/super-admin/super-dashboard.html', icon: HomeIcon, end: true },
-  { id: 'policy', label: 'Policy', to: '/pages/super-admin/policy-management.html', icon: CheckCircleIcon },
   { id: 'users', label: 'Users', to: '/pages/super-admin/users.html', icon: UsersIcon },
   { id: 'admins', label: 'Admins', to: '/pages/super-admin/admins.html', icon: ShieldIcon },
   { id: 'profile', label: 'Profile', to: '/pages/super-admin/profile.html', icon: ProfileIcon },
@@ -120,10 +119,12 @@ export function getSidebarNav(session) {
   }
 
   if (role === 'super-admin') {
+    // Keep Profile visually separated at the bottom of the sidebar, as in the
+    // original layout, even after the Policy item was removed.
     return {
       variant: 'super-admin',
-      top: SUPER_ADMIN_NAV.slice(0, 4),
-      bottom: SUPER_ADMIN_NAV.slice(4),
+      top: SUPER_ADMIN_NAV.slice(0, -1),
+      bottom: SUPER_ADMIN_NAV.slice(-1),
       showLogin: false,
     };
   }

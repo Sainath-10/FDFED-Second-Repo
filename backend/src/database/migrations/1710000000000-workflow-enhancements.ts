@@ -11,13 +11,6 @@ export class WorkflowEnhancements1710000000000 implements MigrationInterface {
   name = 'WorkflowEnhancements1710000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    // users — persisted (simulated) verification status
-    await queryRunner.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "verificationStatus" varchar DEFAULT 'unverified'`);
-    await queryRunner.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "verifiedAt" timestamptz`);
-    await queryRunner.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "aadhaarMasked" varchar`);
-    await queryRunner.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "organizerVerificationStatus" varchar DEFAULT 'unverified'`);
-    await queryRunner.query(`COMMENT ON COLUMN "users"."verificationStatus" IS 'SIMULATED workflow flag (mock Aadhaar flow) — NOT UIDAI/KYC identity proof.'`);
-
     // competitions — visibility, join code, registration window
     await queryRunner.query(`ALTER TABLE "competitions" ADD COLUMN IF NOT EXISTS "visibility" varchar DEFAULT 'public'`);
     await queryRunner.query(`ALTER TABLE "competitions" ADD COLUMN IF NOT EXISTS "joinCode" varchar`);
@@ -45,7 +38,7 @@ export class WorkflowEnhancements1710000000000 implements MigrationInterface {
       )
     `);
 
-    // audit_logs — workflow audit trail (never stores Aadhaar/OTP)
+    // audit_logs — workflow audit trail (never stores credentials)
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "audit_logs" (
         "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -72,9 +65,5 @@ export class WorkflowEnhancements1710000000000 implements MigrationInterface {
     await queryRunner.query(`ALTER TABLE "competitions" DROP COLUMN IF EXISTS "registrationOpenAt"`);
     await queryRunner.query(`ALTER TABLE "competitions" DROP COLUMN IF EXISTS "joinCode"`);
     await queryRunner.query(`ALTER TABLE "competitions" DROP COLUMN IF EXISTS "visibility"`);
-    await queryRunner.query(`ALTER TABLE "users" DROP COLUMN IF EXISTS "organizerVerificationStatus"`);
-    await queryRunner.query(`ALTER TABLE "users" DROP COLUMN IF EXISTS "aadhaarMasked"`);
-    await queryRunner.query(`ALTER TABLE "users" DROP COLUMN IF EXISTS "verifiedAt"`);
-    await queryRunner.query(`ALTER TABLE "users" DROP COLUMN IF EXISTS "verificationStatus"`);
   }
 }

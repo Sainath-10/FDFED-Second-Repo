@@ -6,7 +6,8 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ReportsAPI } from '../services/api.js';
+import { LocalReportsAPI as ReportsAPI } from '../services/local/reporting.js';
+import useReportSync from '../hooks/useReportSync.js';
 import { DiscardModal, PlayerDecisionModal } from '../components/ReportActionModals.jsx';
 import { PRIORITY_META, capitalise, formatDate, reportCode } from '../lib/reporting.js';
 import { showToast } from '../lib/toast.js';
@@ -28,6 +29,7 @@ export default function OrganizerReportDetail() {
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+  useReportSync(load);
 
   async function discuss() {
     const res = await ReportsAPI.startDiscussion(id);

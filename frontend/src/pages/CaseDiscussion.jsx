@@ -7,7 +7,8 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ReportsAPI } from '../services/api.js';
+import { LocalReportsAPI as ReportsAPI, prepareEvidenceFile } from '../services/local/reporting.js';
+import useReportSync from '../hooks/useReportSync.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { capitalise, formatDate, reportCode } from '../lib/reporting.js';
 import { showToast } from '../lib/toast.js';
@@ -32,6 +33,7 @@ export default function CaseDiscussion() {
   }, [discussionId]);
 
   useEffect(() => { load(); }, [load]);
+  useReportSync(load);
 
   async function send(event) {
     event.preventDefault();
@@ -39,14 +41,11 @@ export default function CaseDiscussion() {
     setBusy(true);
     const evidence = [];
     for (const file of files) {
-      if (file.size > 5 * 1024 * 1024) { showToast(`${file.name} is larger than 5 MB.`, 'error'); continue; }
-      const url = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result || ''));
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-      evidence.push({ url, filename: file.name, mimetype: file.type, size: file.size });
+      try {
+        evidence.push(await prepareEvidenceFile(file));
+      } catch (err) {
+        showToast(err?.message || `${file.name} could not be attached.`, 'error');
+      }
     }
     const res = await ReportsAPI.postMessage(discussionId, body.trim(), evidence);
     setBusy(false);
@@ -75,7 +74,7 @@ export default function CaseDiscussion() {
     return (
       <main className="main-content reports-page">
         <div className="report-inline-error">{error}</div>
-        <Link className="report-btn" to="/pages/my-reports.html">Back to my reports</Link>
+        <Link className="report-btn" to="/pages/my-reports.html">Back to reports</Link>
       </main>
     );
   }
@@ -96,7 +95,7 @@ export default function CaseDiscussion() {
             {readOnly ? 'read-only' : 'open'}
           </p>
         </div>
-        <Link className="report-btn" to="/pages/my-reports.html">My reports</Link>
+        <Link className="report-btn" to="/pages/my-reports.html">Reports</Link>
       </div>
 
       {readOnly && <div className="report-inline-ok">This discussion has ended. The history is preserved and cannot be modified.</div>}

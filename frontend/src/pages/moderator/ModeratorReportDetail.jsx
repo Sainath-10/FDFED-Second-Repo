@@ -6,7 +6,8 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ReportsAPI } from '../../services/api.js';
+import { LocalReportsAPI as ReportsAPI } from '../../services/local/reporting.js';
+import useReportSync from '../../hooks/useReportSync.js';
 import ReputationBadge from '../../components/ReputationBadge.jsx';
 import { DiscardModal, ModeratorDecisionModal } from '../../components/ReportActionModals.jsx';
 import { PRIORITY_META, capitalise, formatDate, formatINR, reportCode } from '../../lib/reporting.js';
@@ -37,6 +38,7 @@ export default function ModeratorReportDetail() {
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+  useReportSync(load);
 
   if (error) {
     return (

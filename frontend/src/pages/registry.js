@@ -51,18 +51,14 @@ import AddAdmin from './super-admin/AddAdmin.jsx';
 import RevokeAdmin from './super-admin/RevokeAdmin.jsx';
 import SuperDashboard from './super-admin/SuperDashboard.jsx';
 import SuperUsers from './super-admin/SuperUsers.jsx';
-import PolicyManagement from './super-admin/PolicyManagement.jsx';
-import CreatePolicy from './super-admin/CreatePolicy.jsx';
-import EditPolicy from './super-admin/EditPolicy.jsx';
-import ViewPolicy from './super-admin/ViewPolicy.jsx';
 import SuperProfile from './super-admin/SuperProfile.jsx';
 import ReportForm from './ReportForm.jsx';
 import MyReports from './MyReports.jsx';
 import CaseDiscussion from './CaseDiscussion.jsx';
 import OrganizerReports from './OrganizerReports.jsx';
 import OrganizerReportDetail from './OrganizerReportDetail.jsx';
-import ModeratorDashboard from './moderator/ModeratorDashboard.jsx';
 import ModeratorReports from './moderator/ModeratorReports.jsx';
+import ModeratorActivity from './moderator/ModeratorActivity.jsx';
 import ModeratorReportDetail from './moderator/ModeratorReportDetail.jsx';
 import ModeratorProfile from './moderator/ModeratorProfile.jsx';
 
@@ -70,10 +66,6 @@ export const PAGE_COMPONENTS = {
   '/': Index,
   '/pages/admin/admin-profile.html': AdminProfile,
   '/pages/super-admin/profile.html': SuperProfile,
-  '/pages/super-admin/create-policy.html': CreatePolicy,
-  '/pages/super-admin/edit-policy.html': EditPolicy,
-  '/pages/super-admin/view-policy.html': ViewPolicy,
-  '/pages/super-admin/policy-management.html': PolicyManagement,
   '/pages/super-admin/super-dashboard.html': SuperDashboard,
   '/pages/super-admin/users.html': SuperUsers,
   '/pages/super-admin/admins.html': Admins,
@@ -127,8 +119,8 @@ export const PAGE_COMPONENTS = {
   '/pages/case-discussion.html': CaseDiscussion,
   '/pages/organizer-reports.html': OrganizerReports,
   '/pages/organizer-report-detail.html': OrganizerReportDetail,
-  '/pages/moderator/dashboard.html': ModeratorDashboard,
   '/pages/moderator/reports.html': ModeratorReports,
+  '/pages/moderator/activity.html': ModeratorActivity,
   '/pages/moderator/report-detail.html': ModeratorReportDetail,
   '/pages/moderator/profile.html': ModeratorProfile,
 };

@@ -4,7 +4,7 @@
  * wherever the competition is shown.
  */
 import { useEffect, useState } from 'react';
-import { ReputationAPI } from '../services/api.js';
+import { LocalReputationAPI as ReputationAPI } from '../services/local/reporting.js';
 import ReputationBadge from './ReputationBadge.jsx';
 
 export default function OrganiserReputation({ username, showLimit = true }) {

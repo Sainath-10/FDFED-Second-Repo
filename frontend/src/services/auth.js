@@ -17,6 +17,9 @@
  */
 
 import { AuthAPI, getUser as getApiUser, getToken as getApiToken } from './api.js';
+import { isAdministrativeAccount, resolveAdminRole } from '../lib/adminRoles.js';
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 export const SESSION_KEY = 'nexus.auth.session';
 export const ACCOUNTS_KEY = 'nexus.auth.accounts';
@@ -116,6 +119,244 @@ export function getAccounts() {
   return merged;
 }
 
+// ── Local administrative account management ────────────────────────────────
+// All administrator and Community Moderator accounts use the same
+// `nexus.auth.accounts` store as every other local account, so login, logout,
+// role normalisation and the existing auth context keep working unchanged.
+
+function upsertStoredAccount(account) {
+  const stored = readAccountsFromStorage();
+  const key = normalize(account.username);
+  const index = stored.findIndex((entry) => normalize(entry.username) === key);
+  if (index >= 0) stored[index] = { ...stored[index], ...account };
+  else stored.push(account);
+  saveAccountsToStorage(stored);
+  return account;
+}
+
+function sameIdentity(a, b) {
+  return normalize(a) === normalize(b) && normalize(a) !== '';
+}
+
+export function findAccount(identity) {
+  const key = normalize(identity);
+  if (!key) return null;
+  return getAccounts().find((entry) => normalize(entry.username) === key || normalize(entry.email) === key) || null;
+}
+
+/** Every administrator account, including seed accounts and Community Moderators. */
+export function listAdministrativeAccounts() {
+  return getAccounts().filter(isAdministrativeAccount);
+}
+
+export function createAdministrator(options = {}) {
+  const fullName = String(options.fullName || options.displayName || '').trim();
+  const username = String(options.username || '').trim().replace(/^@/, '');
+  const email = String(options.email || '').trim();
+  const password = String(options.password || '');
+  const confirm = options.confirmPassword === undefined ? password : String(options.confirmPassword || '');
+  const meta = resolveAdminRole(options.role);
+
+  if (!fullName || !username || !email || !password) {
+    return { ok: false, error: 'Full name, username, email and password are required.' };
+  }
+  if (fullName.length < 2) return { ok: false, error: 'Enter the administrator’s full name.' };
+  if (username.length < 3) return { ok: false, error: 'Username must be at least 3 characters.' };
+  if (!EMAIL_RE.test(email)) return { ok: false, error: 'Enter a valid email address.' };
+  if (password.length < 6) return { ok: false, error: 'Password must be at least 6 characters.' };
+  if (confirm !== password) return { ok: false, error: 'Password and confirmation do not match.' };
+  if (!meta) return { ok: false, error: 'Select a valid administrative role.' };
+  if (meta.role === 'participant') return { ok: false, error: 'This form only creates administrative accounts.' };
+
+  const accounts = getAccounts();
+  const usernameKey = normalize(username);
+  const emailKey = normalize(email);
+  if (accounts.some((entry) => normalize(entry.username) === usernameKey)) {
+    return { ok: false, error: 'That username is already in use.' };
+  }
+  if (accounts.some((entry) => normalize(entry.email) === emailKey)) {
+    return { ok: false, error: 'That email address is already in use.' };
+  }
+
+  const account = {
+    username,
+    email,
+    password,
+    role: meta.role,
+    adminType: meta.adminType,
+    displayName: fullName,
+    createdAt: new Date().toISOString(),
+    status: 'active',
+    banned: false,
+    createdBy: String(options.createdBy || '').trim() || null,
+  };
+  upsertStoredAccount(account);
+  return { ok: true, account };
+}
+
+/**
+ * Mirrors the original Add Admin workflow: create a new account or elevate an
+ * existing participant. New accounts use the same default password as the
+ * platform seed accounts (`nexus`) and can sign in immediately.
+ */
+export function addOrElevateAdministrator(options = {}) {
+  const uname = String(options.username || '').trim().replace(/^@/, '');
+  if (!uname) return { ok: false, error: 'Please enter a username or email' };
+
+  const email = String(options.email || (uname.includes('@') ? uname : `${uname}@nexus.gg`)).trim();
+  const meta = resolveAdminRole(options.adminType);
+  if (!meta) return { ok: false, error: 'Select a valid administrative role.' };
+
+  const existing = findAccount(uname) || findAccount(email);
+  if (existing) {
+    if (isAdministrativeAccount(existing)) {
+      return { ok: false, error: 'User is already an admin' };
+    }
+    const next = {
+      ...existing,
+      role: meta.role,
+      adminType: meta.adminType,
+      email: existing.email || email,
+      revokedReason: null,
+      updatedAt: new Date().toISOString(),
+    };
+    upsertStoredAccount(next);
+    return { ok: true, account: next, elevated: true };
+  }
+
+  const account = {
+    username: uname,
+    email,
+    password: 'nexus',
+    role: meta.role,
+    adminType: meta.adminType,
+    displayName: uname,
+    createdAt: new Date().toISOString(),
+    status: 'active',
+    banned: false,
+    createdBy: String(options.actor || '').trim() || null,
+  };
+  upsertStoredAccount(account);
+  return { ok: true, account, created: true };
+}
+
+export function updateAdministrator(identity, updates = {}) {
+  const existing = findAccount(identity);
+  if (!existing) return { ok: false, error: 'Administrator not found.' };
+
+  const next = { ...existing };
+
+  if (updates.displayName !== undefined) {
+    const name = String(updates.displayName || '').trim();
+    if (!name) return { ok: false, error: 'Display name cannot be empty.' };
+    next.displayName = name;
+  }
+
+  if (updates.email !== undefined) {
+    const email = String(updates.email || '').trim();
+    if (!EMAIL_RE.test(email)) return { ok: false, error: 'Enter a valid email address.' };
+    const clash = getAccounts().some((entry) => (
+      !sameIdentity(entry.username, existing.username) && normalize(entry.email) === normalize(email)
+    ));
+    if (clash) return { ok: false, error: 'That email address is already in use.' };
+    next.email = email;
+  }
+
+  if (updates.role !== undefined) {
+    const meta = resolveAdminRole(updates.role);
+    if (!meta) return { ok: false, error: 'Select a valid administrative role.' };
+    next.role = meta.role;
+    next.adminType = meta.adminType;
+  }
+
+  if (updates.status !== undefined) {
+    const status = String(updates.status || '').toLowerCase() === 'inactive' ? 'inactive' : 'active';
+    next.status = status;
+    next.banned = status === 'inactive';
+  }
+
+  upsertStoredAccount(next);
+
+  if (sameIdentity(getSession()?.username, existing.username)) {
+    const current = getSession();
+    if (current) {
+      setSession({
+        ...current,
+        displayName: next.displayName || current.displayName,
+        email: next.email || current.email,
+        role: next.role || current.role,
+        adminType: next.adminType || current.adminType,
+      });
+    }
+  }
+  return { ok: true, account: next };
+}
+
+export function setAdministratorActive(identity, active, actor) {
+  if (!active && sameIdentity(identity, actor)) {
+    return { ok: false, error: 'You cannot deactivate your own account.' };
+  }
+  return updateAdministrator(identity, { status: active ? 'active' : 'inactive' });
+}
+
+export function revokeAdministrator(identity, options = {}) {
+  const existing = findAccount(identity);
+  if (!existing) return { ok: false, error: 'Administrator not found.' };
+  if (sameIdentity(existing.username, options.actor)) {
+    return { ok: false, error: 'You cannot revoke your own administrator access.' };
+  }
+  const next = {
+    ...existing,
+    role: 'participant',
+    adminType: null,
+    status: 'active',
+    banned: false,
+    revokedReason: String(options.reason || '').trim(),
+    revokedAt: new Date().toISOString(),
+    revokedBy: String(options.actor || '').trim() || null,
+  };
+  upsertStoredAccount(next);
+  return { ok: true, account: next };
+}
+
+export function updateAccountProfile(identity, updates = {}) {
+  const existing = findAccount(identity);
+  if (!existing) return { ok: false, error: 'Account not found.' };
+  const next = { ...existing };
+  if (updates.displayName !== undefined) {
+    const name = String(updates.displayName || '').trim();
+    if (!name) return { ok: false, error: 'Name cannot be empty.' };
+    next.displayName = name;
+  }
+  if (updates.email !== undefined) {
+    const email = String(updates.email || '').trim();
+    if (!EMAIL_RE.test(email)) return { ok: false, error: 'Enter a valid email address.' };
+    const clash = getAccounts().some((entry) => (
+      !sameIdentity(entry.username, existing.username) && normalize(entry.email) === normalize(email)
+    ));
+    if (clash) return { ok: false, error: 'That email address is already in use.' };
+    next.email = email;
+  }
+  upsertStoredAccount(next);
+  if (sameIdentity(getSession()?.username, existing.username)) {
+    const current = getSession();
+    if (current) setSession({ ...current, displayName: next.displayName, email: next.email });
+  }
+  return { ok: true, account: next };
+}
+
+export function changeAccountPassword(identity, currentPassword, nextPassword) {
+  const existing = findAccount(identity);
+  if (!existing) return { ok: false, error: 'Account not found.' };
+  if (String(existing.password || '') !== String(currentPassword || '')) {
+    return { ok: false, error: 'Current password is incorrect.' };
+  }
+  const next = String(nextPassword || '');
+  if (next.length < 6) return { ok: false, error: 'New password must be at least 6 characters.' };
+  upsertStoredAccount({ ...existing, password: next });
+  return { ok: true };
+}
+
 export function getSession() {
  // Try to get user from backend API first
   if (AuthAPI && AuthAPI.getCurrentUser) {
@@ -147,6 +388,17 @@ export function getSession() {
   try {
     const parsed = JSON.parse(raw);
     if (!parsed || !parsed.role || !parsed.username) return null;
+    // Drop stale identity-verification fields left by the removed verification
+    // feature. Nothing is invalidated — only obsolete keys are cleaned.
+    const verifiedKeys = ['verificationStatus', 'organizerVerificationStatus', 'verifiedAt', 'aadhaarMasked'];
+    let changed = false;
+    verifiedKeys.forEach((key) => {
+      if (Object.prototype.hasOwnProperty.call(parsed, key)) {
+        delete parsed[key];
+        changed = true;
+      }
+    });
+    if (changed) writeStorage(SESSION_KEY, JSON.stringify(parsed));
     return parsed;
   } catch (err) {
     return null;
@@ -164,7 +416,9 @@ function clearAccountScopedState() {
 }
 
 export function setSession(session) {
-  writeStorage(SESSION_KEY, JSON.stringify(session));
+  const next = { ...(session || {}) };
+  ['verificationStatus', 'organizerVerificationStatus', 'verifiedAt', 'aadhaarMasked'].forEach((key) => delete next[key]);
+  writeStorage(SESSION_KEY, JSON.stringify(next));
 }
 
 export function clearSession() {
@@ -366,23 +620,30 @@ export async function login(options) {
 
  // Login successful (API)
   const user = AuthAPI.getCurrentUser();
+  const identity = user?.username || opts.username;
 
-  const account = getAccounts().find((entry) => normalize(entry.username) === normalize(user?.username || opts.username));
+  const account = getAccounts().find((entry) => normalize(entry.username) === normalize(identity));
+  // A locally stored override is authoritative for role and status. This is
+  // what makes Super Admin role changes and deactivations take effect for
+  // accounts that also exist in the seed/backend directory.
+  const storedOverride = readAccountsFromStorage().find((entry) => (
+    normalize(entry.username) === normalize(identity) || normalize(entry.email) === normalize(identity)
+  ));
 
-  if (account && account.banned) {
-    console.warn('API login succeeded but account is banned locally.');
-    return { ok: false, error: 'Your account has been permanently banned for platform violations.' };
+  if ((account && account.banned) || (storedOverride && (storedOverride.banned || storedOverride.status === 'inactive'))) {
+    console.warn('API login succeeded but account is inactive locally.');
+    return { ok: false, error: 'This account is deactivated. Contact the platform administrator.' };
   }
 
-  const userRole = normalizeRole(user?.role || (account && account.role) || 'participant');
-  const adminType = user?.adminType || null;
-  const revokedReason = user?.revokedReason || null;
+  const userRole = normalizeRole(storedOverride?.role || user?.role || (account && account.role) || 'participant');
+  const adminType = storedOverride?.adminType || user?.adminType || null;
+  const revokedReason = user?.revokedReason || storedOverride?.revokedReason || null;
 
  // Build and persist the session object
   const firstName = user?.firstName || '';
   const lastName = user?.lastName || '';
-  let displayName = user?.username || 'User';
-  if (firstName || lastName) {
+  let displayName = storedOverride?.displayName || user?.username || 'User';
+  if (!storedOverride?.displayName && (firstName || lastName)) {
     displayName = (firstName + ' ' + lastName).trim();
   }
 
@@ -391,7 +652,7 @@ export async function login(options) {
     role: userRole,
     adminType: adminType,
     displayName: displayName,
-    email: user?.email || '',
+    email: storedOverride?.email || user?.email || '',
     joinedAt: account && account.createdAt ? account.createdAt : null,
     lastLoginAt: Date.now(),
     loggedInAt: Date.now(),
@@ -419,6 +680,15 @@ const NexusAuth = {
   SESSION_KEY,
   ACCOUNTS_KEY,
   getAccounts,
+  findAccount,
+  listAdministrativeAccounts,
+  createAdministrator,
+  addOrElevateAdministrator,
+  updateAdministrator,
+  setAdministratorActive,
+  revokeAdministrator,
+  updateAccountProfile,
+  changeAccountPassword,
   getSession,
   setSession,
   clearSession,

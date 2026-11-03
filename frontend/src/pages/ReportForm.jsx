@@ -7,7 +7,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ReportsAPI } from '../services/api.js';
+import { LocalReportsAPI as ReportsAPI, prepareEvidenceFile } from '../services/local/reporting.js';
 import { reasonsFor, capitalise } from '../lib/reporting.js';
 import { showToast } from '../lib/toast.js';
 import '../styles/pages/reports.css';
@@ -80,13 +80,7 @@ export default function ReportForm() {
     try {
       const payload = [];
       for (const file of evidence) {
-        const dataUrl = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(String(reader.result || ''));
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
-        payload.push({ url: dataUrl, filename: file.name, mimetype: file.type, size: file.size });
+        payload.push(await prepareEvidenceFile(file));
       }
       const res = await ReportsAPI.create({
         competitionId: compId,
@@ -119,10 +113,10 @@ export default function ReportForm() {
           {submitted.queue === 'moderator' ? 'the Community Moderator' : 'the competition organiser'}.
         </div>
         <p style={{ color: '#94a3b8', fontSize: 13 }}>
-          No punishment is applied automatically. You can follow the status and any case discussion from My Reports.
+          No punishment is applied automatically. You can follow the status and any case discussion from Reports.
         </p>
         <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
-          <Link className="report-btn primary" to="/pages/my-reports.html">My reports</Link>
+          <Link className="report-btn primary" to="/pages/my-reports.html">Reports</Link>
           <Link className="report-btn" to={`/pages/comp-info.html?id=${compId}`}>Back to competition</Link>
         </div>
       </main>
@@ -141,7 +135,7 @@ export default function ReportForm() {
             choose who judges the case.
           </p>
         </div>
-        <Link className="report-btn" to="/pages/my-reports.html">My reports</Link>
+        <Link className="report-btn" to="/pages/my-reports.html">Reports</Link>
       </div>
 
       {locked && (

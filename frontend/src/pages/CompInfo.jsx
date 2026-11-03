@@ -11,11 +11,11 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import NexusData from '../services/data.js';
 import NexusTeamWorkflow from '../services/teamWorkflow.js';
-import useVerificationGate from '../hooks/useVerificationGate.jsx';
 import useJoinCodeGate from '../hooks/useJoinCodeGate.jsx';
 import { DisputesAPI, MatchesAPI, TeamsAPI } from '../services/api.js';
 import ChatRoom from '../components/ChatRoom.jsx';
 import OrganiserReputation from '../components/OrganiserReputation.jsx';
+import ReportButton from '../components/ReportButton.jsx';
 import { showToast } from '../lib/toast.js';
 import { assetUrl } from '../lib/assets.js';
 import '../styles/pages/comp-info.css';
@@ -112,10 +112,6 @@ export default function CompInfo() {
   const [dEvidence, setDEvidence] = useState('');
   const [disputeSubmitting, setDisputeSubmitting] = useState(false);
   const [serverTeams, setServerTeams] = useState(null);
-
-  // §12.4 / §2.4 — shared gates: simulated verification before joining or
-  // creating a team, and the organizer's code for private competitions.
-  const gate = useVerificationGate('join or create a team in a competition');
 
   // Rosters change on other devices, so the Teams tab reads them from the backend.
   const backendCompId = comp ? (comp.dbId || comp.id) : null;
@@ -222,8 +218,7 @@ export default function CompInfo() {
       navigate(`/pages/comp-participant.html?id=${encodeURIComponent(myTeam.context.compId)}`);
       return;
     }
-    // §12.4 — verification gate resumes this exact closure after verification.
-    gate.run(async () => {
+    (async () => {
       // §2.4 — private competitions require the backend-validated join code.
       const code = await joinCodeGate.requireCode();
       if (code === null) return; // cancelled — no navigation, no duplicate records
@@ -231,7 +226,7 @@ export default function CompInfo() {
         try { sessionStorage.setItem(`nexus.joinCode.${comp.id}`, code); } catch (err) { /* ignore */ }
       }
       navigate(`/pages/join-teams.html?id=${comp.id}`);
-    });
+    })();
   }
 
   function onCreate() {
@@ -245,14 +240,14 @@ export default function CompInfo() {
       }
       return;
     }
-    gate.run(async () => {
+    (async () => {
       const code = await joinCodeGate.requireCode();
       if (code === null) return;
       if (code) {
         try { sessionStorage.setItem(`nexus.joinCode.${comp.id}`, code); } catch (err) { /* ignore */ }
       }
       navigate(`/pages/create-team.html?id=${comp.id}`);
-    });
+    })();
   }
 
  // Button state
@@ -520,7 +515,7 @@ export default function CompInfo() {
                                 {m.isLead && <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>(Lead)</span>}
                               </span>
                               {normalize(m.username) !== userKey && (
-                                <Link to={`/pages/submit-report.html?compId=${encodeURIComponent(comp.id)}&against=${encodeURIComponent(m.username)}`} className="btn-table-secondary">Report</Link>
+                                <ReportButton compId={comp.id} against={m.username} targetRole="player" source="comp-info-roster" className="btn-table-secondary" />
                               )}
                             </div>
                           ))}
@@ -686,6 +681,16 @@ export default function CompInfo() {
                   <span className="val" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                     @{comp.createdBy}
                     <OrganiserReputation username={comp.createdBy} />
+                    {session && normalize(comp.createdBy) !== normalize(session.username) && (
+                      <ReportButton
+                        compId={comp.id}
+                        against={comp.createdBy}
+                        targetRole="organiser"
+                        source="competition-info"
+                        label="Report organiser"
+                        className="report-btn"
+                      />
+                    )}
                   </span>
                 </div>
               )}
@@ -786,7 +791,6 @@ export default function CompInfo() {
         </div>
       )}
 
-      {gate.gateModal}
       {joinCodeGate.modal}
     </>
   );

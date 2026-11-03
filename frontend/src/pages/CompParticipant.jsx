@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
+import ReportButton from '../components/ReportButton.jsx';
 import NexusData from '../services/data.js';
 import NexusTeamWorkflow from '../services/teamWorkflow.js';
 import { CompetitionsAPI, MatchesAPI, TeamsAPI } from '../services/api.js';
@@ -332,6 +333,15 @@ export default function CompParticipant() {
                                   ? <span style={{ fontSize: 10, background: 'rgba(198,255,51,0.15)', color: '#C6FF33', padding: '2px 7px', borderRadius: 4, marginLeft: 8, fontWeight: 600 }}>CAPTAIN</span>
                                   : <span style={{ fontSize: 10, background: 'rgba(255,255,255,0.06)', color: '#94a3b8', padding: '2px 7px', borderRadius: 4, marginLeft: 8 }}>PLAYER</span>}
                               </div>
+                              {m.username && normalize(m.username) !== normalize(session?.username) && (
+                                <ReportButton
+                                  compId={comp.id}
+                                  against={m.username}
+                                  targetRole={isCaptain ? 'team_leader' : 'player'}
+                                  source="participant-roster"
+                                  className="btn-table-secondary"
+                                />
+                              )}
                             </div>
                           );
                         })}

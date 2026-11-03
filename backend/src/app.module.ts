@@ -14,7 +14,6 @@ import { PoliciesModule } from './modules/policies/policies.module';
 import { MatchesModule } from './modules/matches/matches.module';
 import { RevenueModule } from './modules/revenue/revenue.module';
 import { AdminModule } from './modules/admin/admin.module';
-import { VerificationModule } from './modules/verification/verification.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { ReputationModule } from './modules/reputation/reputation.module';
@@ -55,6 +54,7 @@ import { MatchBrackets1793577600000 } from './database/migrations/1793577600000-
 import { MatchResultRules1793577601000 } from './database/migrations/1793577601000-match-result-rules';
 import { ChatMessages1793664000000 } from './database/migrations/1793664000000-chat-messages';
 import { ReportsReputation1793750000000 } from './database/migrations/1793750000000-reports-reputation';
+import { RemoveAadhaarVerification1793846400000 } from './database/migrations/1793846400000-remove-aadhaar-verification';
 
 @Module({
   imports: [
@@ -114,7 +114,7 @@ import { ReportsReputation1793750000000 } from './database/migrations/1793750000
           // automatic synchronization. Set DB_SYNCHRONIZE=true only for a
           // throwaway local database.
           synchronize: config.get<string>('DB_SYNCHRONIZE') === 'true',
-          migrations: [WorkflowEnhancements1710000000000, MatchBrackets1793577600000, MatchResultRules1793577601000, ChatMessages1793664000000, ReportsReputation1793750000000],
+          migrations: [WorkflowEnhancements1710000000000, MatchBrackets1793577600000, MatchResultRules1793577601000, ChatMessages1793664000000, ReportsReputation1793750000000, RemoveAadhaarVerification1793846400000],
           migrationsRun: config.get<string>('DB_MIGRATIONS_RUN') !== 'false',
           logging: config.get<string>('NODE_ENV') === 'development' ? ['error', 'warn'] : false,
         };
@@ -145,7 +145,6 @@ import { ReportsReputation1793750000000 } from './database/migrations/1793750000
     MatchesModule,
     RevenueModule,
     AdminModule,
-    VerificationModule,
     ChatModule,
     ReputationModule,
     ReportsModule,

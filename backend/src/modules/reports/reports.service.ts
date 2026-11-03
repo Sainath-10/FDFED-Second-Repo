@@ -872,10 +872,10 @@ export class ReportsService implements OnModuleInit {
     let successor: any = null;
     if (leaderLeaving) {
       const allUsers = await this.users.findAll();
-      // Roster order, skipping inactive or unverified players.
+      // Roster order, skipping banned/inactive players.
       successor = remaining
         .map((name) => allUsers.find((u: any) => String(u.username).toLowerCase() === String(name).toLowerCase()))
-        .find((u: any) => u && !u.banned && String(u.verificationStatus || '').toLowerCase() === 'verified') || null;
+        .find((u: any) => u && !u.banned) || null;
       if (!successor) {
         throw new BadRequestException(
           'No active, eligible player is available to take over as team leader. Resolve leadership separately before removing this player.',

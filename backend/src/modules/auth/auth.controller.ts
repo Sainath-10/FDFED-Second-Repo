@@ -45,7 +45,7 @@ export class AuthController {
   @Get('me')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get current authenticated user (fresh from DB, includes mock verification status)' })
+  @ApiOperation({ summary: 'Get current authenticated user (fresh from DB)' })
   async getMe(@Request() req: any) {
     const fresh = await this.authService.getUserById(req.user.id);
     if (!fresh) return req.user;
@@ -55,8 +55,6 @@ export class AuthController {
       email: fresh.email,
       role: fresh.role,
       adminType: fresh.adminType,
-      verificationStatus: fresh.verificationStatus || 'unverified',
-      verifiedAt: fresh.verifiedAt || null,
       profilePicUrl: fresh.profilePicUrl || null,
       bio: fresh.bio || null,
     };

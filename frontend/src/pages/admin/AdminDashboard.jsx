@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
 import NexusData from '../../services/data.js';
+import { LocalReputationAPI } from '../../services/local/reporting.js';
 import { showToast } from '../../lib/toast.js';
 import '../../styles/pages/admin/dashboard.css';
 
@@ -43,6 +44,25 @@ export default function AdminDashboard() {
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState(null);
   const [version, setVersion] = useState(0);
+  const [ceiling, setCeiling] = useState(300000);
+  const [savingCeiling, setSavingCeiling] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    LocalReputationAPI.config()
+      .then((res) => { if (alive && res.ok && res.data) setCeiling(res.data.maxPrizePool); })
+      .catch(() => undefined);
+    return () => { alive = false; };
+  }, []);
+
+  async function saveCeiling() {
+    setSavingCeiling(true);
+    const res = await LocalReputationAPI.setCeiling(Number(ceiling));
+    setSavingCeiling(false);
+    if (!res.ok) { showToast(res.error || 'Unable to save the ceiling.', 'error'); return; }
+    setCeiling(res.data.maxPrizePool);
+    showToast('Platform prize-pool ceiling updated.', 'success');
+  }
 
   useEffect(() => {
     const f = normalize(params.get('filter'));
@@ -111,6 +131,28 @@ export default function AdminDashboard() {
         <div className="dash-stat-card"><div className="dash-stat-icon dash-stat-icon-success">⚡</div><div><div className="dash-stat-num" id="stat-active">{stats.active}</div><div className="dash-stat-lbl">Active &amp; Live</div></div></div>
         <div className="dash-stat-card"><div className="dash-stat-icon dash-stat-icon-info">📅</div><div><div className="dash-stat-num" id="stat-upcoming">{stats.upcoming}</div><div className="dash-stat-lbl">Upcoming</div></div></div>
         <div className="dash-stat-card"><div className="dash-stat-icon dash-stat-icon-warn">🏁</div><div><div className="dash-stat-num" id="stat-completed">{stats.completed}</div><div className="dash-stat-lbl">Completed</div></div></div>
+      </div>
+
+      <div className="tournaments-section" style={{ marginBottom: 18 }}>
+        <div className="tournaments-section-header">
+          <h2 className="table-title-md">Platform prize-pool ceiling</h2>
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '0 16px 16px' }}>
+          <span style={{ color: '#94a3b8', fontSize: 13 }}>₹</span>
+          <input
+            type="number"
+            min="1"
+            value={ceiling}
+            onChange={(e) => setCeiling(e.target.value)}
+            style={{ width: 160, padding: '9px 12px', borderRadius: 8, border: '1px solid #334155', background: '#0f172a', color: '#f1f5f9' }}
+          />
+          <button className="btn-table-primary" disabled={savingCeiling} onClick={saveCeiling} style={{ border: 'none', cursor: savingCeiling ? 'wait' : 'pointer' }}>
+            {savingCeiling ? 'Saving…' : 'Save ceiling'}
+          </button>
+          <span style={{ color: '#64748b', fontSize: 12 }}>
+            Applies platform-wide. Orange/Red level limits still apply when lower.
+          </span>
+        </div>
       </div>
 
       <div className="tournaments-section">

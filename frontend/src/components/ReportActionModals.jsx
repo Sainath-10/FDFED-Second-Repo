@@ -13,7 +13,7 @@ import {
   MODERATOR_ACTIONS,
   ORGANISER_ACTIONS,
 } from '../lib/reporting.js';
-import { ReportsAPI, ReputationAPI } from '../services/api.js';
+import { LocalReportsAPI as ReportsAPI, LocalReputationAPI as ReputationAPI } from '../services/local/reporting.js';
 
 function Backdrop({ children, onClose }) {
   return (

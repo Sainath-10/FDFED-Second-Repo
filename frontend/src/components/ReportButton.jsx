@@ -7,7 +7,8 @@
  */
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ReportsAPI } from '../services/api.js';
+import { LocalReportsAPI as ReportsAPI } from '../services/local/reporting.js';
+import { subscribe } from '../services/local/storage.js';
 
 export function reportHref({ compId, against, targetRole = 'player', matchId, teamId, source = 'page' }) {
   const params = new URLSearchParams();
@@ -35,15 +36,22 @@ export default function ReportButton({
 
   useEffect(() => {
     let alive = true;
-    if (!compId) return () => { alive = false; };
-    ReportsAPI.restrictions(compId)
-      .then((res) => {
-        if (!alive) return;
-        if (res?.ok && res.data) setRestricted(!!res.data.restricted);
-      })
-      .catch(() => undefined)
-      .finally(() => { if (alive) setChecking(false); });
-    return () => { alive = false; };
+    if (!compId) {
+      setChecking(false);
+      return () => { alive = false; };
+    }
+    const check = () => {
+      ReportsAPI.restrictions(compId)
+        .then((res) => {
+          if (!alive) return;
+          if (res?.ok && res.data) setRestricted(!!res.data.restricted);
+        })
+        .catch(() => undefined)
+        .finally(() => { if (alive) setChecking(false); });
+    };
+    check();
+    const unsubscribe = subscribe(check);
+    return () => { alive = false; unsubscribe(); };
   }, [compId]);
 
   if (restricted) {

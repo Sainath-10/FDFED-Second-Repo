@@ -4,13 +4,18 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ReportsAPI } from '../../services/api.js';
+import { LocalReportsAPI as ReportsAPI } from '../../services/local/reporting.js';
+import useReportSync from '../../hooks/useReportSync.js';
 import ReportCard from '../../components/ReportCard.jsx';
 import { DiscardModal, ModeratorDecisionModal } from '../../components/ReportActionModals.jsx';
 import { STATUS_TABS } from '../../lib/reporting.js';
 import { showToast } from '../../lib/toast.js';
 import '../../styles/pages/admin/dashboard.css';
 import '../../styles/pages/reports.css';
+
+// Resolved/discarded reports live in Activity, not in the active Reports queue.
+const ACTIVE_STATUS_KEYS = ['new', 'under_review', 'awaiting_response'];
+const ACTIVE_TABS = STATUS_TABS.filter((status) => ACTIVE_STATUS_KEYS.includes(status.key));
 
 export default function ModeratorReports() {
   const navigate = useNavigate();
@@ -31,6 +36,7 @@ export default function ModeratorReports() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  useReportSync(load);
 
   async function discuss(report) {
     const res = await ReportsAPI.startDiscussion(report.id);
@@ -38,11 +44,12 @@ export default function ModeratorReports() {
     navigate(`/pages/case-discussion.html?discussionId=${res.data.discussion.id}`);
   }
 
-  const counts = reports.reduce((acc, report) => {
+  const activeReports = reports.filter((report) => ACTIVE_STATUS_KEYS.includes(report.status));
+  const counts = activeReports.reduce((acc, report) => {
     acc[report.status] = (acc[report.status] || 0) + 1;
     return acc;
   }, {});
-  const filtered = tab === 'all' ? reports : reports.filter((report) => report.status === tab);
+  const filtered = tab === 'all' ? activeReports : activeReports.filter((report) => report.status === tab);
 
   return (
     <main className="admin-page reports-page">
@@ -57,9 +64,9 @@ export default function ModeratorReports() {
 
       <div className="reports-tabs">
         <button className={`reports-tab ${tab === 'all' ? 'active' : ''}`} onClick={() => setTab('all')}>
-          All <span className="count">{reports.length}</span>
+          All <span className="count">{activeReports.length}</span>
         </button>
-        {STATUS_TABS.map((status) => (
+        {ACTIVE_TABS.map((status) => (
           <button
             key={status.key}
             className={`reports-tab ${tab === status.key ? 'active' : ''}`}

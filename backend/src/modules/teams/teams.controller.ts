@@ -45,7 +45,7 @@ export class TeamsController {
   })
   @ApiResponse({
     status: 403,
-    description: 'Forbidden - Authentication/verification requirements were not met',
+    description: 'Forbidden - Authentication/authorization requirements were not met',
   })
   async createTeam(
     @Body() createTeamDto: CreateTeamDto,

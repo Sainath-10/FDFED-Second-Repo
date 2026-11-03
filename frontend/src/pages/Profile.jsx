@@ -3,9 +3,8 @@
  *
  * header + bio, 5 tabs (match history,
  * stats, sessions, account, preferences), the live my-teams / upcoming-matches
- * sidebar computed from competition data, the edit-profile / email / password
- * modals, and the §12 Account Verification section (persisted backend status,
- * simulated Aadhaar flow opened from the shared VerificationModal).
+ * sidebar computed from competition data, and the edit-profile / email /
+ * password modals.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -13,8 +12,8 @@ import { useAuth } from '../context/AuthContext.jsx';
 import NexusData from '../services/data.js';
 import { showToast } from '../lib/toast.js';
 import { assetUrl } from '../lib/assets.js';
-import { VerificationAPI, isVerified } from '../services/verificationApi.js';
-import VerificationModal from '../components/VerificationModal.jsx';
+import ReputationBadge from '../components/ReputationBadge.jsx';
+import { LocalReputationAPI } from '../services/local/reporting.js';
 import '../styles/pages/profile.css';
 
 const PTABS = [
@@ -65,22 +64,17 @@ export default function Profile() {
   const [email, setEmail] = useState(session ? (session.email || session.emailAddress || '') : '');
   const [emailInput, setEmailInput] = useState(session ? (session.email || '') : '');
   const [pwd, setPwd] = useState({ current: '', next: '', confirm: '' });
+  const [organiserProfile, setOrganiserProfile] = useState(null);
 
-  // §12.1 — account verification (persisted backend status, simulated flow)
-  const [verifyOpen, setVerifyOpen] = useState(false);
-  const [verificationStatus, setVerificationStatus] = useState(null); // null until loaded
-  const verified = isVerified(verificationStatus);
-  const organizerVerified = String(
-    (verificationStatus && (verificationStatus.organizerVerificationStatus || verificationStatus.verificationStatus)) || '',
-  ).toLowerCase() === 'verified';
   useEffect(() => {
-    let active = true;
-    VerificationAPI.status().then((res) => {
-      if (active && res?.ok !== false && res?.data) setVerificationStatus(res.data);
-      else if (active && res?.ok !== false && res) setVerificationStatus(res);
-    }).catch(() => { /* offline: leave as unverified rather than claiming verified */ });
-    return () => { active = false; };
-  }, []);
+    let alive = true;
+    if (!session) return () => { alive = false; };
+    LocalReputationAPI.me()
+      .then((res) => { if (alive && res.ok && res.data) setOrganiserProfile(res.data); })
+      .catch(() => undefined);
+    return () => { alive = false; };
+  }, [session?.username]);
+
 
   const derived = useMemo(() => {
     const myTeams = [];
@@ -197,6 +191,19 @@ export default function Profile() {
               <div className="rank-badge" id="profile-rank-badge" style={{ display: 'none' }}></div>
             </div>
             <div className="username" id="profile-username">@{username || '—'}</div>
+            {organiserProfile && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', margin: '10px 0 2px' }}>
+                <ReputationBadge level={organiserProfile.level} limit={organiserProfile.limit} />
+                {organiserProfile.lifetimeBan && (
+                  <span style={{ color: '#f87171', fontSize: 12, fontWeight: 700 }}>Lifetime organising ban</span>
+                )}
+                {!organiserProfile.lifetimeBan && organiserProfile.bannedUntil && (
+                  <span style={{ color: '#f87171', fontSize: 12, fontWeight: 700 }}>
+                    Organising restricted until {formatDate(organiserProfile.bannedUntil)}
+                  </span>
+                )}
+              </div>
+            )}
             <p className="bio" id="profile-bio">{bio}</p>
             <div className="profile-badges" id="profile-badges-container"></div>
             <div className="profile-stats-row">
@@ -319,23 +326,6 @@ export default function Profile() {
                       </div>
                     </div>
                     <div className="settings-divider"></div>
-                    <div id="profile-verification-section" className="settings-item-row">
-                      <div className="settings-label-info">
-                        <h3>Account Verification</h3>
-                        <p>Verify your Aadhaar to create or join competitions. Your verification status is saved to your account.</p>
-                        <p style={{ fontSize: 12, color: '#94a3b8' }}>
-                          Organizer eligibility: <strong style={{ color: organizerVerified ? '#C6FF33' : '#f87171' }}>{organizerVerified ? 'Verified' : 'Unverified'}</strong>
-                        </p>
-                      </div>
-                      <div className="settings-action-input-wrap">
-                        {verified ? (
-                          <span id="verification-status-badge" className="verify-status-chip verified" aria-live="polite">✔ Verified{verificationStatus && verificationStatus.aadhaarMasked ? ` · ${verificationStatus.aadhaarMasked}` : ''}</span>
-                        ) : (
-                          <button id="verify-aadhaar-btn" className="btn-update-pill" onClick={() => setVerifyOpen(true)}>Verify Aadhaar</button>
-                        )}
-                      </div>
-                    </div>
-                    <div className="settings-divider"></div>
                     <div className="settings-item-row">
                       <div className="settings-label-info">
                         <h3>Two factor Authentication</h3>
@@ -454,16 +444,6 @@ export default function Profile() {
           </div>
         </div>
       </div>
-
-      <VerificationModal
-        open={verifyOpen}
-        onClose={() => setVerifyOpen(false)}
-        onVerified={() => {
-          setVerificationStatus({ verificationStatus: 'verified' });
-          showToast('Verification complete.');
-        }}
-        purpose="continue"
-      />
 
       <div className={`modal-overlay${passwordOpen ? ' open' : ''}`} id="password-modal" onClick={(e) => { if (e.target.id === 'password-modal') setPasswordOpen(false); }}>
         <div className="modal modal-relative">

@@ -232,25 +232,6 @@ export const AuthAPI = {
   },
 };
 
-// ============ VERIFICATION API (§12 — simulated Aadhaar flow) ============
-export const VerificationEndpoints = {
-  async status() {
-    return makeRequest('/verification/status', { method: 'GET' });
-  },
-  async requestOtp(aadhaarNumber) {
-    return makeRequest('/verification/aadhaar/request-otp', {
-      method: 'POST',
-      body: JSON.stringify({ aadhaarNumber }),
-    });
-  },
-  async verify(otp) {
-    return makeRequest('/verification/aadhaar/verify', {
-      method: 'POST',
-      body: JSON.stringify({ otp }),
-    });
-  },
-};
-
 // ============ COMPETITIONS API ============
 export const CompetitionsAPI = {
   async getAll() {

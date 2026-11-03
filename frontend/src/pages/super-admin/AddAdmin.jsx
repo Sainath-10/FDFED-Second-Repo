@@ -1,21 +1,22 @@
 ﻿/**
  * NEXUS ESPORTS — Super Admin · Add Administrator
  *
- * Creates a new administrator (or elevates an existing account) through
- * POST /auth/add-admin, then syncs the local accounts cache.
+ * Restores the original simple form (Username or Email + Admin Type/Role).
+ * Community Moderator is an additional role option alongside the existing
+ * administrative roles. Accounts are created/elevated through the local
+ * account directory so they can sign in immediately.
  */
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext.jsx';
+import { addOrElevateAdministrator } from '../../services/auth.js';
 import { showToast } from '../../lib/toast.js';
 import '../../styles/pages/super-admin/super-dashboard.css';
 import '../../styles/pages/super-admin/users.css';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const ACCOUNTS_KEY = 'nexus.auth.accounts';
-const normalize = (v) => String(v || '').trim().toLowerCase();
-
 export default function AddAdmin() {
   const navigate = useNavigate();
+  const { session } = useAuth();
   const [username, setUsername] = useState('');
   const [adminType, setAdminType] = useState('comp_admin');
   const [error, setError] = useState('');
@@ -33,43 +34,22 @@ export default function AddAdmin() {
     const email = uname.includes('@') ? uname : `${uname}@nexus.gg`;
 
     setSubmitting(true);
-    try {
-      const token = getToken();
-      const res = await fetch(`${API_URL}/auth/add-admin`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ username: uname, email, adminType }),
-      });
+    const result = addOrElevateAdministrator({
+      username: uname,
+      email,
+      adminType,
+      actor: session?.username,
+    });
+    setSubmitting(false);
 
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const msg = data.message || 'Could not save the administrator. Is the backend running on ' + API_URL + '?';
-        setError(Array.isArray(msg) ? msg.join(', ') : msg);
-        showToast(Array.isArray(msg) ? msg.join(', ') : msg, 'error');
-        setSubmitting(false);
-        return;
-      }
-
-      try {
-        const stored = JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '[]');
-        const idx = stored.findIndex((a) => normalize(a.username) === normalize(uname));
-        const item = { username: uname, email, role: adminType, adminType };
-        if (idx >= 0) stored[idx] = Object.assign(stored[idx], item);
-        else stored.push(item);
-        localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(stored));
-      } catch (err) { /* cache sync is best-effort */ }
-
-      showToast(`${uname} now has ${adminType} access.`, 'success');
-      setTimeout(() => navigate('/pages/super-admin/admins.html'), 600);
-    } catch (err) {
-      const msg = `Cannot reach the backend at ${API_URL}.`;
-      setError(msg);
-      showToast(msg, 'error');
-      setSubmitting(false);
+    if (!result.ok) {
+      setError(result.error || 'Could not save the administrator.');
+      showToast(result.error || 'Could not save the administrator.', 'error');
+      return;
     }
+
+    showToast(`${uname} now has ${adminType} access.`, 'success');
+    setTimeout(() => navigate('/pages/super-admin/admins.html'), 600);
   }
 
   return (
@@ -94,7 +74,7 @@ export default function AddAdmin() {
             <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#cbd5e1', marginBottom: 8 }}>Username or Email *</label>
             <input type="text" id="page-admin-username" className="form-input" placeholder="e.g. disputeadmin or name@nexus.gg" required value={username} onChange={(e) => setUsername(e.target.value)} style={{ width: '100%', padding: '12px 16px', background: '#0f172a', border: '1px solid #334155', borderRadius: 10, color: '#fff', fontSize: 14 }} />
             <p style={{ margin: '6px 0 0', fontSize: 12, color: '#64748b' }}>
-              A new account is created if this user does not exist yet; an existing account is elevated.
+              A new account is created if this user does not exist yet; an existing account is elevated. New accounts use the default password <strong>nexus</strong>.
             </p>
           </div>
 
@@ -105,6 +85,7 @@ export default function AddAdmin() {
               <option value="dispute_admin">🛡️ Dispute Admin (dispute_admin)</option>
               <option value="revenue_admin">💳 Revenue Admin (revenue_admin)</option>
               <option value="super_admin">⚡ Super Admin (super_admin)</option>
+              <option value="community_moderator">🚩 Community Moderator (community_moderator)</option>
             </select>
           </div>
 

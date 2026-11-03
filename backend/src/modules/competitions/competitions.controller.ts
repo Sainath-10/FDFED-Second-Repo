@@ -103,7 +103,7 @@ export class CompetitionsController {
   })
   async joinValidate(@Body() dto: JoinValidateDto, @CurrentUser() user?: any) {
     // §12.4 — the authenticated account (id + username) is used for the
-    // backend-enforced mock-verification gate; never trust the request body.
+    // backend-derived organiser identity; never trust the request body.
     return this.competitionsService.participate(dto.competitionId, dto.joinCode, user);
   }
 

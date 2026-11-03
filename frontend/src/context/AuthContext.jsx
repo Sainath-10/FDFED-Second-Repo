@@ -10,7 +10,6 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import * as AuthService from '../services/auth.js';
-import { VerificationAPI } from '../services/verificationApi.js';
 
 const AuthContext = createContext(null);
 
@@ -32,7 +31,6 @@ export function AuthProvider({ children }) {
   const login = useCallback(async (options) => {
     const result = await AuthService.login(options);
     if (result.ok) {
-      VerificationAPI.resetCache(); // never reuse another account's cached status
       setSessionState(result.user || AuthService.getSession());
     }
     return result;
@@ -45,7 +43,6 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(() => {
     AuthService.clearSession();
-    VerificationAPI.resetCache();
     setSessionState(null);
   }, []);
 

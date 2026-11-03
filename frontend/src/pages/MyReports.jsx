@@ -1,13 +1,14 @@
 /**
- * NEXUS ESPORTS — My Reports
+ * NEXUS ESPORTS — Reports
  *
  * Player view: reports I filed or that were filed against me, the case
  * discussions I participate in, and (for organisers) the reputation / prize-pool
  * exception tools.
  */
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ReportsAPI, ReputationAPI } from '../services/api.js';
+import { LocalReportsAPI as ReportsAPI, LocalReputationAPI as ReputationAPI } from '../services/local/reporting.js';
+import useReportSync from '../hooks/useReportSync.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import ReportCard from '../components/ReportCard.jsx';
 import ReputationBadge from '../components/ReputationBadge.jsx';
@@ -28,7 +29,7 @@ export default function MyReports() {
   const [reason, setReason] = useState('');
   const [requesting, setRequesting] = useState(false);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
@@ -46,9 +47,10 @@ export default function MyReports() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
+  useReportSync(load);
 
   async function requestException() {
     const value = Number(String(amount).replace(/[^0-9.]/g, ''));
@@ -70,13 +72,12 @@ export default function MyReports() {
     <main className="main-content reports-page">
       <div className="reports-head">
         <div>
-          <h1 className="reports-title">My reports</h1>
+          <h1 className="reports-title">Reports</h1>
           <p className="reports-subtitle">
             Track what you filed and what was filed about you. Case discussions appear here as soon as a
             reviewer opens one.
           </p>
         </div>
-        <Link className="report-btn" to="/pages/my-activity.html">My activity</Link>
       </div>
 
       {error && <div className="report-inline-error">{error}</div>}
