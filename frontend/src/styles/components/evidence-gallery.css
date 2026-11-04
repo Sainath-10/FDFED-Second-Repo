@@ -1,0 +1,230 @@
+/* NEXUS ESPORTS — shared evidence gallery + lightbox */
+
+.evidence-gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.evidence-gallery-empty {
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.evidence-gallery-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.evidence-thumb {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 132px;
+  padding: 6px;
+  background: #0b1420;
+  border: 1px solid #24303d;
+  border-radius: 10px;
+  cursor: zoom-in;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.evidence-thumb:hover,
+.evidence-thumb:focus-visible {
+  border-color: rgba(198, 255, 51, 0.55);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.evidence-thumb img {
+  width: 100%;
+  height: 78px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: #06080b;
+  display: block;
+}
+
+.evidence-thumb-caption {
+  font-size: 10.5px;
+  color: #94a3b8;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.evidence-gallery.is-compact .evidence-thumb {
+  width: 108px;
+}
+
+.evidence-gallery.is-compact .evidence-thumb img {
+  height: 62px;
+}
+
+.evidence-file {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: 260px;
+  padding: 8px 10px;
+  background: #0b1420;
+  border: 1px solid #334155;
+  border-radius: 9px;
+  color: #cbd5e1;
+  text-decoration: none;
+}
+
+.evidence-file:hover {
+  border-color: rgba(198, 255, 51, 0.45);
+}
+
+.evidence-file-icon {
+  font-size: 17px;
+  line-height: 1;
+}
+
+.evidence-file-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.evidence-file-meta strong {
+  font-size: 12px;
+  color: #e2e8f0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.evidence-file-meta small {
+  font-size: 10.5px;
+  color: #7d8b9a;
+}
+
+/* ── Lightbox ─────────────────────────────────────────────────────────── */
+
+.evidence-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  background: rgba(3, 6, 10, 0.94);
+  backdrop-filter: blur(3px);
+  padding: 18px;
+}
+
+.evidence-lightbox-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 6px 6px 12px;
+}
+
+.evidence-lightbox-name {
+  color: #e2e8f0;
+  font-size: 13px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.evidence-lightbox-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.evidence-lightbox-tools button,
+.evidence-lightbox-tools a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border-radius: 8px;
+  border: 1px solid rgba(198, 255, 51, 0.4);
+  background: rgba(198, 255, 51, 0.08);
+  color: #c6ff33;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.evidence-lightbox-close {
+  font-size: 18px !important;
+  line-height: 1;
+  padding: 2px 12px !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: #e2e8f0 !important;
+}
+
+.evidence-lightbox-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: #070a0f;
+  padding: 16px;
+}
+
+.evidence-lightbox-stage img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.evidence-lightbox-stage.is-zoomed {
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+.evidence-lightbox-stage.is-zoomed img {
+  max-width: none;
+  max-height: none;
+  width: 170%;
+}
+
+.evidence-lightbox-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid rgba(198, 255, 51, 0.45);
+  background: rgba(8, 12, 16, 0.85);
+  color: #c6ff33;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.evidence-lightbox-nav.prev { left: 10px; }
+.evidence-lightbox-nav.next { right: 10px; }
+
+@media (max-width: 640px) {
+  .evidence-thumb,
+  .evidence-gallery.is-compact .evidence-thumb { width: calc(50% - 5px); }
+  .evidence-lightbox { padding: 10px; }
+  .evidence-lightbox-stage.is-zoomed img { width: 220%; }
+}

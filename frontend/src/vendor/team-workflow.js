@@ -58,6 +58,39 @@
     return configured > 0 ? configured : MAX_TEAM_PLAYERS;
   }
 
+  /**
+   * Local mirror of the backend player-eligibility rule. Only normal player
+   * accounts may join a competition team; the stored role/adminType decides,
+   * never the display name. Unknown local accounts are validated by the API.
+   */
+  const PLAYER_ROLES = new Set(['participant', 'team_lead', 'regular', 'user', 'player']);
+
+  function accountEligibleForTeam(username) {
+    const name = normalize(username);
+    if (!name) return false;
+    let account = null;
+    try {
+      const auth = window.NexusAuth;
+      if (auth && typeof auth.getAccounts === 'function') {
+        account = (auth.getAccounts() || []).find(
+          (row) => normalize(row.username) === name || normalize(row.email) === name,
+        ) || null;
+      }
+    } catch (err) {
+      account = null;
+    }
+    if (!account) {
+      const session = getSession();
+      account = session && normalize(session.username) === name ? session : null;
+    }
+    if (!account) return true;
+    if (account.banned) return false;
+    if (normalize(account.adminType)) return false;
+    return PLAYER_ROLES.has(normalize(account.role));
+  }
+
+  const STAFF_TEAM_ERROR = 'Staff and administrative accounts cannot join competition teams.';
+
   function loadNotifications() {
     return parseJson(localStorage.getItem(NOTIFICATIONS_KEY), []);
   }
@@ -785,6 +818,7 @@
     const opts = options || {};
     const session = getSession();
     if (!session) return { ok: false, error: 'Please log in first.' };
+    if (!accountEligibleForTeam(session.username)) return { ok: false, error: STAFF_TEAM_ERROR };
 
     const comp = getCompetitionById(opts.compId);
     if (!comp) return { ok: false, error: 'Competition not found.' };
@@ -1163,6 +1197,7 @@
     const opts = options || {};
     const session = getSession();
     if (!session) return { ok: false, error: 'Please log in first.' };
+    if (!accountEligibleForTeam(session.username)) return { ok: false, error: STAFF_TEAM_ERROR };
 
     let comp = opts.compId ? getCompetitionById(opts.compId) : null;
     let team = comp ? findTeam(comp, opts.teamId) : null;

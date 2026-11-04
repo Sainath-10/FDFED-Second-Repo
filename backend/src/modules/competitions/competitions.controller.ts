@@ -14,6 +14,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagg
 import { CompetitionsService } from './competitions.service';
 import { CreateCompetitionDto, UpdateCompetitionDto, CompetitionResponseDto, AddCoOrganizerDto, JoinValidateDto } from './dto/competition.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../../common/guards/optional-jwt-auth.guard';
 import { RolesGuard } from '../../common/decorators/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -190,8 +191,9 @@ export class CompetitionsController {
     status: 404,
     description: 'Competition not found',
   })
-  async getCompetition(@Param('id') id: string): Promise<CompetitionResponseDto> {
-    const competition = await this.competitionsService.getCompetitionById(id);
+  @UseGuards(OptionalJwtAuthGuard)
+  async getCompetition(@Param('id') id: string, @CurrentUser() user?: any): Promise<CompetitionResponseDto> {
+    const competition = await this.competitionsService.getCompetitionById(id, user?.username);
     if (!competition) {
       throw new NotFoundException(`Competition with ID ${id} not found`);
     }
@@ -240,7 +242,7 @@ export class CompetitionsController {
 
   @Patch(':id/approval')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.COMP_ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Approve or reject a competition',

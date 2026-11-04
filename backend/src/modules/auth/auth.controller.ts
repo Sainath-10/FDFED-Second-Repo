@@ -76,9 +76,9 @@ export class AuthController {
   @Roles(
     UserRole.ADMIN,
     UserRole.SUPER_ADMIN,
-    UserRole.COMP_ADMIN,
-    UserRole.DISPUTE_ADMIN,
-    UserRole.REVENUE_ADMIN,
+    UserRole.ADMIN,
+    UserRole.ADMIN,
+    UserRole.ADMIN,
   )
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get all users (Admin only)' })
@@ -110,7 +110,7 @@ export class AuthController {
 
   @Patch('users/:id/ban')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.DISPUTE_ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Ban a user by ID or username/email (Admin only)' })
   async banUser(@Param('id') id: string) {
@@ -119,7 +119,7 @@ export class AuthController {
 
   @Patch('users/:id/warn')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.DISPUTE_ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Issue a warning to a user (Admin only)' })
   async warnUser(@Param('id') id: string) {

@@ -87,8 +87,8 @@ database (no server on `127.0.0.1:5432`) and browser end-to-end click-throughs
   organizers are notified for participant/team disputes.
 - Reporter is notified on status changes; dispute creation/review/resolution
   write audit records.
-- Team creation, disband, refunds, removals, scheduling, results, advancement,
-  and verification write audit events and notifications.
+- Team creation, disband, refunds, removals, scheduling, results and advancement
+  write audit events and notifications.
 - Admin revenue page includes a refund-request queue with manual
   completed/failed/cancelled resolution.
 
@@ -120,18 +120,17 @@ database (no server on `127.0.0.1:5432`) and browser end-to-end click-throughs
   throwaway local database. Migrations run on startup unless
   `DB_MIGRATIONS_RUN=false`.
 
-Columns/tables added: user verification fields, competition visibility/join
-code/registration window, `refund_requests`, `audit_logs`, dispute category.
+Columns/tables added: competition visibility/join code/registration window,
+`refund_requests`, `audit_logs`, dispute category.
 
 ## API changes
 
-- `POST /competitions/join-validate` now enforces the persisted verification
-  status and private join code.
+- `POST /competitions/join-validate` now enforces the private join code.
 - `GET /competitions/:id` no longer returns `joinCode`.
 - `POST /teams/:id/join-requests` accepts and enforces `joinCode`.
 - `PATCH /matches/:id/result` accepts an empty winner for league draws.
-- `GET /competitions/:id/participants`, refund endpoints, verification
-  endpoints, and match schedule/standings endpoints are now wired to callers.
+- `GET /competitions/:id/participants`, refund endpoints, and match
+  schedule/standings endpoints are now wired to callers.
 - Dispute creation/review now emits notifications and audit records.
 
 ## Actual build and test results
@@ -139,10 +138,9 @@ code/registration window, `refund_requests`, `audit_logs`, dispute category.
 - Backend build (`backend: npm run build`): **PASS**.
 - Frontend production build (`frontend: npm run build`): **PASS** (only the
   existing >500 kB chunk-size warning).
-- Automated tests (`backend: npm test`): **48 passed, 0 failed**.
+- Automated tests (`backend: npm test`): **43 passed, 0 failed**.
   - 7 competition-rule tests
   - 7 tournament/standings/scheduling tests
-  - 5 simulated verification tests
   - 13 competition-service tests
   - 8 team-service tests
   - 8 match-service tests

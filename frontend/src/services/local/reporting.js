@@ -22,7 +22,7 @@ import {
   profileOf, historyOf, sanctionsOf, warningsOf, getGlobalMax,
   addSanction, downgrade, mutateProfile, effectiveLimit,
   setGlobalCeiling, requestException, myExceptions, allExceptions, reviewException,
-  recordRecoverySanction,
+  recordRecoverySanction, revokeSanctionsForReport, applyLevelChange,
 } from './reputation.js';
 
 const COMPETITIONS_KEY = 'nexus_competitions';
@@ -34,12 +34,23 @@ const MAX_EVIDENCE_FILES = 5;
 const MAX_EVIDENCE_TOTAL_BYTES = 4 * 1024 * 1024;
 const BASELESS_LIMIT = 3;
 const REASON_BY_CODE = new Map(REPORT_REASONS.map((reason) => [reason.code, reason]));
-const FINDING_VALUES = new Set(['substantiated', 'partially_substantiated', 'unsubstantiated']);
-const PLAYER_ACTIONS = new Set(['formal_warning', 'final_warning', 'remove_from_competition', 'no_action']);
+// New decisions use two findings. `partially_substantiated` is kept readable
+// for historical rows and still counts as substantiated in statistics.
+const DECISION_FINDINGS = new Set(['substantiated', 'unsubstantiated']);
+// One unified warning action; legacy formal/final rows remain untouched.
+const PLAYER_ACTIONS = new Set(['warning', 'remove_from_competition', 'no_action']);
 const MODERATOR_ACTIONS = new Set([
-  'formal_warning', 'final_warning', 'reputation_downgrade',
-  'creation_restriction', 'competition_suspension', 'no_action',
+  'warning', 'reputation_downgrade', 'creation_restriction',
+  'competition_suspension', 'no_action',
 ]);
+// Non-warning actions create a restriction the organiser can appeal. A normal
+// warning and No Action deliberately do not.
+const APPEALABLE_ACTIONS = new Set([
+  'reputation_downgrade', 'creation_restriction', 'competition_suspension',
+  'formal_warning', 'final_warning',
+]);
+const isAppealableAction = (action) => APPEALABLE_ACTIONS.has(String(action || ''));
+
 const DISCARD_REASONS = new Set([
   'duplicate_report', 'incorrect_reported_person', 'outside_competition_scope',
   'insufficient_information', 'not_covered_by_rules', 'other',
@@ -116,7 +127,7 @@ function isModerator(user) {
 }
 
 function isAdmin(user) {
-  return !!user && ['admin', 'comp_admin', 'dispute_admin', 'revenue_admin', 'super_admin'].includes(roleKey(user.role));
+  return !!user && ['admin', 'admin', 'admin', 'admin', 'super_admin'].includes(roleKey(user.role));
 }
 
 function moderatorUsernames() {
@@ -156,6 +167,19 @@ function isParticipant(comp, username) {
 
 function isTeamLeader(team, username) {
   return !!team && (sameUser(team.createdBy, username) || sameUser(team.leaderUsername, username));
+}
+
+/** Competition ids this account was removed from (used to hide activity entries). */
+export function removedCompetitionIds(username) {
+  const key = norm(username);
+  const ids = new Set();
+  if (!key) return ids;
+  asArray(read(KEYS.audit, [])).forEach((row) => {
+    if (row.type === 'player_removed' && norm(row.username) === key && row.competitionId) {
+      ids.add(String(row.competitionId));
+    }
+  });
+  return ids;
 }
 
 function wasRemovedFromCompetition(compId, username) {
@@ -275,12 +299,75 @@ function persistRestriction(competitionId, reporter, count) {
   write(KEYS.restrictions, map);
 }
 
+/**
+ * Older reports were decided before decision versioning existed. Synthesise the
+ * current decision from the report's own fields so those reports stay
+ * upliftable and auditable instead of looking "already uplifted".
+ */
+function ensureDecisionHistory(report) {
+  const history = asArray(report.decisionHistory);
+  if (history.length) return history;
+  if (!report.finding || !report.action) return history;
+  history.push({
+    version: 1,
+    finding: report.finding,
+    action: report.action,
+    level: report.level || null,
+    days: report.days || null,
+    conclusion: report.conclusion || '',
+    decidedBy: report.resolvedBy || 'system',
+    decidedAt: report.resolvedAt || report.updatedAt || report.createdAt,
+    previousLevel: report.previousLevel || null,
+    // The decision on a currently-resolved report is the active one; a stale
+    // report-level uplifted flag must not make it look already reversed.
+    status: report.status === 'resolved' ? 'active' : (report.uplifted ? 'uplifted' : 'active'),
+    upliftedBy: report.upliftedBy || null,
+    upliftReason: report.upliftReason || '',
+    upliftedAt: report.upliftedAt || null,
+    competitionDisposition: report.competitionDisposition || null,
+    legacy: true,
+  });
+  report.decisionHistory = history;
+  return history;
+}
+
+function appealAlreadyUsed(report) {
+  return !!(report.appealUsed
+    || report.appealedAt
+    || ['submitted', 'resolved', 'withdrawn', 'retained'].includes(String(report.appealStatus || '')));
+}
+
 function decorate(report) {
+  const original = report.originalReportId
+    ? allReports().find((row) => String(row.id) === String(report.originalReportId)) || null
+    : null;
+  const history = ensureDecisionHistory(report);
+  const latestDecision = history.length ? history[history.length - 1] : null;
   return {
     ...report,
     code: report.code || codeFor(report.id),
     reporterPriorSubstantiated: substantiatedCount(report.reporterUsername),
     accusedPriorSubstantiated: substantiatedCount(report.reportedUsername),
+    appealStatus: report.appealStatus || null,
+    appealUsed: appealAlreadyUsed(report),
+    decisionHistory: history,
+    latestDecision,
+    canAppeal: isAppealableAction(report.action)
+      && report.status === 'resolved'
+      && !report.uplifted
+      && !appealAlreadyUsed(report)
+      && (!latestDecision || latestDecision.status === 'active'),
+    originalReport: original ? {
+      id: original.id,
+      code: original.code || codeFor(original.id),
+      description: original.description,
+      finding: original.finding,
+      action: original.action,
+      conclusion: original.conclusion,
+      resolvedBy: original.resolvedBy,
+      resolvedAt: original.resolvedAt,
+      status: original.status,
+    } : null,
   };
 }
 
@@ -290,6 +377,13 @@ function canReview(report, user) {
   if (report.queue === 'moderator') return isModerator(user);
   const comp = getCompetition(report.competitionId);
   return isOrganiserOf(comp, user.username);
+}
+
+function isDiscussionParticipantOf(reportId, username) {
+  return asArray(read(KEYS.discussions, [])).some((room) => (
+    String(room.reportId || '') === String(reportId || '')
+    && asArray(room.participants).some((person) => sameUser(person.username, username))
+  ));
 }
 
 function canView(report, user) {
@@ -375,6 +469,68 @@ function compressImage(dataUrl, maxDimension = 1400, quality = 0.72) {
 
 // ── Report API ──────────────────────────────────────────────────────────────
 
+function createDiscussionRoom(report, reviewer, participants) {
+  const rooms = asArray(read(KEYS.discussions, []));
+  let room = rooms.find((row) => String(row.reportId) === String(report.id));
+  if (!room) {
+    room = {
+      id: uid('disc'),
+      reportId: report.id,
+      code: report.code,
+      status: 'open',
+      reviewerUsername: reviewer,
+      reviewerRole: 'community_moderator',
+      participants: [],
+      createdAt: now(),
+      endedAt: null,
+      endedBy: null,
+    };
+    rooms.unshift(room);
+  }
+  room.status = 'open';
+  room.endedAt = null;
+  room.endedBy = null;
+  room.participants = asArray(room.participants);
+  (participants || []).forEach(({ username, role }) => {
+    if (!username) return;
+    if (room.participants.some((person) => sameUser(person.username, username))) return;
+    room.participants.push({ id: uid('part'), username, role });
+  });
+  write(KEYS.discussions, rooms);
+  return room;
+}
+
+/** Competition Suspension terminates the competition — it is never a timed ban. */
+function terminateCompetition(report, actor, reason) {
+  const comp = getCompetition(report.competitionId);
+  if (!comp) return null;
+  comp.status = 'terminated';
+  comp.terminated = true;
+  comp.terminatedAt = now();
+  comp.terminatedBy = actor;
+  comp.terminationReportId = report.id;
+  comp.terminationReason = reason;
+  saveCompetition(comp);
+  const recipients = new Set();
+  teamsOf(comp).forEach((team) => asArray(team.members).forEach((member) => {
+    if (member && member.username) recipients.add(member.username);
+  }));
+  recipients.forEach((name) => notify(name, {
+    type: 'competition',
+    title: 'Competition terminated',
+    body: `"${compName(comp)}" has been terminated following a Community Moderator decision.`,
+    meta: { competitionId: comp.id, reportId: report.id },
+  }));
+  pushAudit({
+    type: 'competition_terminated',
+    actor,
+    reportId: report.id,
+    competitionId: comp.id,
+    details: reason,
+  });
+  return comp;
+}
+
 export const LocalReportsAPI = {
   async create(payload = {}) {
     const user = session();
@@ -393,6 +549,27 @@ export const LocalReportsAPI = {
     if (!comp) return fail('That competition could not be found.');
 
     if (sameUser(reportedUsername, user.username)) return fail('You cannot report yourself.');
+
+    // An organiser complaint references the decision being challenged without
+    // changing the original report: the moderator reviews it independently.
+    const originalReportId = String(payload.originalReportId || '');
+    let originalReport = null;
+    if (originalReportId) {
+      originalReport = allReports().find((row) => String(row.id) === originalReportId) || null;
+      if (!originalReport) return fail('The original report could not be found.');
+      if (!sameUser(originalReport.reportedUsername, user.username)) {
+        return fail('Only the player affected by that decision can file this complaint.', 403);
+      }
+      if (String(originalReport.competitionId || '') !== competitionId) {
+        return fail('The original report belongs to another competition.');
+      }
+      if (originalReport.status !== 'resolved' || !originalReport.resolvedBy) {
+        return fail('The original report has no organiser decision to complain about.');
+      }
+      if (!sameUser(originalReport.resolvedBy, reportedUsername)) {
+        return fail('The complaint must name the organiser who recorded the decision.');
+      }
+    }
 
     const reportedRole = reportedRoleInComp(comp, reportedUsername);
     const queue = reportedRole === 'organiser' ? 'moderator' : 'organiser';
@@ -457,7 +634,11 @@ export const LocalReportsAPI = {
         reporterTeamId: team?.id || null,
         reportedTeamId: reportedTeam?.id || null,
         sameTeam: !!(team && reportedTeam && team.id === reportedTeam.id),
-        relatedReportId: related?.id || null,
+        relatedReportId: originalReport?.id || related?.id || null,
+        originalReportId: originalReport?.id || null,
+        originalDecision: originalReport
+          ? `${originalReport.finding} · ${originalReport.action}: ${originalReport.conclusion || ''}`.trim()
+          : null,
         evidence: evidence.rows,
         status: 'new',
         statusHistory: [{
@@ -516,11 +697,51 @@ export const LocalReportsAPI = {
     });
   },
 
+  /** Whether the signed-in player has been removed from this competition. */
+  async removalStatus(competitionId) {
+    const user = session();
+    if (!user) return fail('Please log in.', 401);
+    const rows = asArray(read(KEYS.audit, []))
+      .filter((row) => row.type === 'player_removed'
+        && String(row.competitionId || '') === String(competitionId || '')
+        && sameUser(row.username, user.username));
+    const latest = rows[0] || null;
+    return ok({
+      removed: !!latest,
+      removedAt: latest?.at || null,
+      reason: latest?.details || '',
+    });
+  },
+
   async mine() {
     const user = session();
     if (!user) return fail('Please log in.', 401);
     const rows = allReports()
-      .filter((row) => sameUser(row.reporterUsername, user.username) || sameUser(row.reportedUsername, user.username))
+      .filter((row) => sameUser(row.reporterUsername, user.username)
+        || sameUser(row.reportedUsername, user.username)
+        || isDiscussionParticipantOf(row.id, user.username))
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .map(decorate);
+    return ok(rows);
+  },
+
+  /**
+   * Reports belonging to one competition for its organisers. This is the same
+   * underlying record the organiser reports queue renders — the competition
+   * Disputes tab never keeps a second copy of a report.
+   */
+  async forCompetition(competitionId) {
+    const user = session();
+    if (!user) return fail('Please log in.', 401);
+    const comp = getCompetition(competitionId);
+    if (!comp) return fail('That competition could not be found.', 404);
+    if (!isOrganiserOf(comp, user.username) && !isModerator(user)) {
+      return fail('Only an organiser of this competition can view its disputes.', 403);
+    }
+    const rows = allReports()
+      .filter((row) => String(row.competitionId || '') === String(competitionId))
+      .filter((row) => !sameUser(row.reportedUsername, user.username))
+      .filter((row) => (isModerator(user) ? true : row.queue === 'organiser'))
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
       .map(decorate);
     return ok(rows);
@@ -557,8 +778,11 @@ export const LocalReportsAPI = {
     const user = session();
     if (!isModerator(user)) return fail('Community Moderator access is required.', 403);
     const rows = allReports().filter((row) => row.queue === 'moderator');
-    const counts = { new: 0, under_review: 0, awaiting_response: 0, resolved: 0, discarded: 0 };
-    rows.forEach((row) => { counts[row.status] = (counts[row.status] || 0) + 1; });
+    const counts = { new: 0, under_review: 0, awaiting_response: 0, resolved: 0, discarded: 0, appealed: 0 };
+    rows.forEach((row) => {
+      counts[row.status] = (counts[row.status] || 0) + 1;
+      if (row.status === 'resolved' && row.appealStatus === 'submitted' && !row.uplifted) counts.appealed += 1;
+    });
     return ok(counts);
   },
 
@@ -587,6 +811,7 @@ export const LocalReportsAPI = {
       .filter((row) => (
         row.queue === 'moderator'
         && ['resolved', 'discarded'].includes(row.status)
+        && !row.uplifted
         && (sameUser(row.resolvedBy, target) || sameUser(row.discardedBy, target))
       ))
       .sort((a, b) => new Date(b.resolvedAt || b.discardedAt || b.updatedAt) - new Date(a.resolvedAt || a.discardedAt || a.updatedAt))
@@ -746,7 +971,7 @@ export const LocalReportsAPI = {
   async actPlayer(id, payload = {}) {
     const user = session();
     const { finding, action, conclusion } = payload;
-    if (!FINDING_VALUES.has(finding)) return fail('Select a valid finding.');
+    if (!DECISION_FINDINGS.has(finding)) return fail('Select a valid finding.');
     if (!PLAYER_ACTIONS.has(action)) return fail('Select a valid action.');
     if (String(conclusion || '').trim().length < 15) {
       return fail('Write a conclusion explaining what happened and why this decision was reached.');
@@ -771,8 +996,8 @@ export const LocalReportsAPI = {
         return fail('That player is no longer in a team for this competition.');
       }
 
-      if (action === 'formal_warning' || action === 'final_warning') {
-        recordPlayerWarning(report.reportedUsername, action, report.id, user.username, conclusion);
+      if (action === 'warning') {
+        recordPlayerWarning(report.reportedUsername, 'warning', report.id, user.username, conclusion);
       }
 
       report.finding = finding;
@@ -805,13 +1030,19 @@ export const LocalReportsAPI = {
     const user = session();
     if (!isModerator(user)) return fail('Community Moderator access is required.', 403);
     const { finding, action, conclusion, level, days } = payload;
-    if (!FINDING_VALUES.has(finding)) return fail('Select a valid finding.');
+    if (!DECISION_FINDINGS.has(finding)) return fail('Select a valid finding.');
     if (!MODERATOR_ACTIONS.has(action)) return fail('Select a valid action.');
     if (String(conclusion || '').trim().length < 15) {
       return fail('A recorded conclusion explaining the decision is required.');
     }
-    if (finding === 'unsubstantiated' && !['no_action', 'formal_warning'].includes(action)) {
+    if (finding === 'unsubstantiated' && !['no_action', 'warning'].includes(action)) {
       return fail('An unsubstantiated finding cannot justify a punitive action.');
+    }
+    // Only a temporary creation restriction uses a duration. Competition
+    // Suspension terminates the competition, so it never records one.
+    const includesDays = action === 'creation_restriction';
+    if (includesDays && Number(days) > 0 && (Number(days) < 1 || Number(days) > 365)) {
+      return fail('Enter a restriction duration between 1 and 365 days.');
     }
 
     return withLock(`report-act-mod:${id}`, () => {
@@ -824,30 +1055,36 @@ export const LocalReportsAPI = {
 
       const organiser = report.reportedUsername;
       const reason = String(conclusion).trim();
+      const decidedAt = now();
+      // Capture this BEFORE clearing the current appeal status: the single
+      // appeal opportunity is permanent for the life of the report.
+      const appealUsed = appealAlreadyUsed(report);
+      const previousLevel = profileOf(organiser)?.level || null;
       let sanction = null;
 
-      if (action === 'formal_warning' || action === 'final_warning') {
-        sanction = addSanction(organiser, { type: action, reason, reportId: report.id }, user.username);
+      if (action === 'warning') {
+        sanction = addSanction(organiser, { type: 'warning', reason, reportId: report.id }, user.username);
       } else if (action === 'reputation_downgrade') {
         const result = downgrade(organiser, level, reason, report.id, user.username);
         if (!result.ok) return fail(result.error);
-      } else if (action === 'creation_restriction' || action === 'competition_suspension') {
-        sanction = addSanction(organiser, { type: action, days: Number(days) || 30, reason, reportId: report.id }, user.username);
+      } else if (includesDays) {
+        sanction = addSanction(organiser, {
+          type: action, days: Number(days) || 30, reason, reportId: report.id,
+        }, user.username);
+      } else if (action === 'competition_suspension') {
+        sanction = addSanction(organiser, { type: action, reason, reportId: report.id }, user.username);
+        terminateCompetition(report, user.username, reason);
       }
 
       if (['substantiated', 'partially_substantiated'].includes(finding)) {
         // Record the substantiated violation. Reputation never changes here:
-        // a downgrade is a separate, explicit moderator action with its own
-        // recorded reason and policy reference.
+        // a downgrade is a separate, explicit moderator action.
         mutateProfile(organiser, (profile) => {
           profile.counters.substantiatedReports = (Number(profile.counters.substantiatedReports) || 0) + 1;
           profile.counters.mediumViolationCount = (Number(profile.counters.mediumViolationCount) || 0) + 1;
           return null;
         });
 
-        // Red-level recovery sanction: a substantiated medium/high violation
-        // during recovery triggers a one-month organising ban; a repeat after
-        // that ban escalates to a lifetime ban.
         const current = profileOf(organiser);
         if (current?.level === 'red' && ['medium', 'high'].includes(report.priority)) {
           recordRecoverySanction(organiser, {
@@ -857,21 +1094,55 @@ export const LocalReportsAPI = {
         }
       }
 
+      // Every decision is a new version; history is never overwritten. A
+      // corrected decision supersedes the previous active version, but an
+      // already-uplifted version stays uplifted. The appeal opportunity is
+      // never restored: one appeal per report, for its whole lifetime.
+      const priorHistory = ensureDecisionHistory(report);
+      priorHistory.forEach((entry) => {
+        if (entry.status === 'active') entry.status = 'superseded';
+      });
+      report.decisionHistory = priorHistory;
+      const version = report.decisionHistory.length + 1;
+      report.decisionHistory.push({
+        version,
+        finding,
+        action,
+        level: level || null,
+        days: includesDays ? Number(days) || 30 : null,
+        conclusion: reason,
+        decidedBy: user.username,
+        decidedAt,
+        previousLevel,
+        status: 'active',
+        upliftedBy: null,
+        upliftReason: '',
+        upliftedAt: null,
+        competitionDisposition: null,
+      });
+      report.decisionVersion = version;
       report.finding = finding;
       report.action = action;
       report.conclusion = reason;
       report.resolvedBy = user.username;
-      report.resolvedAt = now();
+      report.resolvedAt = decidedAt;
+      report.uplifted = false;
+      report.appealStatus = null;
+      report.appealedAt = null;
+      report.appealUsed = appealUsed;
+      report.appealDiscussionId = report.appealDiscussionId || null;
       pushStatus(report, 'resolved', user.username, `Finding: ${finding} · Action: ${action}`);
       reports[index] = report;
       const saved = saveReports(reports);
       if (!saved.ok) return fail(saved.error, 507);
 
+      // Notify only after the decision is durably stored. Includes the report
+      // code, the action and a link; no private reviewer notes are exposed.
       notify(organiser, {
         type: 'report',
-        title: 'Moderator decision recorded',
-        body: `A decision was recorded for ${report.code}: ${finding.replace(/_/g, ' ')} · ${action.replace(/_/g, ' ')}.`,
-        meta: { reportId: report.id, competitionId: report.competitionId },
+        title: 'Action Recorded Against Your Account',
+        body: `A Community Moderator has recorded a decision against your account for report ${report.code}. Action: ${action.replace(/_/g, ' ')}. You can review the decision and submit an appeal from your Reports page.`,
+        meta: { reportId: report.id, competitionId: report.competitionId, action, link: '/pages/my-reports.html' },
       });
       pushAudit({
         type: 'organiser_decision', actor: user.username, reportId: report.id,
@@ -880,6 +1151,269 @@ export const LocalReportsAPI = {
       });
       closeDiscussions(report.id, user.username);
       return ok(decorate(report));
+    });
+  },
+
+  /**
+   * Appeal a non-warning organiser decision. Reuses the existing case
+   * discussion room and NEVER removes the active sanction by itself.
+   */
+  async appeal(id) {
+    const user = session();
+    if (!user) return fail('Please log in.', 401);
+    return withLock(`report-appeal:${id}`, () => {
+      const reports = allReports();
+      const index = reports.findIndex((row) => String(row.id) === String(id));
+      if (index < 0) return fail('Report not found.', 404);
+      const report = reports[index];
+      if (report.queue !== 'moderator') return fail('Only decisions against an organiser can be appealed.', 409);
+      if (!sameUser(report.reportedUsername, user.username)) {
+        return fail('Only the organiser affected by this decision can appeal it.', 403);
+      }
+      if (report.status !== 'resolved') return fail('This decision is not active.', 409);
+      if (!isAppealableAction(report.action)) {
+        return fail('A normal warning or a no-action decision cannot be appealed.', 400);
+      }
+      if (appealAlreadyUsed(report)) {
+        return fail('This report has already used its one appeal. A report can only be appealed once.', 409);
+      }
+      if (report.appealStatus === 'submitted') {
+        return fail('An appeal for this decision is already open.', 409);
+      }
+
+      ensureDecisionHistory(report);
+      report.appealUsed = true;
+      report.appealCount = (Number(report.appealCount) || 0) + 1;
+      report.appealHistory = asArray(report.appealHistory);
+      report.appealHistory.push({
+        submittedBy: user.username,
+        submittedAt: now(),
+        decisionVersion: report.decisionHistory.length,
+      });
+      report.appealStatus = 'submitted';
+      report.appealedAt = now();
+      const room = createDiscussionRoom(report, report.resolvedBy, [
+        { username: report.resolvedBy, role: 'reviewer' },
+        { username: report.reportedUsername, role: 'accused' },
+        { username: report.reporterUsername, role: 'reporter' },
+      ]);
+      report.appealDiscussionId = room.id;
+      pushStatus(report, 'resolved', user.username, 'Appeal submitted. The decision remains active while it is reviewed.');
+      reports[index] = report;
+      const saved = saveReports(reports);
+      if (!saved.ok) return fail(saved.error, 507);
+
+      if (report.resolvedBy) {
+        notify(report.resolvedBy, {
+          type: 'report',
+          title: 'Organiser Appealed a Decision',
+          body: `An Organiser has appealed the decision for report ${report.code}. Open the Appealed reports tab to enter the discussion.`,
+          meta: { reportId: report.id, discussionId: room.id, link: '/pages/moderator/reports.html' },
+        });
+      }
+      notify(user.username, {
+        type: 'discussion',
+        title: 'Appeal submitted',
+        body: `Your appeal for ${report.code} was sent to the Community Moderator. The decision remains active until it is reviewed.`,
+        meta: { reportId: report.id, discussionId: room.id },
+      });
+      pushAudit({
+        type: 'appeal_submitted', actor: user.username, reportId: report.id,
+        competitionId: report.competitionId, username: report.reportedUsername,
+        details: 'Appeal submitted; the active sanction was not changed.',
+      });
+      return ok({ discussionId: room.id, discussion: room, report: decorate(report) });
+    });
+  },
+
+  /**
+   * Uplift the active action on a resolved report. Reverses only what THIS
+   * decision created, preserves history and returns the same report to New.
+   */
+  async uplift(id, payload = {}) {
+    const user = session();
+    if (!isModerator(user)) return fail('Only an authorized Community Moderator can uplift an action.', 403);
+    const reason = String(payload.reason || '').trim();
+    if (reason.length < 15) {
+      return fail('A mandatory reason (at least 15 characters) is required to uplift an action.');
+    }
+    return withLock(`report-uplift:${id}`, () => {
+      const reports = allReports();
+      const index = reports.findIndex((row) => String(row.id) === String(id));
+      if (index < 0) return fail('Report not found.', 404);
+      const report = reports[index];
+      if (report.queue !== 'moderator') return fail('Only decisions against an organiser can be uplifted.', 409);
+      if (report.status !== 'resolved') return fail('This decision is no longer active.', 409);
+      // Only the LATEST decision can be uplifted. An older uplifted/superseded
+      // version must never be mistaken for the current decision.
+      const history = ensureDecisionHistory(report);
+      const active = history.length ? history[history.length - 1] : null;
+      if (!active) return fail('There is no recorded decision to uplift.', 409);
+      if (active.status === 'uplifted') return fail('This decision has already been uplifted.', 409);
+      if (active.status !== 'active') {
+        return fail('This decision is not the active decision on this report.', 409);
+      }
+      if (!isAppealableAction(active.action)) {
+        return fail('This decision has no actionable restriction to uplift.', 400);
+      }
+
+      // Only the sanctions recorded by this report are revoked.
+      revokeSanctionsForReport(report.reportedUsername, report.id, { actor: user.username, reason });
+      if (active.action === 'reputation_downgrade' && active.previousLevel
+        && LEVEL_META[active.previousLevel]
+        && profileOf(report.reportedUsername)?.level !== active.previousLevel) {
+        applyLevelChange(report.reportedUsername, active.previousLevel, {
+          reason: `Uplifted decision on ${report.code}: ${reason}`,
+          reviewer: user.username,
+          reportId: report.id,
+        });
+      }
+
+      let competitionDisposition = null;
+      if (active.action === 'competition_suspension') {
+        // Termination is never auto-reversed: the moderator must explicitly
+        // choose, and the choice is stored with the decision.
+        competitionDisposition = payload.competitionDisposition === 'reopen' ? 'reopen' : 'remain_terminated';
+        const comp = getCompetition(report.competitionId);
+        if (comp) {
+          comp.terminationDisposition = competitionDisposition;
+          comp.terminationDispositionAt = now();
+          comp.terminationDispositionBy = user.username;
+          if (competitionDisposition === 'reopen') {
+            comp.status = 'ongoing';
+            comp.terminated = false;
+            comp.reopenedAt = now();
+            comp.reopenedBy = user.username;
+            comp.reopenedReason = reason;
+          }
+          saveCompetition(comp);
+        }
+        pushAudit({
+          type: 'competition_disposition', actor: user.username, reportId: report.id,
+          competitionId: report.competitionId,
+          details: `Disposition: ${competitionDisposition}. ${reason}`,
+        });
+      }
+
+      active.status = 'uplifted';
+      active.upliftedBy = user.username;
+      active.upliftReason = reason;
+      active.upliftedAt = now();
+      active.competitionDisposition = competitionDisposition;
+      report.uplifted = true;
+      report.upliftReason = reason;
+      report.upliftedBy = user.username;
+      report.upliftedAt = now();
+      report.appealStatus = 'resolved';
+      report.competitionDisposition = competitionDisposition;
+      // Restore the ORIGINAL report to its unresolved state. The decision that
+      // was uplifted no longer appears as the report's current result; it stays
+      // available in decisionHistory for audit.
+      report.finding = null;
+      report.action = null;
+      report.level = null;
+      report.days = null;
+      report.conclusion = '';
+      report.status = 'new';
+      // Keep the ORIGINAL resolvedBy/resolvedAt in decisionHistory; the uplift
+      // actor is recorded in statusHistory and the audit log.
+      pushStatus(report, 'new', user.username, `Previous action uplifted: ${reason}`);
+      reports[index] = report;
+      const saved = saveReports(reports);
+      if (!saved.ok) return fail(saved.error, 507);
+
+      // The same discussion room stays available; reopen it for review.
+      const rooms = asArray(read(KEYS.discussions, []));
+      rooms.forEach((room) => {
+        if (String(room.reportId) === String(report.id) && room.status === 'ended') {
+          room.status = 'open';
+          room.reopenedAt = now();
+          room.reopenedBy = user.username;
+        }
+      });
+      write(KEYS.discussions, rooms);
+
+      notify(report.reportedUsername, {
+        type: 'report',
+        title: 'Decision Uplifted',
+        body: `The Community Moderator has uplifted the previous decision for report ${report.code}. The restrictions associated with that decision have been removed, and the report has been reopened for review.`,
+        meta: { reportId: report.id, competitionId: report.competitionId, link: '/pages/my-reports.html' },
+      });
+      pushAudit({
+        type: 'action_uplifted', actor: user.username, reportId: report.id,
+        competitionId: report.competitionId, username: report.reportedUsername,
+        details: `${active.action} uplifted. Reason: ${reason}`,
+      });
+      return ok(decorate(report));
+    });
+  },
+
+  /**
+   * Return the ONE discussion room attached to a report. The moderator enters
+   * the same room the organiser appealed from — never a second room.
+   */
+  async appealRoom(id) {
+    const user = session();
+    if (!isModerator(user)) return fail('Community Moderator access is required.', 403);
+    return withLock(`report-room:${id}`, () => {
+      const reports = allReports();
+      const report = reports.find((row) => String(row.id) === String(id));
+      if (!report) return fail('Report not found.', 404);
+      if (report.queue !== 'moderator') return fail('This report is not in the moderator queue.', 409);
+
+      const rooms = asArray(read(KEYS.discussions, []));
+      let room = (report.appealDiscussionId
+        ? rooms.find((row) => String(row.id) === String(report.appealDiscussionId))
+        : null)
+        || rooms.find((row) => String(row.reportId) === String(report.id));
+      if (!room) {
+        room = createDiscussionRoom(report, report.resolvedBy || user.username, [
+          { username: report.reportedUsername, role: 'accused' },
+          { username: report.reporterUsername, role: 'reporter' },
+        ]);
+      }
+      // The assigned reviewer is the room's reviewer. Other moderators may view
+      // it through the existing moderator permission, but are not subscribed.
+      if (report.appealDiscussionId !== room.id) {
+        report.appealDiscussionId = room.id;
+        const index = reports.findIndex((row) => String(row.id) === String(report.id));
+        reports[index] = report;
+        saveReports(reports);
+      }
+      return ok({ discussionId: room.id, discussion: room });
+    });
+  },
+
+  /** Organiser/reporter access to the shared appeal room (legacy-safe). */
+  async organiserAppealRoom(id) {
+    const user = session();
+    if (!user) return fail('Please log in.', 401);
+    return withLock(`report-room:${id}`, () => {
+      const reports = allReports();
+      const index = reports.findIndex((row) => String(row.id) === String(id));
+      if (index < 0) return fail('Report not found.', 404);
+      const report = reports[index];
+      if (!sameUser(report.reportedUsername, user.username)
+        && !sameUser(report.reporterUsername, user.username)) {
+        return fail('You are not authorised to view this appeal.', 403);
+      }
+      const rooms = asArray(read(KEYS.discussions, []));
+      let room = (report.appealDiscussionId
+        ? rooms.find((row) => String(row.id) === String(report.appealDiscussionId))
+        : null)
+        || rooms.find((row) => String(row.reportId) === String(report.id));
+      if (!room) {
+        room = createDiscussionRoom(report, report.resolvedBy || 'community_moderator', [
+          { username: report.reportedUsername, role: 'accused' },
+          { username: report.reporterUsername, role: 'reporter' },
+        ]);
+      }
+      if (report.appealDiscussionId !== room.id) {
+        report.appealDiscussionId = room.id;
+        reports[index] = report;
+        saveReports(reports);
+      }
+      return ok({ discussionId: room.id, discussion: room });
     });
   },
 
@@ -934,17 +1468,25 @@ export const LocalReportsAPI = {
     if (!user) return fail('Please log in.', 401);
     const reports = allReports();
     const rows = asArray(read(KEYS.discussions, []))
-      .filter((room) => asArray(room.participants).some((person) => sameUser(person.username, user.username))
-        || sameUser(room.reviewerUsername, user.username))
+      .filter((room) => {
+        const report = reports.find((row) => String(row.id) === String(room.reportId));
+        return asArray(room.participants).some((person) => sameUser(person.username, user.username))
+          || sameUser(room.reviewerUsername, user.username)
+          || sameUser(report?.reporterUsername, user.username)
+          || sameUser(report?.reportedUsername, user.username);
+      })
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
       .map((room) => {
         const person = asArray(room.participants).find((row) => sameUser(row.username, user.username));
         const report = reports.find((row) => String(row.id) === String(room.reportId));
+        const fallback = sameUser(report?.reportedUsername, user.username)
+          ? 'accused'
+          : sameUser(report?.reporterUsername, user.username) ? 'reporter' : 'reviewer';
         return {
           discussionId: room.id,
           code: room.code,
           status: room.status,
-          as: person?.role || (sameUser(room.reviewerUsername, user.username) ? 'reviewer' : 'participant'),
+          as: person?.role || fallback,
           reasonCode: report?.reasonCode || '',
           createdAt: room.createdAt,
         };
@@ -1058,17 +1600,25 @@ export const LocalReportsAPI = {
       return fail('Only the reviewer can add participants.', 403);
     }
     if (room.status === 'ended') return fail('This discussion has ended.', 409);
-    if (!accountOf(key) && !isParticipant(getCompetitionByReport(room.reportId), key)) {
-      return fail('That account does not exist.');
+
+    // Membership is verified against the competition the report belongs to, using
+    // the same team/roster records the rest of the app reads. A typed username is
+    // never trusted on its own, and the reporter/accused always stay in the case.
+    const comp = getCompetitionByReport(room.reportId);
+    if (!comp) return fail('The competition for this case could not be found.', 404);
+    const target = accountOf(key);
+    if (!target) return fail('That username does not exist.');
+    if (asArray(room.participants).some((person) => sameUser(person.username, target.username))) {
+      return fail('That person is already a participant in this discussion.');
     }
-    if (asArray(room.participants).some((person) => sameUser(person.username, key))) {
-      return fail('That person is already a participant.');
+    if (!isParticipant(comp, target.username) && !isOrganiserOf(comp, target.username)) {
+      return fail('Only players registered in this competition can be added to its case discussion.', 403);
     }
     room.participants = asArray(room.participants);
-    room.participants.push({ id: uid('part'), username: key, role: role || 'witness' });
+    room.participants.push({ id: uid('part'), username: target.username, role: role || 'witness' });
     rooms[index] = room;
     write(KEYS.discussions, rooms);
-    notify(key, {
+    notify(target.username, {
       type: 'discussion',
       title: 'Added to a case discussion',
       body: `You were added to case ${room.code}.`,
@@ -1106,7 +1656,8 @@ function recordPlayerWarning(username, action, reportId, reviewer, reason) {
   const warnings = asObject(read(KEYS.warnings, {}));
   const key = norm(username);
   const row = asObject(warnings[key]);
-  if (action === 'final_warning') row.final = (Number(row.final) || 0) + 1;
+  if (action === 'warning') row.warning = (Number(row.warning) || 0) + 1;
+  else if (action === 'final_warning') row.final = (Number(row.final) || 0) + 1;
   else row.formal = (Number(row.formal) || 0) + 1;
   row.updatedAt = now();
   warnings[key] = row;
@@ -1131,6 +1682,8 @@ function removePlayerFromCompetition(competitionId, username, reason, actor, rep
 
     let promoted = null;
     if (wasLeader) {
+      // Existing roster order decides succession. Banned, inactive and removed
+      // members are skipped so leadership never lands on an ineligible player.
       const next = members.find((member) => (
         member
         && member.active !== false
@@ -1142,6 +1695,10 @@ function removePlayerFromCompetition(competitionId, username, reason, actor, rep
         team.createdBy = next.username;
         team.leaderUsername = next.username;
         promoted = next.username;
+      } else {
+        // No eligible player remains: the team has no active leader.
+        team.createdBy = null;
+        team.leaderUsername = null;
       }
     }
     saveCompetition(comp);
@@ -1151,15 +1708,52 @@ function removePlayerFromCompetition(competitionId, username, reason, actor, rep
       actor,
       reportId,
       competitionId,
+      teamId: team.id,
       username,
-      details: `Removed from ${team.name}.${promoted ? ` Leadership transferred to @${promoted}.` : ' No eligible member to promote.'}`,
+      removedBy: actor,
+      reason,
+      details: `Removed from ${team.name}.${promoted ? ` Leadership transferred to @${promoted}.` : (wasLeader ? ' No eligible member to promote.' : '')}`,
+    });
+    if (wasLeader) {
+      pushAudit({
+        type: 'team_leadership_transferred',
+        actor,
+        reportId,
+        competitionId,
+        teamId: team.id,
+        removedLeader: username,
+        newLeader: promoted,
+        removedBy: actor,
+        reason,
+        details: promoted
+          ? `@${username} was removed from the competition by @${actor}. @${promoted} was automatically promoted to Team Leader.`
+          : `@${username} was removed from the competition by @${actor}. No eligible player remained, so the team has no active leader.`,
+      });
+    }
+
+    // The removed player is told separately and keeps report/appeal access.
+    notify(username, {
+      type: 'team-roster-update',
+      title: 'Removed from competition',
+      body: `You were removed from ${team.name}. You can no longer access its team or competition management features, but you can still view your reports and report the organiser.`,
+      meta: { competitionId, teamId: team.id, reason },
     });
 
-    const recipients = new Set([...members.map((member) => member.username), promoted].filter(Boolean));
-    recipients.forEach((name) => notify(name, {
+    const others = members.filter((member) => member && !sameUser(member.username, promoted));
+    if (promoted) {
+      notify(promoted, {
+        type: 'team-roster-update',
+        title: 'You Are Now the Team Leader',
+        body: 'The previous Team Leader has been removed from the competition. You have automatically been promoted to Team Leader. You now have access to Team Leader functionality.',
+        meta: { competitionId, teamId: team.id, reason },
+      });
+    }
+    others.forEach((member) => notify(member.username, {
       type: 'team-roster-update',
-      title: 'Team roster updated',
-      body: `@${username} was removed from ${team.name}.${promoted ? ` @${promoted} is now team leader.` : ''}`,
+      title: promoted ? 'Team Leadership Updated' : 'Team roster updated',
+      body: promoted
+        ? `${promoted} is now the Team Leader of your team.`
+        : `@${username} was removed from ${team.name}.`,
       meta: { competitionId, teamId: team.id, reason },
     }));
     return { teamId: team.id, teamName: team.name, promoted, removed };
@@ -1277,6 +1871,122 @@ export function sweepDeadlines() {
   return ok({ created });
 }
 
+// ── Organiser overview (Profile reputation & history) ───────────────────────
+
+function competitionsOrganisedBy(username) {
+  return loadCompetitions().filter((comp) => isOrganiserOf(comp, username)).length;
+}
+
+function isOrganiserAccount(username) {
+  const role = roleKey(accountOf(username)?.role);
+  if (['organizer', 'organiser', 'team_lead', 'teamlead'].includes(role)) return true;
+  return competitionsOrganisedBy(username) > 0;
+}
+
+/** Report statistics against one organiser, derived from the report records. */
+function reportStatsAgainst(username) {
+  const rows = allReports().filter((row) => sameUser(row.reportedUsername, username));
+  const resolved = rows.filter((row) => row.status === 'resolved');
+  return {
+    total: rows.length,
+    substantiated: resolved.filter((row) => ['substantiated', 'partially_substantiated'].includes(row.finding)).length,
+    unsubstantiated: resolved.filter((row) => row.finding === 'unsubstantiated').length,
+    discarded: rows.filter((row) => row.status === 'discarded').length,
+    underReview: rows.filter((row) => ['new', 'under_review', 'awaiting_response'].includes(row.status)).length,
+  };
+}
+
+/**
+ * Everything the Profile page shows about an organiser's standing. Every number
+ * comes from a stored record — transitions, sanctions or reports — never from
+ * the current level alone.
+ */
+function organiserOverview(username) {
+  const profile = profileOf(username);
+  if (!profile) return null;
+
+  const levelHistory = historyOf(username)
+    .slice()
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  const levelCounts = { blue: 0, green: 0, orange: 0, red: 0 };
+  levelHistory.forEach((entry) => {
+    if (LEVEL_META[entry.toLevel]) levelCounts[entry.toLevel] += 1;
+  });
+
+  const enteredCurrent = levelHistory.find((entry) => entry.toLevel === profile.level);
+
+  // Historical formal/final warnings stay valid and are counted with the new
+  // unified `warning` type.
+  const warningRows = sanctionsOf(username).filter((row) => (
+    ['warning', 'formal_warning', 'final_warning'].includes(row.type)
+  ));
+
+  const organisedCompetitions = competitionsOrganisedBy(username);
+
+  return {
+    username: profile.username,
+    level: profile.level,
+    limit: profile.limit,
+    levelLimit: profile.levelLimit,
+    globalMax: profile.globalMax,
+    bannedUntil: profile.bannedUntil,
+    lifetimeBan: profile.lifetimeBan,
+    isOrganiser: organisedCompetitions > 0 || isOrganiserAccount(username),
+    organisedCompetitions,
+    levelEnteredAt: enteredCurrent?.createdAt || (profile.level === 'blue' ? profile.createdAt : null),
+    transitions: levelHistory.length,
+    levelCounts,
+    levelHistory: levelHistory.map(({ id, fromLevel, toLevel, reason, policy, createdAt }) => ({
+      id,
+      fromLevel: fromLevel || null,
+      toLevel,
+      reason,
+      policy: policy || null,
+      createdAt,
+    })),
+    warningSummary: { total: warningRows.length },
+    reports: reportStatsAgainst(username),
+  };
+}
+
+/**
+ * Public reputation context for a competition organiser: level, limit, how
+ * often each level was entered and the transition list. Reasons, warnings,
+ * reports and moderator notes are deliberately excluded.
+ */
+function publicOrganiserOverview(username) {
+  const key = String(username || '').trim();
+  if (!key) return null;
+  const profile = profileOf(key);
+  if (!profile) return null;
+
+  const levelHistory = historyOf(key)
+    .slice()
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  const levelCounts = { blue: 0, green: 0, orange: 0, red: 0 };
+  levelHistory.forEach((entry) => {
+    if (LEVEL_META[entry.toLevel]) levelCounts[entry.toLevel] += 1;
+  });
+
+  return {
+    username: profile.username,
+    level: profile.level,
+    limit: profile.limit,
+    levelLimit: profile.levelLimit,
+    globalMax: profile.globalMax,
+    levelEnteredAt: levelHistory.find((entry) => entry.toLevel === profile.level)?.createdAt || null,
+    levelCounts,
+    transitions: levelHistory.map((entry) => ({
+      id: entry.id,
+      fromLevel: entry.fromLevel || null,
+      toLevel: entry.toLevel,
+      createdAt: entry.createdAt,
+    })),
+  };
+}
+
 // ── Reputation API (local) ──────────────────────────────────────────────────
 
 export const LocalReputationAPI = {
@@ -1305,6 +2015,27 @@ export const LocalReputationAPI = {
     const key = String(username || '').trim();
     if (!key) return fail('A username is required.');
     return ok(profileOf(key));
+  },
+
+  /** Public reputation context for an organiser of a competition. */
+  async publicOverview(username) {
+    const data = publicOrganiserOverview(username);
+    if (!data) return fail('A username is required.');
+    return ok(data);
+  },
+
+  /** Own reputation record plus warning, level-transition and report history. */
+  async overview(username) {
+    const user = session();
+    if (!user) return fail('Please log in.', 401);
+    const target = String(username || user.username).trim();
+    const isSelf = sameUser(target, user.username);
+    if (!isSelf && !isModerator(user) && !isAdmin(user)) {
+      return fail('You can only view your own reputation overview.', 403);
+    }
+    const data = organiserOverview(target);
+    if (!data) return fail('Unknown account.', 404);
+    return ok(data);
   },
 
   async history(username) {

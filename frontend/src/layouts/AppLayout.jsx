@@ -14,7 +14,7 @@
 import Sidebar from '../components/Sidebar.jsx';
 import SiteFooter from '../components/SiteFooter.jsx';
 
-export default function AppLayout({ children, offset = true, footerClassName }) {
+export default function AppLayout({ children, offset = true, footerClassName, hideFooter = false }) {
   return (
     <>
       <div id="sidebar-mount">
@@ -24,16 +24,20 @@ export default function AppLayout({ children, offset = true, footerClassName }) 
         <div className="page-with-sidebar">
           {/* Each page supplies its own <main class="…">. */}
           {children}
-          <div id="footer-mount">
-            <SiteFooter />
-          </div>
+          {!hideFooter && (
+            <div id="footer-mount">
+              <SiteFooter />
+            </div>
+          )}
         </div>
       ) : (
         <>
           {children}
-          <div id="footer-mount" className={footerClassName !== undefined ? footerClassName : 'footer-offset'}>
-            <SiteFooter />
-          </div>
+          {!hideFooter && (
+            <div id="footer-mount" className={footerClassName !== undefined ? footerClassName : 'footer-offset'}>
+              <SiteFooter />
+            </div>
+          )}
         </>
       )}
     </>

@@ -119,7 +119,7 @@ export default function CompetitionDetail() {
   const isLeague = /league|robin/i.test(`${comp?.type} ${comp?.format}`);
   const creator = comp?.createdBy || comp?.organizerId;
   const organizers = [...new Set([creator, ...(comp?.organizers || [])].filter(Boolean))];
-  const canManage = organizers.includes(session?.username) || ['admin', 'comp_admin', 'super-admin', 'super_admin'].includes(session?.role);
+  const canManage = organizers.includes(session?.username) || ['admin', 'admin', 'super-admin', 'super_admin'].includes(session?.role);
   const eligibleTeams = teams.filter((team) => team.status === 'approved');
   const availableTabs = canManage ? ['fixtures', 'teams', 'overview', 'standings', 'organizers', 'disputes'] : ['fixtures', 'teams', 'overview', 'standings'];
   const activeTab = availableTabs.includes(params.get('tab')) ? params.get('tab') : 'fixtures';
@@ -172,7 +172,7 @@ export default function CompetitionDetail() {
 
     <nav className="cd-nav" aria-label="Competition sections">
       {availableTabs.map((value) => <button key={value} type="button" aria-current={activeTab === value ? 'page' : undefined} className={activeTab === value ? 'active' : ''} onClick={() => tab(value)}>{value === 'fixtures' && <Icon name="bracket" size={16} />}{value[0].toUpperCase() + value.slice(1)}</button>)}
-      {canManage && <>{comp.feeType && comp.feeType !== 'free' && <Link to={route('organizer-revenue')}>Transactions</Link>}{!ended && <Link to={route('edit-competition')}>Settings</Link>}</>}
+      {canManage && <>{comp.feeType && comp.feeType !== 'free' && <Link to={route('organizer-revenue')}>Transactions</Link>}{!ended && <Link to={route('edit-competition')}>Edit</Link>}</>}
     </nav>
 
     {!!current.errors.length && <div className="cd-notice" role="alert"><div>{current.errors.map((error) => <p key={error}>{error}</p>)}{matches.length > 0 && <small>Showing the last available fixtures until refresh succeeds.</small>}</div><button className="cd-button" onClick={() => setRevision((v) => v + 1)} disabled={current.loading}>Retry</button></div>}

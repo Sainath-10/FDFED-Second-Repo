@@ -9,10 +9,12 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { LocalReportsAPI as ReportsAPI } from '../../services/local/reporting.js';
 import useReportSync from '../../hooks/useReportSync.js';
 import ReputationBadge from '../../components/ReputationBadge.jsx';
+import EvidenceGallery from '../../components/EvidenceGallery.jsx';
 import { DiscardModal, ModeratorDecisionModal } from '../../components/ReportActionModals.jsx';
 import { PRIORITY_META, capitalise, formatDate, formatINR, reportCode } from '../../lib/reporting.js';
 import { showToast } from '../../lib/toast.js';
 import '../../styles/pages/admin/dashboard.css';
+import '../../styles/pages/reports.css';
 import '../../styles/pages/reports.css';
 
 const TABS = [
@@ -89,6 +91,20 @@ export default function ModeratorReportDetail() {
           <span>Warnings: {organiser.warnings}</span>
         </div>
         <p className="report-desc">{report.description}</p>
+
+        {report.originalReport && (
+          <div className="report-context-card" style={{ marginTop: 14 }}>
+            <div className="report-context-head">Original report being complained about</div>
+            <div className="report-context-row"><span>Report</span><strong>{report.originalReport.code}</strong></div>
+            <div className="report-context-row"><span>Original finding</span><strong>{capitalise(report.originalReport.finding)}</strong></div>
+            <div className="report-context-row"><span>Original action</span><strong>{capitalise(report.originalReport.action)}</strong></div>
+            <div className="report-context-row"><span>Recorded by</span><strong>@{report.originalReport.resolvedBy}</strong></div>
+            {report.originalReport.conclusion && (
+              <p className="report-context-note">{report.originalReport.conclusion}</p>
+            )}
+            <p className="report-context-note">Original report: {report.originalReport.description}</p>
+          </div>
+        )}
       </div>
 
       <div className="investigation-tabs" style={{ marginTop: 18 }}>
@@ -224,13 +240,7 @@ export default function ModeratorReportDetail() {
             {evidence.length === 0 ? (
               <p style={{ color: '#94a3b8', fontSize: 12.5 }}>No files attached.</p>
             ) : (
-              <div className="evidence-list">
-                {evidence.map((file) => (
-                  <a className="evidence-item" key={file.id} href={file.url} target="_blank" rel="noreferrer">
-                    {file.filename || 'Evidence'}
-                  </a>
-                ))}
-              </div>
+              <EvidenceGallery files={evidence} />
             )}
           </div>
           <div className="info-card">

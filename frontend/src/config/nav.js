@@ -22,7 +22,7 @@ import {
 } from '../components/icons.jsx';
 
 /** Roles that use an admin-area sidebar. */
-export const ADMIN_ROLES = ['admin', 'comp_admin', 'dispute_admin', 'revenue_admin'];
+export const ADMIN_ROLES = ['admin'];
 
 const MAIN_NAV = [
   { id: 'home', label: 'Home', to: '/', icon: HomeIcon, end: true },
@@ -34,14 +34,6 @@ const MAIN_NAV = [
   { id: 'about', label: 'About', to: '/pages/about.html', icon: InfoIcon },
 ];
 
-/** Organiser-only queue for participant reports. */
-const ORGANISER_REPORTS_ITEM = {
-  id: 'organiser-reports',
-  label: 'Reports',
-  to: '/pages/organizer-reports.html',
-  icon: ShieldIcon,
-};
-
 /** Community Moderator sidebar: Reports, Activity, and Profile (Profile at the bottom). */
 const MODERATOR_NAV = [
   { id: 'reports', label: 'Reports', to: '/pages/moderator/reports.html', icon: ShieldIcon, end: true },
@@ -50,25 +42,7 @@ const MODERATOR_NAV = [
 ];
 
 const ADMIN_NAV = {
-  comp_admin: [
-    { id: 'home', label: 'Comp Dashboard', to: '/pages/admin/dashboard.html', icon: HomeIcon, end: true },
-    { id: 'users', label: 'Users', to: '/pages/admin/users.html', icon: UsersIcon },
-    { id: 'activity', label: 'Activity', to: '/pages/admin/admin-activity.html', icon: CheckCircleIcon },
-    { id: 'profile', label: 'Profile', to: '/pages/admin/admin-profile.html', icon: ProfileIcon },
-  ],
-  dispute_admin: [
-    { id: 'disputes', label: 'Dispute Dashboard', to: '/pages/admin/disputes.html', icon: ShieldIcon, end: true },
-    { id: 'users', label: 'Users', to: '/pages/admin/users.html', icon: UsersIcon },
-    { id: 'activity', label: 'Activity', to: '/pages/admin/admin-activity.html', icon: CheckCircleIcon },
-    { id: 'profile', label: 'Profile', to: '/pages/admin/admin-profile.html', icon: ProfileIcon },
-  ],
-  revenue_admin: [
-    { id: 'revenue', label: 'Revenue Dashboard', to: '/pages/admin/revenue-transactions.html', icon: MoneyIcon, end: true },
-    { id: 'users', label: 'Users', to: '/pages/admin/users.html', icon: UsersIcon },
-    { id: 'activity', label: 'Activity', to: '/pages/admin/admin-activity.html', icon: CheckCircleIcon },
-    { id: 'profile', label: 'Profile', to: '/pages/admin/admin-profile.html', icon: ProfileIcon },
-  ],
-  general: [
+  admin: [
     { id: 'home', label: 'Comp Dashboard', to: '/pages/admin/dashboard.html', icon: HomeIcon, end: true },
     { id: 'disputes', label: 'Disputes', to: '/pages/admin/disputes.html', icon: ShieldIcon },
     { id: 'revenue', label: 'Revenue', to: '/pages/admin/revenue-transactions.html', icon: MoneyIcon },
@@ -131,18 +105,14 @@ export function getSidebarNav(session) {
 
   if (ADMIN_ROLES.includes(role)) {
     let key = String(session.adminType || role || '').trim().toLowerCase();
-    if (key === 'admin') key = 'comp_admin';
+    if (key === 'admin') key = 'admin';
     const items = ADMIN_NAV[key] || ADMIN_NAV.general;
     const cut = items.length > 4 ? 4 : 2;
     return { variant: 'admin', top: items.slice(0, cut), bottom: items.slice(cut), showLogin: false };
   }
 
-  // Team leads also get the organiser reports queue.
-  if (role === 'team_lead') {
-    const items = [...MAIN_NAV.slice(0, 4), ORGANISER_REPORTS_ITEM, ...MAIN_NAV.slice(4)];
-    return { variant: 'main', top: items.slice(0, 5), bottom: items.slice(5), showLogin: false };
-  }
-
+  // Team leads share the main sidebar: exactly one Reports entry, pointing at
+  // the single player Reports page (the organiser queue is linked from My Activity).
  // participant / regular share the main sidebar (logged in).
   return {
     variant: 'main',

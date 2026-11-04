@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import NexusData from '../services/data.js';
+import { removedCompetitionIds } from '../services/local/reporting.js';
 import { showToast } from '../lib/toast.js';
 import '../styles/pages/my-activity.css';
 
@@ -55,6 +56,9 @@ function dedupeById(items) {
 
 function buildBuckets(allComps, session) {
   const userKey = normalize(session && session.username);
+  // A removed player keeps their account and reports, but the activity entry
+  // must not lead back into that competition's team or management pages.
+  const removedCompIds = removedCompetitionIds(session && session.username);
   const organized = [];
   const participated = [];
   const teamled = [];
@@ -71,7 +75,7 @@ function buildBuckets(allComps, session) {
       }
 
       const myTeam = teams.find((team) => normalize(team.createdBy || team.leaderUsername) === userKey);
-      if (myTeam) {
+      if (myTeam && !removedCompIds.has(String(comp.id))) {
         const teamStatus = normalize(myTeam.status || 'approved');
         if (teamStatus !== 'rejected') {
           teamled.push({ ...comp, role: 'teamlead', userCreated: true, members: myTeam.players, participants: myTeam.players, teamStatus, teamContext: { compId: comp.id, teamId: myTeam.id, teamName: myTeam.name } });
@@ -82,7 +86,7 @@ function buildBuckets(allComps, session) {
         if (normalize(team.createdBy || team.leaderUsername) === userKey) return false;
         return (team.members || []).some((member) => normalize(member.username) === userKey);
       });
-      if (joinedTeam) {
+      if (joinedTeam && !removedCompIds.has(String(comp.id))) {
         participated.push({ ...comp, role: 'participant', teamJoined: joinedTeam.name, teamContext: { compId: comp.id, teamId: joinedTeam.id, teamName: joinedTeam.name } });
       }
       return;
@@ -221,6 +225,9 @@ export default function MyActivity() {
               <h2 className="act-section-title">{s.title}</h2>
               <p className="act-section-count" id={s.countId}>{s.comps.length} {s.noun}{s.comps.length !== 1 ? 's' : ''}</p>
             </div>
+            {s.gridId === 'organized-grid' && s.comps.length > 0 && (
+              <Link className="btn-table-secondary" to="/pages/organizer-reports.html">Report queue</Link>
+            )}
           </div>
           <div className="act-comp-grid" id={s.gridId}>
             {s.comps.length === 0 ? (

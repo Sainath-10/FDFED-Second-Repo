@@ -334,10 +334,19 @@ async function competitionServiceTests() {
       ),
       consumeException: async () => undefined,
     };
+    // Participation revocations live in their own table; no removals here.
+    const removalRepository = {
+      createQueryBuilder: () => {
+        const qb: any = { where: () => qb, andWhere: () => qb, getOne: async () => null };
+        return qb;
+      },
+      find: async () => [],
+    };
     return new CompetitionsService(
       competitionRepository as any,
       userRepository as any,
       teamRepository as any,
+      removalRepository as any,
       notifications as any,
       noopAudit as any,
       reputation as any,
@@ -799,6 +808,14 @@ async function teamServiceTests() {
     };
     const paid = new Set(opts.paidMembers || []);
     const revenueRepo = { exists: async ({ where }: any) => paid.has(where.organizerName) };
+    // No player has been removed from the competition in these fixtures.
+    const removals = {
+      createQueryBuilder: () => {
+        const qb: any = { where: () => qb, andWhere: () => qb, getOne: async () => null };
+        return qb;
+      },
+      find: async () => [],
+    };
     const service = new TeamsService(
       teamRepository as any,
       competitionRepository as any,
@@ -807,6 +824,7 @@ async function teamServiceTests() {
       noopAudit as any,
       refundRepo as any,
       revenueRepo as any,
+      removals as any,
       opts.matchesService as any,
     );
     return { service, team, competition, saved, mutations, invites, joinRequest };
@@ -1497,7 +1515,7 @@ async function matchServiceTests() {
       ForbiddenException,
       'Only an organizer',
     );
-    const adminResult = await service.generateSchedule('c1', 'competition-admin', {}, UserRole.COMP_ADMIN);
+    const adminResult = await service.generateSchedule('c1', 'competition-admin', {}, UserRole.ADMIN);
     assert.ok(adminResult.created > 0);
   });
 

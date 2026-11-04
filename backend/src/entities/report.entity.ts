@@ -92,6 +92,14 @@ export class ReportEntity {
   @Column({ nullable: true })
   relatedReportId: string;
 
+  /** Set when this report is a complaint about an organiser's decision. */
+  @Column({ nullable: true })
+  originalReportId: string;
+
+  /** The decision being complained about, captured when the complaint is filed. */
+  @Column({ type: 'text', nullable: true, default: null })
+  originalDecision: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

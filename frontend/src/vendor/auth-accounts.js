@@ -16,28 +16,12 @@ window.NEXUS_DEMO_ACCOUNTS = [
     displayName: 'Super Admin 2'
   },
   {
-    username: 'compadmin',
-    email: 'compadmin@nexus.gg',
-    password: 'nexus',
-    role: 'comp_admin',
-    adminType: 'comp_admin',
-    displayName: 'Competition Admin'
-  },
-  {
-    username: 'revenueadmin',
-    email: 'revenueadmin@nexus.gg',
-    password: 'nexus',
-    role: 'revenue_admin',
-    adminType: 'revenue_admin',
-    displayName: 'Revenue Admin'
-  },
-  {
-    username: 'disputeadmin',
-    email: 'disputeadmin@nexus.gg',
-    password: 'nexus',
-    role: 'dispute_admin',
-    adminType: 'dispute_admin',
-    displayName: 'Dispute Admin'
+    username: 'admin',
+    email: 'admin@nexus.gg',
+    password: 'admin123',
+    role: 'admin',
+    adminType: 'admin',
+    displayName: 'Admin User'
   },
   {
     username: 'communitymod',

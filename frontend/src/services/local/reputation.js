@@ -17,6 +17,40 @@ import {
 export const DEFAULT_GLOBAL_MAX = 300000;
 export const LEVEL_ORDER = ['blue', 'green', 'orange', 'red'];
 
+const NOTIFICATIONS_KEY = 'nexus.notifications.items';
+const ACCOUNTS_KEY = 'nexus.auth.accounts';
+/** Support roles that review prize-pool exceptions (never the Community Moderator). */
+const SUPPORT_ROLES = new Set(['admin', 'admin', 'admin', 'admin', 'super_admin', 'super-admin']);
+
+function supportUsernames() {
+  const names = new Set();
+  const fromWindow = typeof window !== 'undefined' ? window.NEXUS_DEMO_ACCOUNTS : null;
+  [...asArray(fromWindow), ...asArray(read(ACCOUNTS_KEY, []))].forEach((account) => {
+    if (account && SUPPORT_ROLES.has(norm(account.role))) names.add(account.username);
+  });
+  return Array.from(names);
+}
+
+function notifySupport(entry) {
+  const recipients = supportUsernames();
+  if (!recipients.length) return;
+  const rows = asArray(read(NOTIFICATIONS_KEY, []));
+  recipients.forEach((toUsername) => {
+    rows.unshift({
+      id: uid('notif'),
+      toUsername,
+      type: entry.type || 'prize-pool-exception',
+      status: 'pending',
+      title: entry.title || 'Prize-pool exception requested',
+      body: entry.body || '',
+      createdAt: now(),
+      read: false,
+      meta: entry.meta || {},
+    });
+  });
+  write(NOTIFICATIONS_KEY, rows);
+}
+
 const SEVERITY = { blue: 0, green: 1, orange: 2, red: 3 };
 
 function defaultCounters() {
@@ -186,16 +220,21 @@ export function addSanction(username, payload = {}, reviewer = 'system') {
 
   if (type === 'lifetime_ban') profile.lifetimeBan = true;
   if (type === 'organising_ban' && endsAt) profile.bannedUntil = endsAt;
-  if (type === 'formal_warning' || type === 'final_warning') {
+  // One unified `warning` type for new decisions; historical formal/final rows
+  // keep their own counters so nothing is lost.
+  if (type === 'warning' || type === 'formal_warning' || type === 'final_warning') {
     const warnings = asObject(read(KEYS.warnings, {}));
     const key = norm(username);
     const current = asObject(warnings[key]);
-    if (type === 'formal_warning') current.formal = (Number(current.formal) || 0) + 1;
+    if (type === 'warning') current.warning = (Number(current.warning) || 0) + 1;
+    else if (type === 'formal_warning') current.formal = (Number(current.formal) || 0) + 1;
     else current.final = (Number(current.final) || 0) + 1;
     current.updatedAt = now();
     warnings[key] = current;
     write(KEYS.warnings, warnings);
-    profile.counters.warnings = (Number(current.formal) || 0) + (Number(current.final) || 0);
+    profile.counters.warnings = (Number(current.warning) || 0)
+      + (Number(current.formal) || 0)
+      + (Number(current.final) || 0);
   }
   profile.updatedAt = now();
   saveProfile(profile);
@@ -206,6 +245,8 @@ export function sanctionsOf(username, { activeOnly = false } = {}) {
   const nowMs = Date.now();
   return asArray(read(KEYS.sanctions, [])).filter((row) => {
     if (!sameUser(row.username, username)) return false;
+    // Revoked sanctions stay stored for the audit trail but never restrict.
+    if (row.revokedAt) return false;
     if (!activeOnly) return true;
     if (row.type === 'lifetime_ban') return true;
     if (row.endsAt) return new Date(row.endsAt).getTime() > nowMs;
@@ -213,13 +254,37 @@ export function sanctionsOf(username, { activeOnly = false } = {}) {
   });
 }
 
+/**
+ * Revoke the sanctions created by ONE report decision. Unrelated sanctions from
+ * other reports are untouched; rows stay stored (revoked) for the audit trail.
+ */
+export function revokeSanctionsForReport(username, reportId, { actor, reason } = {}) {
+  const all = asArray(read(KEYS.sanctions, []));
+  let revoked = 0;
+  all.forEach((row) => {
+    if (!sameUser(row.username, username)) return;
+    if (String(row.reportId || '') !== String(reportId || '')) return;
+    if (row.revokedAt) return;
+    row.revokedAt = now();
+    row.revokedBy = actor || 'system';
+    row.revokeReason = String(reason || '').slice(0, 500);
+    revoked += 1;
+  });
+  if (revoked) write(KEYS.sanctions, all);
+  return { ok: true, revoked };
+}
+
 export function warningsOf(username) {
   const row = asObject(asObject(read(KEYS.warnings, {}))[norm(username)]);
+  const warning = Number(row.warning) || 0;
+  const formal = Number(row.formal) || 0;
+  const final = Number(row.final) || 0;
   return {
-    formal: Number(row.formal) || 0,
-    final: Number(row.final) || 0,
+    warning,
+    formal,
+    final,
     automated: Number(row.automated) || 0,
-    total: (Number(row.formal) || 0) + (Number(row.final) || 0),
+    total: warning + formal + final,
   };
 }
 
@@ -439,6 +504,32 @@ export function approvedExceptionFor(username, competitionId) {
   )) || null;
 }
 
+/** An approved, still-unused exception that covers the requested amount. */
+export function availableExceptionFor(username, amount) {
+  const requested = Number(amount) || 0;
+  const globalMax = getGlobalMax();
+  if (!username || requested <= 0 || requested > globalMax) return null;
+  return asArray(read(KEYS.exceptions, [])).find((row) => (
+    sameUser(row.username, username)
+    && row.status === 'approved'
+    && !row.competitionId
+    && Number(row.requestedAmount) >= requested
+  )) || null;
+}
+
+/** Binds an approved single-use exception to the competition that used it. */
+export function bindExceptionToCompetition(id, competitionId) {
+  if (!id || !competitionId) return { ok: false, error: 'A competition is required to use this exception.' };
+  const all = asArray(read(KEYS.exceptions, []));
+  const index = all.findIndex((row) => String(row.id) === String(id));
+  if (index < 0 || all[index].status !== 'approved' || all[index].competitionId) {
+    return { ok: false, error: 'The approved prize-pool exception is no longer available.' };
+  }
+  all[index] = { ...all[index], competitionId, updatedAt: now() };
+  write(KEYS.exceptions, all);
+  return { ok: true, exception: all[index] };
+}
+
 export function requestException(username, requestedAmount, reason) {
   const profile = ensureProfile(username);
   const amount = Number(requestedAmount);
@@ -464,6 +555,11 @@ export function requestException(username, requestedAmount, reason) {
   const all = asArray(read(KEYS.exceptions, []));
   all.unshift(row);
   write(KEYS.exceptions, all);
+  notifySupport({
+    title: 'Prize-pool exception requested',
+    body: `@${username} requested a ₹${amount.toLocaleString('en-IN')} prize pool. Their permanent ${profile.level} limit is ₹${effectiveLimit(profile.level).toLocaleString('en-IN')}.`,
+    meta: { exceptionId: row.id, requestedAmount: amount, organiserUsername: username, level: profile.level },
+  });
   return { ok: true, exception: row };
 }
 

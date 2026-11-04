@@ -46,6 +46,28 @@ export default function AdminDashboard() {
   const [version, setVersion] = useState(0);
   const [ceiling, setCeiling] = useState(300000);
   const [savingCeiling, setSavingCeiling] = useState(false);
+  // Support Team queue: prize-pool exception requests from organisers.
+  const [exceptionRows, setExceptionRows] = useState([]);
+  const [exceptionNotes, setExceptionNotes] = useState({});
+  const [reviewingException, setReviewingException] = useState('');
+
+  const loadExceptions = () => LocalReputationAPI.exceptions()
+    .then((res) => { if (res.ok && Array.isArray(res.data)) setExceptionRows(res.data); })
+    .catch(() => undefined);
+
+  useEffect(() => { loadExceptions(); }, []);
+
+  async function reviewException(row, status) {
+    setReviewingException(row.id);
+    const res = await LocalReputationAPI.reviewException(row.id, status, exceptionNotes[row.id] || '');
+    setReviewingException('');
+    if (!res.ok) { showToast(res.error || 'Unable to review this request.', 'error'); return; }
+    showToast(status === 'approved'
+      ? `Exception approved for @${row.organiserUsername || row.username} — single competition only.`
+      : 'Exception request rejected.', status === 'approved' ? 'success' : 'error');
+    setExceptionNotes((old) => ({ ...old, [row.id]: '' }));
+    loadExceptions();
+  }
 
   useEffect(() => {
     let alive = true;
@@ -152,6 +174,57 @@ export default function AdminDashboard() {
           <span style={{ color: '#64748b', fontSize: 12 }}>
             Applies platform-wide. Orange/Red level limits still apply when lower.
           </span>
+        </div>
+      </div>
+
+      <div className="tournaments-section" style={{ marginBottom: 18 }}>
+        <div className="tournaments-section-header">
+          <h2 className="table-title-md">Prize-pool exception requests (Support)</h2>
+          <button className="btn-table-secondary" onClick={loadExceptions}>Refresh</button>
+        </div>
+        <div style={{ padding: '0 16px 16px', display: 'grid', gap: 12 }}>
+          {exceptionRows.length === 0 && (
+            <p style={{ color: '#64748b', fontSize: 13, margin: 0 }}>No prize-pool exception requests yet.</p>
+          )}
+          {exceptionRows.map((row) => {
+            const organiserName = row.organiserUsername || row.username;
+            const pendingRow = row.status === 'pending';
+            return (
+              <div key={row.id} style={{ border: '1px solid #1e293b', borderRadius: 10, padding: 14, display: 'grid', gap: 8, background: '#0b1220' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <strong style={{ color: '#f1f5f9', fontSize: 14 }}>@{organiserName}</strong>
+                  <span style={{ fontSize: 12.5, color: row.status === 'approved' ? '#86efac' : row.status === 'rejected' ? '#f87171' : '#fb923c', fontWeight: 700 }}>
+                    {String(row.status).toUpperCase()}{row.competitionId ? ' · USED' : ''}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: 12.5, color: '#94a3b8' }}>
+                  <span>Requested prize pool: <strong style={{ color: '#c6ff33' }}>₹{Number(row.requestedAmount).toLocaleString('en-IN')}</strong></span>
+                  <span>Platform ceiling: ₹{Number(ceiling).toLocaleString('en-IN')}</span>
+                  <span>Filed: {new Date(row.createdAt).toLocaleDateString('en-IN')}</span>
+                  {row.reviewer && <span>Reviewed by @{row.reviewer}</span>}
+                </div>
+                <p style={{ margin: 0, fontSize: 12.5, color: '#cbd5e1' }}><strong style={{ color: '#94a3b8' }}>Reason:</strong> {row.reason}</p>
+                {pendingRow && (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <input
+                      value={exceptionNotes[row.id] || ''}
+                      onChange={(e) => setExceptionNotes((old) => ({ ...old, [row.id]: e.target.value }))}
+                      placeholder="Review note (optional, min 10 chars if you request more information)"
+                      style={{ flex: '1 1 260px', padding: '8px 10px', borderRadius: 8, border: '1px solid #334155', background: '#0f172a', color: '#f1f5f9', fontSize: 12.5 }}
+                    />
+                    <button className="btn-table-primary" style={{ background: '#22c55e', border: 'none', color: '#fff' }} disabled={reviewingException === row.id} onClick={() => reviewException(row, 'approved')}>
+                      {reviewingException === row.id ? 'Saving…' : 'Approve'}
+                    </button>
+                    <button className="btn-table-secondary" style={{ borderColor: '#ef4444', color: '#ef4444' }} disabled={reviewingException === row.id} onClick={() => reviewException(row, 'rejected')}>Reject</button>
+                    <Link className="btn-table-secondary" to={`/pages/admin/users.html?search=${encodeURIComponent(organiserName)}`}>View organiser</Link>
+                  </div>
+                )}
+                {!pendingRow && row.reviewNote && (
+                  <p style={{ margin: 0, fontSize: 12.5, color: '#94a3b8' }}><strong>Review note:</strong> {row.reviewNote}</p>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 

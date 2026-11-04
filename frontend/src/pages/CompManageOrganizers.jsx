@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import NexusData from '../services/data.js';
+import { API_URL } from '../services/api.js';
 import { showToast } from '../lib/toast.js';
 import '../styles/pages/subpage.css';
 
@@ -78,7 +79,7 @@ export default function CompManageOrganizers() {
       if (!res.ok) { showToast(res.error || 'Unable to add co-organizer.', 'error'); return; }
     }
     try {
-      fetch(`http://localhost:3000/competitions/${compId}/organizers`, {
+      fetch(`${API_URL}/competitions/${compId}/organizers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-user-role': 'team_lead' },
         body: JSON.stringify({ organizerId: cleanUser }),
@@ -96,7 +97,7 @@ export default function CompManageOrganizers() {
       if (!res.ok) { showToast(res.error || 'Unable to remove co-organizer.', 'error'); return; }
     }
     try {
-      fetch(`http://localhost:3000/competitions/${compId}/organizers/${username}`, {
+      fetch(`${API_URL}/competitions/${compId}/organizers/${username}`, {
         method: 'DELETE',
         headers: { 'x-user-role': 'team_lead' },
       }).catch(() => {});

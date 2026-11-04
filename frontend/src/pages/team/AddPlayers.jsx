@@ -15,7 +15,7 @@ import { showToast } from '../../lib/toast.js';
 import '../../styles/pages/team/add-players.css';
 
 export default function AddPlayers() {
-  const { ctx, checkingPermission, canChat, refresh, canManage: hookCanManage, isEnded: hookIsEnded } = useTeamContext();
+  const { ctx, checkingPermission, canChat, refresh, canManage: hookCanManage, isEnded: hookIsEnded, isRemoved } = useTeamContext();
   const [query, setQuery] = useState('');
   const [direct, setDirect] = useState('');
   const [players, setPlayers] = useState([]);
@@ -52,6 +52,18 @@ export default function AddPlayers() {
   const isEnded = hookIsEnded ?? !!(comp.ended || comp.status === 'completed');
 
   if (checkingPermission) return <main className="main-content"><p role="status">Checking team permissions...</p></main>;
+
+  if (isRemoved) {
+    return (
+      <main className="main-content">
+        <h1 className="page-title">Access restricted</h1>
+        <p className="page-subtitle">
+          You have been removed from this competition. You can no longer access its team or competition management features.
+        </p>
+        <Link to="/pages/my-reports.html" className="btn-primary">View your reports</Link>
+      </main>
+    );
+  }
 
   if (!canManage || isEnded) {
     return <Navigate to={`/pages/team/team-roster.html?compId=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(team.id)}`} replace />;
@@ -103,11 +115,6 @@ export default function AddPlayers() {
         </div>
       )}
 
-      {isStarted && !isEnded && (
-        <div style={{ background: 'rgba(251,146,60,0.12)', border: '1px solid rgba(251,146,60,0.4)', color: '#fb923c', padding: '14px 20px', borderRadius: 10, fontSize: 14, fontWeight: 700, textAlign: 'center', margin: '24px 0', letterSpacing: '0.5px' }}>
-          🎮 Competition has started — team members can no longer be added.
-        </div>
-      )}
 
       {isFull && !isEnded && !isStarted && (
         <div style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.35)', color: '#f87171', padding: '14px 20px', borderRadius: 10, fontSize: 14, fontWeight: 700, textAlign: 'center', margin: '24px 0' }}>

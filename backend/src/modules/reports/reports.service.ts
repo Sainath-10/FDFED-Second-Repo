@@ -15,6 +15,9 @@ import { ReportDiscussionMessageEntity } from '../../entities/report-discussion-
 import { ReportStatusHistoryEntity } from '../../entities/report-status-history.entity';
 import { ReportAuditLogEntity } from '../../entities/report-audit-log.entity';
 import { ReportingRestrictionEntity } from '../../entities/reporting-restriction.entity';
+import { CompetitionRemovalEntity } from '../../entities/competition-removal.entity';
+import { UserEntity } from '../../entities/user.entity';
+import { UserRole } from '../../common/interfaces';
 import { TeamEntity } from '../../entities/team.entity';
 import { MatchEntity } from '../../entities/match.entity';
 import { ChatMessageEntity } from '../../entities/chat-message.entity';
@@ -237,6 +240,29 @@ export class ReportsService implements OnModuleInit {
     const reportedUser = await this.users.findByUsername(reportedUsername);
     if (!reportedUser) throw new BadRequestException('The reported user does not exist.');
 
+    // An organiser complaint is independent of the original report: the original
+    // decision is captured here and is never altered or reversed by filing it.
+    let originalReport: ReportEntity | null = null;
+    if (dto.originalReportId) {
+      originalReport = await this.reports.findOne({ where: { id: String(dto.originalReportId) } });
+      if (!originalReport) throw new BadRequestException('The original report could not be found.');
+      if (String(originalReport.competitionId) !== competitionId) {
+        throw new BadRequestException('The original report belongs to another competition.');
+      }
+      if (originalReport.reportedUsername.toLowerCase() !== reporter.toLowerCase()) {
+        throw new ForbiddenException('Only the player affected by the original decision can file this complaint.');
+      }
+      if (originalReport.status !== 'resolved' || !originalReport.resolvedBy) {
+        throw new BadRequestException('The original report has no organiser decision to complain about.');
+      }
+      if (originalReport.resolvedBy.toLowerCase() !== reportedUsername.toLowerCase()) {
+        throw new BadRequestException('The complaint must name the organiser who recorded the decision.');
+      }
+      if (!['warning', 'remove_from_competition'].includes(String(originalReport.action))) {
+        throw new BadRequestException('Only a punitive decision can be reported.');
+      }
+    }
+
     const reason = REPORT_REASONS[dto.reasonCode];
     if (!reason) throw new BadRequestException('Choose a valid report reason.');
 
@@ -326,7 +352,11 @@ export class ReportsService implements OnModuleInit {
         status: 'new',
         queue,
         assignedTo: queue === 'organiser' ? comp.createdBy : null,
-        relatedReportId: related && related.status !== 'discarded' ? related.id : null,
+        relatedReportId: originalReport?.id || (related && related.status !== 'discarded' ? related.id : null),
+        originalReportId: originalReport?.id || null,
+        originalDecision: originalReport
+          ? `${originalReport.finding} · ${originalReport.action}: ${originalReport.conclusion || ''}`.trim()
+          : null,
       } as Partial<ReportEntity>);
       const stored = await reportRepo.save(report);
 
@@ -391,12 +421,29 @@ export class ReportsService implements OnModuleInit {
         },
       }),
     ]);
+    const original = report.originalReportId
+      ? await this.reports.findOne({ where: { id: report.originalReportId } }).catch(() => null)
+      : null;
     return {
       ...report,
       code: this.reportCode(report.id),
       competitionName: comp?.name || report.competitionId,
       reporterPriorSubstantiated: reporterPrior,
       accusedPriorSubstantiated: accusedPrior,
+      // Shown to the Community Moderator alongside the complaint.
+      originalReport: original
+        ? {
+          id: original.id,
+          code: this.reportCode(original.id),
+          description: original.description,
+          finding: original.finding,
+          action: original.action,
+          conclusion: original.conclusion,
+          resolvedBy: original.resolvedBy,
+          resolvedAt: original.resolvedAt,
+          status: original.status,
+        }
+        : null,
     };
   }
 
@@ -418,11 +465,19 @@ export class ReportsService implements OnModuleInit {
   }
 
   async listMine(username: string) {
-    const rows = await this.reports.find({
-      where: [{ reporterUsername: username }, { reportedUsername: username }],
-      order: { createdAt: 'DESC' },
-      take: 200,
-    });
+    // Reports the user filed, reports filed against them, and reports whose case
+    // discussion they are an authorised participant of — one record per report.
+    const participantRows = await this.participants.find({ where: { username } });
+    const discussionIds = Array.from(new Set(participantRows.map((row) => row.discussionId)));
+    const participantReportIds = discussionIds.length
+      ? Array.from(new Set((await this.discussions.find({ where: { id: In(discussionIds) } })).map((row) => row.reportId)))
+      : [];
+    const where: Record<string, any>[] = [
+      { reporterUsername: username },
+      { reportedUsername: username },
+    ];
+    if (participantReportIds.length) where.push({ id: In(participantReportIds) });
+    const rows = await this.reports.find({ where, order: { createdAt: 'DESC' }, take: 200 });
     return Promise.all(rows.map((row) => this.decorate(row)));
   }
 
@@ -662,11 +717,13 @@ export class ReportsService implements OnModuleInit {
   async listDiscussionsFor(username: string) {
     const rows = await this.participants.find({ where: { username }, order: { createdAt: 'DESC' } });
     const out: any[] = [];
+    const seen = new Set<string>();
     for (const row of rows) {
       const discussion = await this.discussions.findOne({ where: { id: row.discussionId } });
       if (!discussion) continue;
       const report = await this.reports.findOne({ where: { id: discussion.reportId } });
       if (!report) continue;
+      seen.add(discussion.id);
       out.push({
         discussionId: discussion.id,
         status: discussion.status,
@@ -680,7 +737,28 @@ export class ReportsService implements OnModuleInit {
         createdAt: discussion.createdAt,
       });
     }
-    return out;
+    // The reporter and the accused always see their own case room, even if a
+    // participant row was never materialised for them.
+    const related = await this.reports.find({
+      where: [{ reporterUsername: username }, { reportedUsername: username }],
+    });
+    for (const report of related) {
+      const discussion = await this.discussions.findOne({ where: { reportId: report.id } });
+      if (!discussion || seen.has(discussion.id)) continue;
+      out.push({
+        discussionId: discussion.id,
+        status: discussion.status,
+        reportId: report.id,
+        code: this.reportCode(report.id),
+        competitionId: report.competitionId,
+        reasonCode: report.reasonCode,
+        priority: report.priority,
+        reportStatus: report.status,
+        as: report.reportedUsername.toLowerCase() === String(username).toLowerCase() ? 'accused' : 'reporter',
+        createdAt: discussion.createdAt,
+      });
+    }
+    return out.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
 
   async postMessage(discussionId: string, dto: DiscussionMessageDto, user: any) {
@@ -749,7 +827,21 @@ export class ReportsService implements OnModuleInit {
     const targetUser = await this.users.findByUsername(target);
     if (!targetUser) throw new BadRequestException('This username does not exist.');
     const existing = await this.participants.findOne({ where: { discussionId, username: targetUser.username } });
-    if (existing) return existing;
+    if (existing) throw new BadRequestException('That person is already a participant in this discussion.');
+    // The room may only include people who actually play in the competition this
+    // report belongs to. Membership is read from the team/roster records, never
+    // from the username the client sent.
+    const teams = await this.teams.find({ where: { competitionId: report.competitionId } });
+    const inCompetition = teams.some(
+      (team) =>
+        String(team.leaderId || '').toLowerCase() === targetUser.username.toLowerCase() ||
+        (team.memberUsernames || []).some(
+          (member) => String(member).toLowerCase() === targetUser.username.toLowerCase(),
+        ),
+    );
+    if (!inCompetition) {
+      throw new BadRequestException('Only players registered in this competition can be added to its case discussion.');
+    }
     const created = await this.participants.save(
       this.participants.create({
         discussionId,
@@ -817,15 +909,13 @@ export class ReportsService implements OnModuleInit {
 
     if (dto.action === 'remove_from_competition') {
       await this.removePlayerFromCompetition(report, user.username);
-    } else if (dto.action === 'formal_warning' || dto.action === 'final_warning') {
-      const increment = dto.action === 'formal_warning' ? 1 : 0;
-      if (increment) await this.users.update(player.id, { warningCount: Number(player.warningCount || 0) + increment });
-      await this.notifyUser(
-        player.username,
-        dto.action === 'final_warning' ? 'Final warning' : 'Formal warning',
-        conclusion,
-        { reportId: report.id, compId: report.competitionId },
-      );
+    } else if (dto.action === 'warning') {
+      // One unified warning action. Historical formal/final rows are untouched.
+      await this.users.update(player.id, { warningCount: Number(player.warningCount || 0) + 1 });
+      await this.notifyUser(player.username, 'Warning', conclusion, {
+        reportId: report.id,
+        compId: report.competitionId,
+      });
     }
 
     report.finding = dto.finding as any;
@@ -857,6 +947,14 @@ export class ReportsService implements OnModuleInit {
     return this.get(id, user);
   }
 
+  /**
+   * Revokes participation and transfers leadership as one transaction.
+   *
+   * The removed player keeps their account and report/appeal access, but the
+   * persisted removal row blocks every competition/team endpoint afterwards.
+   * If no eligible player remains, the team is left without an active leader
+   * (empty leader fields) so nobody can manage it until it is resolved.
+   */
   private async removePlayerFromCompetition(report: ReportEntity, actor: string) {
     const teams = await this.teams.find({ where: { competitionId: report.competitionId } });
     const team =
@@ -864,66 +962,129 @@ export class ReportsService implements OnModuleInit {
       teams.find((t) => (t.memberUsernames || []).some((m) => String(m).toLowerCase() === report.reportedUsername.toLowerCase()));
     if (!team) throw new BadRequestException('This player is not currently on a team in this competition.');
 
-    const remaining = (team.memberUsernames || []).filter(
-      (m) => String(m).toLowerCase() !== report.reportedUsername.toLowerCase(),
-    );
-    const leaderLeaving = String(team.leaderId || '').toLowerCase() === report.reportedUsername.toLowerCase();
+    const removedKey = report.reportedUsername.toLowerCase();
+    const allUsers = await this.users.findAll();
 
+    // Succession is decided from the LOCKED roster row inside the transaction:
+    // concurrent removals can never promote a player who is being removed by
+    // the other request, and only one request can win the leadership write.
+    let remaining: string[] = [];
+    let leaderLeaving = false;
     let successor: any = null;
-    if (leaderLeaving) {
-      const allUsers = await this.users.findAll();
-      // Roster order, skipping banned/inactive players.
-      successor = remaining
-        .map((name) => allUsers.find((u: any) => String(u.username).toLowerCase() === String(name).toLowerCase()))
-        .find((u: any) => u && !u.banned) || null;
-      if (!successor) {
-        throw new BadRequestException(
-          'No active, eligible player is available to take over as team leader. Resolve leadership separately before removing this player.',
-        );
-      }
-    }
 
     await this.dataSource.transaction(async (manager) => {
       const repo = manager.getRepository(TeamEntity);
       const fresh = await repo.findOne({ where: { id: team.id }, lock: { mode: 'pessimistic_write' } });
       if (!fresh) throw new NotFoundException('Team not found.');
+
+      const currentLeader = String(fresh.leaderId || '').toLowerCase();
+      leaderLeaving = currentLeader === removedKey;
+      remaining = (fresh.memberUsernames || []).filter((m) => String(m).toLowerCase() !== removedKey);
       fresh.memberUsernames = remaining;
-      if (leaderLeaving && successor) {
-        fresh.leaderId = successor.username;
-        fresh.leaderUsername = successor.username;
-        fresh.createdBy = successor.username;
+
+      const removalRepo = manager.getRepository(CompetitionRemovalEntity);
+      const removedRows = await removalRepo.find({ where: { competitionId: report.competitionId } });
+      const removedKeys = new Set(removedRows.map((row) => String(row.username).toLowerCase()));
+      removedKeys.add(removedKey);
+
+      // Existing roster order decides succession. Banned, removed and staff
+      // accounts are skipped — never promote a removed or ineligible player.
+      if (leaderLeaving) {
+        successor = remaining
+          .map((name) => allUsers.find((u: any) => String(u.username).toLowerCase() === String(name).toLowerCase()))
+          .find((u: any) => u && !u.banned && !removedKeys.has(String(u.username).toLowerCase())) || null;
+      }
+
+      if (leaderLeaving) {
+        fresh.leaderId = successor ? successor.username : '';
+        fresh.leaderUsername = successor ? successor.username : '';
+        fresh.createdBy = successor ? successor.username : '';
       }
       await repo.save(fresh);
+
+      const existing = await removalRepo.findOne({
+        where: { competitionId: report.competitionId, username: report.reportedUsername },
+      });
+      if (!existing) {
+        await removalRepo.save(removalRepo.create({
+          competitionId: report.competitionId,
+          username: report.reportedUsername,
+          removedBy: actor,
+          reportId: report.id,
+          reason: report.conclusion || `Removed by organiser decision on report ${report.id}.`,
+        }));
+      }
+
+      const usersRepo = manager.getRepository(UserEntity);
+      if (leaderLeaving) {
+        // The removed leader loses leadership permissions immediately.
+        const removedUser = allUsers.find((u: any) => String(u.username).toLowerCase() === removedKey);
+        if (removedUser && String(removedUser.role).toLowerCase() === 'team_lead') {
+          await usersRepo.update(removedUser.id, { role: UserRole.PARTICIPANT } as any);
+        }
+      }
+      if (successor) {
+        const promoted = allUsers.find((u: any) => String(u.username).toLowerCase() === String(successor.username).toLowerCase());
+        if (promoted && ['participant', 'regular', 'team_lead'].includes(String(promoted.role).toLowerCase())) {
+          await usersRepo.update(promoted.id, { role: UserRole.TEAM_LEAD } as any);
+        }
+      }
     });
 
+    const reason = String(report.conclusion || '').trim();
     await this.auditLog.record('TEAM_MEMBER_REMOVED', {
       actor,
       entityType: 'team',
       entityId: team.id,
-      details: `@${report.reportedUsername} removed by organiser decision on report ${this.reportCode(report.id)}.`,
+      details: `@${report.reportedUsername} removed by organiser decision on report ${this.reportCode(report.id)}.`
+        + (successor ? ` Leadership transferred to @${successor.username}.` : (leaderLeaving ? ' No eligible player remained, so the team has no active leader.' : '')),
       metadata: {
         competitionId: report.competitionId,
+        teamId: team.id,
         reportId: report.id,
+        removedBy: actor,
+        removedLeader: leaderLeaving ? report.reportedUsername : null,
         newLeader: successor ? successor.username : null,
+        reason,
       },
     });
+    if (leaderLeaving) {
+      await this.auditLog.record('TEAM_LEADERSHIP_TRANSFERRED', {
+        actor,
+        entityType: 'team',
+        entityId: team.id,
+        details: successor
+          ? `@${report.reportedUsername} was removed from the competition by @${actor}. @${successor.username} was automatically promoted to Team Leader.`
+          : `@${report.reportedUsername} was removed from the competition by @${actor}. No eligible player remained, so the team has no active leader.`,
+        metadata: {
+          competitionId: report.competitionId,
+          teamId: team.id,
+          reportId: report.id,
+          removedLeader: report.reportedUsername,
+          newLeader: successor ? successor.username : null,
+          removedBy: actor,
+          reason,
+        },
+      });
+    }
+
     await this.notifyUser(
       report.reportedUsername,
       'Removed from competition',
-      `You were removed from "${report.competitionId}" following report ${this.reportCode(report.id)}.`,
+      `You were removed from "${report.competitionId}" following report ${this.reportCode(report.id)}. You can no longer access its team or competition management features, but you can still view your reports and report the organiser.`,
       { reportId: report.id, compId: report.competitionId },
     );
     if (successor) {
-      const others = remaining.filter((m) => m.toLowerCase() !== String(successor.username).toLowerCase());
+      const others = remaining.filter((m) => String(m).toLowerCase() !== String(successor.username).toLowerCase());
       await this.notifyUser(
         successor.username,
-        'You are now the team leader',
-        `@${report.reportedUsername} was removed from ${team.name}. You are the new team leader.`,
+        'You Are Now the Team Leader',
+        'The previous Team Leader has been removed from the competition. You have automatically been promoted to Team Leader. You now have access to Team Leader functionality.',
         { compId: report.competitionId, teamId: team.id },
       );
       await Promise.all(
         others.map((member) =>
-          this.notifyUser(member, 'Team leadership changed', `${successor.username} is now the leader of ${team.name}.`, {
+          this.notifyUser(member, 'Team Leadership Updated', `${successor.username} is now the Team Leader of your team.`, {
             compId: report.competitionId,
             teamId: team.id,
           }),
@@ -941,7 +1102,7 @@ export class ReportsService implements OnModuleInit {
     if (!MODERATOR_ACTIONS.includes(dto.action as ReportAction)) throw new BadRequestException('Invalid action.');
     const conclusion = String(dto.conclusion || '').trim();
     if (conclusion.length < 15) throw new BadRequestException('A conclusion explaining the decision is required.');
-    if (dto.finding === 'unsubstantiated' && !['no_action', 'formal_warning'].includes(dto.action)) {
+    if (dto.finding === 'unsubstantiated' && !['no_action', 'warning'].includes(dto.action)) {
       throw new BadRequestException('An unsubstantiated finding cannot justify a punitive action.');
     }
     const organiser = report.reportedUsername;
@@ -965,9 +1126,9 @@ export class ReportsService implements OnModuleInit {
       if (comp) {
         await this.competitions.update(report.competitionId, { status: 'suspended' } as any);
       }
-    } else if (dto.action === 'formal_warning' || dto.action === 'final_warning') {
+    } else if (dto.action === 'warning') {
       // A warning alone never changes reputation.
-      await this.reputation.issueSanction(organiser, dto.action, conclusion, {
+      await this.reputation.issueSanction(organiser, 'warning', conclusion, {
         reportId: report.id,
         appliedBy: user.username,
       });
@@ -1070,7 +1231,7 @@ export class ReportsService implements OnModuleInit {
         username: organiser,
         profile,
         substantiatedReports: substantiated,
-        warnings: sanctionsCount.sanctions.filter((s) => ['formal_warning', 'final_warning'].includes(s.type)).length,
+        warnings: sanctionsCount.sanctions.filter((s) => ['warning', 'formal_warning', 'final_warning'].includes(s.type)).length,
         activeRestrictions: profile.activeSanctions,
         reputationHistory: sanctionsCount.reputationHistory,
         sanctions: sanctionsCount.sanctions,
@@ -1105,7 +1266,7 @@ export class ReportsService implements OnModuleInit {
         // High-priority reports get a second platform-level reminder (never a reroute).
         const staff = await this.users.findAll();
         const platform = staff.filter((u: any) =>
-          ['super_admin', 'comp_admin'].includes(String(u.role || '').toLowerCase()),
+          ['super_admin', 'admin'].includes(String(u.role || '').toLowerCase()),
         );
         await Promise.all(
           platform.map((u: any) =>

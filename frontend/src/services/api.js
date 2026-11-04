@@ -15,7 +15,7 @@
  * The object is also published as `window.NexusAPI` for code that expects that global.
  */
 
-export const API_URL = (import.meta.env?.VITE_API_URL || 'http://localhost:3000').replace(/\/+$/, '');
+export const API_URL = (import.meta.env?.VITE_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
 
 const TOKEN_KEY = 'nexus.auth.token';
 const USER_KEY = 'nexus.auth.user';
@@ -32,13 +32,13 @@ export function getToken() {
 export function setToken(token) {
   try {
     localStorage.setItem(TOKEN_KEY, token);
-  } catch (err) {}
+  } catch (err) { }
 }
 
 export function removeToken() {
   try {
     localStorage.removeItem(TOKEN_KEY);
-  } catch (err) {}
+  } catch (err) { }
 }
 
 export function getUser() {
@@ -70,13 +70,13 @@ export function normalizeRole(role) {
 export function setUser(user) {
   try {
     localStorage.setItem(USER_KEY, JSON.stringify(user));
-  } catch (err) {}
+  } catch (err) { }
 }
 
 export function removeUser() {
   try {
     localStorage.removeItem(USER_KEY);
-  } catch (err) {}
+  } catch (err) { }
 }
 
 /**
@@ -95,7 +95,7 @@ export async function makeRequest(endpoint, options = {}) {
     ...options,
   };
 
- // Add JWT bearer token & role header if available
+  // Add JWT bearer token & role header if available
   const token = getToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;

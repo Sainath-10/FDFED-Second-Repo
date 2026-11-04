@@ -14,7 +14,12 @@ import NexusData from '../services/data.js';
 import NexusTeamWorkflow from '../services/teamWorkflow.js';
 import NexusAPI, { CompetitionsAPI } from '../services/api.js';
 import { LocalReputationAPI as ReputationAPI } from '../services/local/reporting.js';
-import { checkPrizePool, isCreationBlocked } from '../services/local/reputation.js';
+import {
+  availableExceptionFor,
+  bindExceptionToCompetition,
+  checkPrizePool,
+  isCreationBlocked,
+} from '../services/local/reputation.js';
 import { showToast } from '../lib/toast.js';
 import { assetUrl } from '../lib/assets.js';
 import '../styles/pages/create-competition.css';
@@ -155,6 +160,50 @@ export default function CreateCompetition() {
     ? Math.min(reputation.levelLimit ?? MAX_PRIZE_POOL, reputation.globalMax ?? MAX_PRIZE_POOL)
     : MAX_PRIZE_POOL;
 
+  // Prize-pool exceptions belong to competition creation (never to Reports or
+  // Disputes). Only Blue and Green organisers may request one; Support approves
+  // it in the administrative queue, the approval is single-use and only that
+  // competition may use it.
+  const [exceptionRequests, setExceptionRequests] = useState([]);
+  const [exceptionReason, setExceptionReason] = useState('');
+  const [requestingException, setRequestingException] = useState(false);
+
+  const loadExceptions = () => ReputationAPI.myExceptions()
+    .then((res) => { if (res.ok && Array.isArray(res.data)) setExceptionRequests(res.data); })
+    .catch(() => undefined);
+
+  useEffect(() => { loadExceptions(); }, []);
+
+  const reputationLevel = reputation?.level || 'blue';
+  const canRequestException = ['blue', 'green'].includes(reputationLevel);
+  const overPrizeLimit = totalPrize > prizeLimit;
+  const approvedException = exceptionRequests.find((row) => (
+    row.status === 'approved' && !row.competitionId && Number(row.requestedAmount) >= totalPrize
+  )) || null;
+
+  async function requestPrizeException() {
+    if (!canRequestException) {
+      showToast('Only Blue and Green organisers can request a prize-pool exception.', 'error');
+      return;
+    }
+    if (totalPrize > MAX_PRIZE_POOL) {
+      showToast(`An exception can never exceed the ₹${MAX_PRIZE_POOL.toLocaleString('en-IN')} platform ceiling.`, 'error');
+      return;
+    }
+    if (!overPrizeLimit) { showToast('Your current limit already covers this prize pool.', 'error'); return; }
+    if (exceptionReason.trim().length < 10) {
+      showToast('Explain why the higher prize pool is needed (10+ characters).', 'error');
+      return;
+    }
+    setRequestingException(true);
+    const res = await ReputationAPI.requestException(totalPrize, exceptionReason.trim());
+    setRequestingException(false);
+    if (!res.ok) { showToast(res.error || 'Unable to submit the exception request.', 'error'); return; }
+    setExceptionReason('');
+    showToast('Exception request submitted to the Support Team.', 'success');
+    loadExceptions();
+  }
+
   const effectiveBanner = bannerSrc || getDefaultBanner(game);
 
   function fieldProps(id) {
@@ -221,7 +270,7 @@ export default function CreateCompetition() {
     if (n3 > 0 && n3 > n2 && n2 > 0) next['prize-3'] = '2nd place prize must be ≥ 3rd place prize.';
     // Platform ceiling + organiser reputation limit (the backend is authoritative).
     if (totalPrize > MAX_PRIZE_POOL) next['prize-total'] = `Total prize pool cannot exceed ₹${MAX_PRIZE_POOL.toLocaleString('en-IN')} (₹3 lakh platform maximum).`;
-    else if (totalPrize > prizeLimit) next['prize-total'] = `Your current reputation level permits a maximum prize pool of ₹${prizeLimit.toLocaleString('en-IN')}.`;
+    else if (totalPrize > prizeLimit && !approvedException) next['prize-total'] = `Your current reputation level permits a maximum prize pool of ₹${prizeLimit.toLocaleString('en-IN')}. Request a Support-approved exception to go above it.`;
 
  // Co-organizers — self/duplicate checks synchronously; existence is validated
  // against registered accounts via the backend below (§2.1).
@@ -365,7 +414,10 @@ export default function CreateCompetition() {
       return;
     }
     const prizeGuard = checkPrizePool(session?.username, comp.prize);
-    if (!prizeGuard.ok) {
+    // A single-use Support approval for this amount lets creation proceed; the
+    // permanent organiser limit is never changed and the backend re-validates.
+    const usableException = prizeGuard.ok ? null : availableExceptionFor(session?.username, comp.prize);
+    if (!prizeGuard.ok && !usableException) {
       setPublishError(prizeGuard.error);
       setCheckout(checkoutData);
       showToast(prizeGuard.error, 'error');
@@ -419,6 +471,8 @@ export default function CreateCompetition() {
     const finalComp = { ...comp, id: created.id || comp.id, joinCode: created.joinCode || null };
 
     if (NexusData) NexusData.addCompetition(finalComp);
+    // Consume the approved exception: it applies to this competition only.
+    if (usableException && finalComp.id) bindExceptionToCompetition(usableException.id, finalComp.id);
 
     pendingCoOrganizers.forEach((coOrgUsername) => {
       if (!coOrgUsername) return;
@@ -648,7 +702,63 @@ export default function CreateCompetition() {
                   <span id="total-due-display" style={{ fontSize: 20, fontWeight: 900, color: 'var(--accent, #c6ff33)' }}>₹{platformFee.toLocaleString('en-IN')}</span>
                 </div>
                 <FieldError id="prize-total" />
-                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>Platform fee status is recorded as pending. No external payment gateway is connected in this build.</p>
+
+                {overPrizeLimit && canRequestException && (
+                  <div style={{ display: 'grid', gap: 8, borderTop: '1px dashed rgba(251,146,60,0.4)', paddingTop: 12 }}>
+                    {approvedException ? (
+                      <p style={{ margin: 0, fontSize: 12.5, color: '#86efac' }}>
+                        ✅ The Support Team approved ₹{Number(approvedException.requestedAmount).toLocaleString('en-IN')} for this
+                        competition. You can publish now — the approval is single-use and is used up by this competition only.
+                      </p>
+                    ) : (
+                      <>
+                        <p style={{ margin: 0, fontSize: 12.5, color: '#fb923c' }}>
+                          ₹{totalPrize.toLocaleString('en-IN')} exceeds your current reputation limit of ₹{prizeLimit.toLocaleString('en-IN')}.
+                          Request a single-use exception from the Support Team — it never changes your reputation or permanent limit.
+                        </p>
+                        <label htmlFor="exception-reason" style={{ fontSize: 12, color: 'var(--text-muted)' }}>Reason for the higher prize pool</label>
+                        <textarea
+                          id="exception-reason"
+                          className="form-input"
+                          rows={2}
+                          maxLength={1000}
+                          value={exceptionReason}
+                          onChange={(e) => setExceptionReason(e.target.value)}
+                          placeholder="e.g. Sponsor-backed community event with a committed prize partner"
+                        />
+                        <button type="button" className="btn-table-secondary" disabled={requestingException} onClick={requestPrizeException} style={{ justifySelf: 'start' }}>
+                          {requestingException ? 'Submitting…' : 'Request exception'}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {overPrizeLimit && !canRequestException && (
+                  <p style={{ margin: 0, fontSize: 12.5, color: '#f87171' }}>
+                    Your current reputation level cannot request a prize-pool exception. Reduce the prize pool to
+                    ₹{prizeLimit.toLocaleString('en-IN')} or below.
+                  </p>
+                )}
+
+                {exceptionRequests.length > 0 && (
+                  <div style={{ display: 'grid', gap: 6, borderTop: '1px dashed rgba(198,255,51,0.25)', paddingTop: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.5px' }}>EXCEPTION REQUESTS</span>
+                      <button type="button" className="btn-table-secondary" onClick={loadExceptions}>Check status</button>
+                    </div>
+                    {exceptionRequests.map((row) => (
+                      <div key={row.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 12.5, color: '#cbd5e1' }}>
+                        <span>₹{Number(row.requestedAmount).toLocaleString('en-IN')} · {new Date(row.createdAt).toLocaleDateString('en-IN')}</span>
+                        <strong style={{ color: row.status === 'approved' ? '#86efac' : row.status === 'rejected' ? '#f87171' : '#fb923c' }}>
+                          {String(row.status).toUpperCase()}{row.competitionId ? ' · USED' : ''}
+                        </strong>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>Platform fee status is recorded as pending. No external payment gateway is connected in this build. A prize-pool exception never funds or verifies the prize pool.</p>
               </div>
 
               <div style={{ marginTop: 32 }}>

@@ -73,22 +73,24 @@ export const LEVEL_META = {
   },
 };
 
+// New decisions record one of these two findings. Historical
+// `partially_substantiated` rows stay in storage and still count as
+// substantiated in statistics — they are never rewritten.
 export const FINDINGS = [
   { value: 'substantiated', label: 'Substantiated' },
-  { value: 'partially_substantiated', label: 'Partially substantiated' },
   { value: 'unsubstantiated', label: 'Unsubstantiated' },
 ];
 
+// A single Warning action replaces the old Formal/Final warning pair. Legacy
+// records are preserved and still counted in warning totals.
 export const ORGANISER_ACTIONS = [
-  { value: 'formal_warning', label: 'Formal Warning' },
-  { value: 'final_warning', label: 'Final Warning' },
+  { value: 'warning', label: 'Warning' },
   { value: 'remove_from_competition', label: 'Remove from Competition' },
   { value: 'no_action', label: 'No Action' },
 ];
 
 export const MODERATOR_ACTIONS = [
-  { value: 'formal_warning', label: 'Formal Warning' },
-  { value: 'final_warning', label: 'Final Warning' },
+  { value: 'warning', label: 'Warning' },
   { value: 'reputation_downgrade', label: 'Reputation Downgrade' },
   { value: 'creation_restriction', label: 'Temporary Competition Creation Restriction' },
   { value: 'competition_suspension', label: 'Competition Suspension' },

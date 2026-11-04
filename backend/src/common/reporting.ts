@@ -40,6 +40,9 @@ export const RECOVERY_COMPETITIONS_REQUIRED = 3;
 export const RED_BAN_DAYS = 30;
 
 export const SANCTION_TYPES = [
+  // New decisions issue a single unified warning.
+  'warning',
+  // Historical sanction types — retained so old rows stay readable and counted.
   'formal_warning',
   'final_warning',
   'creation_restriction',
@@ -57,21 +60,25 @@ export type ReportQueue = 'organiser' | 'moderator';
 export type ReportPriority = 'high' | 'medium' | 'low';
 export const REPORT_PRIORITIES: ReportPriority[] = ['high', 'medium', 'low'];
 
-export type ReportFinding = 'substantiated' | 'partially_substantiated' | 'unsubstantiated';
-export const REPORT_FINDINGS: ReportFinding[] = ['substantiated', 'partially_substantiated', 'unsubstantiated'];
+export type ReportFinding = 'substantiated' | 'unsubstantiated';
+/** Only these two values may be submitted on a new decision. */
+export const REPORT_FINDINGS: ReportFinding[] = ['substantiated', 'unsubstantiated'];
+/** Historical findings kept readable; existing rows are never rewritten. */
+export const HISTORICAL_REPORT_FINDINGS = ['partially_substantiated'] as const;
 
 export type ReportAction =
-  | 'formal_warning'
-  | 'final_warning'
+  | 'warning'
   | 'remove_from_competition'
   | 'no_action'
   | 'reputation_downgrade'
   | 'creation_restriction'
-  | 'competition_suspension';
-export const ORGANISER_ACTIONS: ReportAction[] = ['formal_warning', 'final_warning', 'remove_from_competition', 'no_action'];
+  | 'competition_suspension'
+  // Historical decisions only — never offered for a new decision.
+  | 'formal_warning'
+  | 'final_warning';
+export const ORGANISER_ACTIONS: ReportAction[] = ['warning', 'remove_from_competition', 'no_action'];
 export const MODERATOR_ACTIONS: ReportAction[] = [
-  'formal_warning',
-  'final_warning',
+  'warning',
   'reputation_downgrade',
   'creation_restriction',
   'competition_suspension',

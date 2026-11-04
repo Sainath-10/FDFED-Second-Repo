@@ -51,6 +51,11 @@ export class CreateReportDto {
   @IsString()
   sourcePage?: string;
 
+  /** Original report a player is complaining about (organiser decision review). */
+  @IsOptional()
+  @IsString()
+  originalReportId?: string;
+
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })

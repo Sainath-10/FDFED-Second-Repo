@@ -9,6 +9,7 @@ import { TeamInviteEntity } from '../../entities/team-invite.entity';
 import { CompetitionEntity } from '../../entities/competition.entity';
 import { RefundRequestEntity } from '../../entities/refund-request.entity';
 import { RevenueTransactionEntity } from '../../entities/revenue-transaction.entity';
+import { CompetitionRemovalEntity } from '../../entities/competition-removal.entity';
 import { TeamValidationMiddleware } from '../../common/middleware';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { CompetitionsModule } from '../competitions/competitions.module';
@@ -18,7 +19,7 @@ import { MatchesModule } from '../matches/matches.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([TeamEntity, TeamJoinRequestEntity, TeamInviteEntity, CompetitionEntity, RefundRequestEntity, RevenueTransactionEntity]),
+    TypeOrmModule.forFeature([TeamEntity, TeamJoinRequestEntity, TeamInviteEntity, CompetitionEntity, RefundRequestEntity, RevenueTransactionEntity, CompetitionRemovalEntity]),
     NotificationsModule,
     CompetitionsModule, // exports CompetitionRepository
     AuthModule,         // exports UserRepository

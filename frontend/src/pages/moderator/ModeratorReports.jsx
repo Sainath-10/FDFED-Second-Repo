@@ -8,14 +8,22 @@ import { LocalReportsAPI as ReportsAPI } from '../../services/local/reporting.js
 import useReportSync from '../../hooks/useReportSync.js';
 import ReportCard from '../../components/ReportCard.jsx';
 import { DiscardModal, ModeratorDecisionModal } from '../../components/ReportActionModals.jsx';
-import { STATUS_TABS } from '../../lib/reporting.js';
 import { showToast } from '../../lib/toast.js';
 import '../../styles/pages/admin/dashboard.css';
 import '../../styles/pages/reports.css';
 
-// Resolved/discarded reports live in Activity, not in the active Reports queue.
+// Resolved decisions live in Activity; an appealed decision is still work in
+// progress, so it gets its own Reports tab instead of disappearing.
 const ACTIVE_STATUS_KEYS = ['new', 'under_review', 'awaiting_response'];
-const ACTIVE_TABS = STATUS_TABS.filter((status) => ACTIVE_STATUS_KEYS.includes(status.key));
+const TABS = [
+  { key: 'new', label: 'New' },
+  { key: 'under_review', label: 'Under Review' },
+  { key: 'awaiting_response', label: 'Awaiting Response' },
+  { key: 'appealed', label: 'Appealed' },
+];
+const isAppealed = (report) => report.status === 'resolved'
+  && report.appealStatus === 'submitted'
+  && !report.uplifted;
 
 export default function ModeratorReports() {
   const navigate = useNavigate();
@@ -44,12 +52,26 @@ export default function ModeratorReports() {
     navigate(`/pages/case-discussion.html?discussionId=${res.data.discussion.id}`);
   }
 
+  /** Enter the EXACT room the organiser used to appeal. */
+  async function enterAppeal(report) {
+    const res = await ReportsAPI.appealRoom(report.id);
+    if (!res.ok) { showToast(res.error || 'Unable to open the appeal discussion.', 'error'); return; }
+    navigate(`/pages/case-discussion.html?discussionId=${res.data.discussionId}`);
+  }
+
   const activeReports = reports.filter((report) => ACTIVE_STATUS_KEYS.includes(report.status));
-  const counts = activeReports.reduce((acc, report) => {
-    acc[report.status] = (acc[report.status] || 0) + 1;
+  const appealedReports = reports.filter(isAppealed);
+  const visibleReports = [...activeReports, ...appealedReports];
+  const counts = visibleReports.reduce((acc, report) => {
+    const key = isAppealed(report) ? 'appealed' : report.status;
+    acc[key] = (acc[key] || 0) + 1;
     return acc;
   }, {});
-  const filtered = tab === 'all' ? activeReports : activeReports.filter((report) => report.status === tab);
+  const filtered = tab === 'all'
+    ? visibleReports
+    : tab === 'appealed'
+      ? appealedReports
+      : activeReports.filter((report) => report.status === tab);
 
   return (
     <main className="admin-page reports-page">
@@ -64,9 +86,9 @@ export default function ModeratorReports() {
 
       <div className="reports-tabs">
         <button className={`reports-tab ${tab === 'all' ? 'active' : ''}`} onClick={() => setTab('all')}>
-          All <span className="count">{activeReports.length}</span>
+          All <span className="count">{visibleReports.length}</span>
         </button>
-        {ACTIVE_TABS.map((status) => (
+        {TABS.map((status) => (
           <button
             key={status.key}
             className={`reports-tab ${tab === status.key ? 'active' : ''}`}
@@ -87,8 +109,13 @@ export default function ModeratorReports() {
             <ReportCard
               key={report.id}
               report={report}
+              statusLabel={isAppealed(report) ? 'Appealed' : null}
               detailHref={`/pages/moderator/report-detail.html?id=${report.id}`}
-              actions={['new', 'under_review', 'awaiting_response'].includes(report.status) ? (
+              actions={isAppealed(report) ? (
+                <button className="report-btn primary" onClick={() => enterAppeal(report)}>
+                  Enter Discussion
+                </button>
+              ) : ['new', 'under_review', 'awaiting_response'].includes(report.status) ? (
                 <>
                   <button className="report-btn" onClick={() => discuss(report)}>Discuss</button>
                   <button className="report-btn primary" onClick={() => setDecisionTarget(report)}>Act</button>

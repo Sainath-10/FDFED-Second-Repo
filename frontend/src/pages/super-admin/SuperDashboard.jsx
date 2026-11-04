@@ -1,4 +1,4 @@
-﻿/**
+/**
  * NEXUS ESPORTS — Super Admin Dashboard
  *
  * system
@@ -16,7 +16,7 @@ import { assetUrl } from '../../lib/assets.js';
 import '../../styles/pages/super-admin/super-dashboard.css';
 
 const DASHBOARD_STATE_KEY = 'nexus.superadmin.dashboard.state';
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 const DEFAULTS = {
   platformName: 'Nexus Esports Platform',

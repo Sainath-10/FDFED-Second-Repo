@@ -5,6 +5,7 @@ import { OrganiserReputationEntity } from '../../entities/organiser-reputation.e
 import { OrganiserReputationHistoryEntity } from '../../entities/organiser-reputation-history.entity';
 import { OrganiserSanctionEntity } from '../../entities/organiser-sanction.entity';
 import { PrizePoolExceptionEntity } from '../../entities/prize-pool-exception.entity';
+import { ReportEntity } from '../../entities/report.entity';
 import { PlatformSettingEntity } from '../../entities/platform-setting.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditLogService } from '../../common/audit/audit.service';
@@ -137,7 +138,7 @@ export class ReputationService implements OnModuleInit {
     ]);
     const now = Date.now();
     const activeSanctions = sanctionRows.filter(
-      (s) => s.active && (!s.endsAt || new Date(s.endsAt).getTime() > now) && !['formal_warning', 'final_warning'].includes(s.type),
+      (s) => s.active && (!s.endsAt || new Date(s.endsAt).getTime() > now) && !['warning', 'formal_warning', 'final_warning'].includes(s.type),
     );
     return {
       username,
@@ -164,6 +165,92 @@ export class ReputationService implements OnModuleInit {
       sanctions: sanctionRows,
       exceptions: pendingExceptions,
       updatedAt: profile.updatedAt,
+    };
+  }
+
+  /**
+   * Profile record: current level plus warning, transition and report history.
+   * Counts come from stored rows — never inferred from the current level. A
+   * report is an allegation, so only a substantiated finding is a violation.
+   */
+  async getOrganiserOverview(username: string) {
+    const profile = await this.getOrCreate(username);
+    const globalMax = await this.getGlobalMax();
+    const [levelHistory, sanctionRows, reportRows] = await Promise.all([
+      this.history.find({ where: { username }, order: { createdAt: 'DESC' } }),
+      this.sanctions.find({ where: { username }, order: { createdAt: 'DESC' } }),
+      this.dataSource.getRepository(ReportEntity).find({ where: { reportedUsername: username } }),
+    ]);
+
+    const levelCounts: Record<ReputationLevel, number> = { blue: 0, green: 0, orange: 0, red: 0 };
+    levelHistory.forEach((row) => {
+      if (isReputationLevel(row.toLevel)) levelCounts[row.toLevel] += 1;
+    });
+
+    const enteredCurrent = levelHistory.find((row) => row.toLevel === profile.level);
+    // New decisions record `warning`; historical formal/final rows still count.
+    const warningRows = sanctionRows.filter((row) => ['warning', 'formal_warning', 'final_warning'].includes(row.type));
+    const resolved = reportRows.filter((row) => row.status === 'resolved');
+
+    return {
+      username,
+      level: profile.level,
+      limit: this.effectiveLimit(profile.level, globalMax),
+      levelLimit: REPUTATION_LEVEL_LIMITS[profile.level],
+      globalMax,
+      bannedUntil: profile.bannedUntil,
+      lifetimeBan: profile.lifetimeBan,
+      levelEnteredAt: enteredCurrent?.createdAt ?? (profile.level === 'blue' ? profile.createdAt : null),
+      transitions: levelHistory.length,
+      levelCounts,
+      levelHistory: levelHistory.map((row) => ({
+        id: row.id,
+        fromLevel: row.fromLevel,
+        toLevel: row.toLevel,
+        reason: row.reason,
+        policy: row.policy,
+        createdAt: row.createdAt,
+      })),
+      warningSummary: { total: warningRows.length },
+      reports: {
+        total: reportRows.length,
+        substantiated: resolved.filter((row) => ['substantiated', 'partially_substantiated'].includes(String(row.finding))).length,
+        unsubstantiated: resolved.filter((row) => row.finding === 'unsubstantiated').length,
+        discarded: reportRows.filter((row) => row.status === 'discarded').length,
+        underReview: reportRows.filter((row) => ['new', 'under_review', 'awaiting_response'].includes(String(row.status))).length,
+      },
+    };
+  }
+
+  /**
+   * Public reputation context for a competition organiser: current level,
+   * limit, level-entry counts and the transition list. Reasons, warnings,
+   * reports and moderator notes are deliberately excluded.
+   */
+  async getPublicOrganiserOverview(username: string) {
+    const profile = await this.getOrCreate(username);
+    const globalMax = await this.getGlobalMax();
+    const levelHistory = await this.history.find({ where: { username }, order: { createdAt: 'DESC' } });
+
+    const levelCounts: Record<ReputationLevel, number> = { blue: 0, green: 0, orange: 0, red: 0 };
+    levelHistory.forEach((row) => {
+      if (isReputationLevel(row.toLevel)) levelCounts[row.toLevel] += 1;
+    });
+
+    return {
+      username,
+      level: profile.level,
+      limit: this.effectiveLimit(profile.level, globalMax),
+      levelLimit: REPUTATION_LEVEL_LIMITS[profile.level],
+      globalMax,
+      levelEnteredAt: levelHistory.find((row) => row.toLevel === profile.level)?.createdAt ?? null,
+      levelCounts,
+      transitions: levelHistory.map((row) => ({
+        id: row.id,
+        fromLevel: row.fromLevel,
+        toLevel: row.toLevel,
+        createdAt: row.createdAt,
+      })),
     };
   }
 
@@ -557,12 +644,16 @@ export class ReputationService implements OnModuleInit {
       profile.lifetimeBan = true;
       await this.reputation.save(profile);
     }
-    if (['formal_warning', 'final_warning'].includes(type)) {
+    if (['warning', 'formal_warning', 'final_warning'].includes(type)) {
       await this.notifications
         .create({
           toUsername: username,
           type: `organiser-${type}`,
-          title: type === 'final_warning' ? 'Final warning (organiser)' : 'Formal warning (organiser)',
+          title: type === 'warning'
+            ? 'Warning (organiser)'
+            : type === 'final_warning'
+              ? 'Final warning (organiser)'
+              : 'Formal warning (organiser)',
           body: reason,
         })
         .catch(() => undefined);

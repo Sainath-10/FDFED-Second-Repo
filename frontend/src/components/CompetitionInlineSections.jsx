@@ -1,6 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
-import { CompetitionsAPI, DisputesAPI, MatchesAPI } from '../services/api.js';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { CompetitionsAPI, MatchesAPI } from '../services/api.js';
+import { PRIORITY_META, STATUS_LABEL, capitalise, formatDate, reportCode } from '../lib/reporting.js';
+import { LocalReportsAPI as ReportsAPI } from '../services/local/reporting.js';
+import useReportSync from '../hooks/useReportSync.js';
+import EvidenceGallery from './EvidenceGallery.jsx';
+import { DiscardModal, PlayerDecisionModal } from './ReportActionModals.jsx';
+import { showToast } from '../lib/toast.js';
 import CompetitionOutcome from './CompetitionOutcome.jsx';
+import '../styles/pages/reports.css';
+import '../styles/pages/report-workspace.css';
 
 function Initial({ name }) {
   return <span className="cd-inline-avatar">{String(name || '?').replace(/^@/, '').slice(0, 1).toUpperCase()}</span>;
@@ -51,29 +60,141 @@ export function OrganizersSection({ competition, onChanged }) {
   </section>;
 }
 
-const pending = (status) => ['open_organizer', 'under_review'].includes(status);
+const OPEN_REPORT_STATUSES = ['new', 'under_review', 'awaiting_response'];
+const DISPUTE_FILTERS = [
+  { value: 'all', label: 'All disputes' },
+  { value: 'new', label: 'New' },
+  { value: 'under_review', label: 'Under Review' },
+  { value: 'awaiting_response', label: 'Awaiting Response' },
+  { value: 'resolved', label: 'Resolved' },
+  { value: 'discarded', label: 'Discarded' },
+];
+
+/**
+ * One participant report rendered as a bounded card: identity, facts and
+ * evidence are grouped, and the actions sit in a footer so nothing overlaps.
+ */
+function DisputeReportCard({ report, onDiscuss, onAct, onDiscard }) {
+  const priority = PRIORITY_META[report.priority] || PRIORITY_META.medium;
+  const open = OPEN_REPORT_STATUSES.includes(report.status);
+  return (
+    <article className="cd-dispute-card">
+      <header className="cd-dispute-card-head">
+        <span className="cd-dispute-code">{reportCode(report)}</span>
+        <span className="cd-dispute-badge" style={{ color: priority.color, background: priority.bg, borderColor: priority.border }}>
+          {priority.label} priority
+        </span>
+        <span className="cd-dispute-badge">{capitalise(report.reasonCode)}</span>
+        <span className="cd-dispute-badge is-status">{STATUS_LABEL[report.status] || capitalise(report.status)}</span>
+      </header>
+
+      <p className="cd-dispute-people">
+        <span>@{report.reporterUsername}</span>
+        <span className="cd-dispute-arrow">→</span>
+        <span>@{report.reportedUsername}</span>
+        {report.reportedRole && <span className="cd-dispute-role">· {capitalise(report.reportedRole)}</span>}
+      </p>
+
+      <dl className="cd-dispute-facts">
+        <div><dt>Competition</dt><dd>{report.competitionName || '—'}</dd></div>
+        <div><dt>Submitted</dt><dd>{formatDate(report.createdAt)}</dd></div>
+        <div><dt>Reporter history</dt><dd>{report.reporterPriorSubstantiated ?? 0} prior substantiated</dd></div>
+        <div><dt>Accused history</dt><dd>{report.accusedPriorSubstantiated ?? 0} prior substantiated</dd></div>
+      </dl>
+
+      <p className="cd-dispute-desc">{report.description}</p>
+
+      <EvidenceGallery files={report.evidence} compact />
+
+      <footer className="cd-dispute-actions">
+        {open ? (
+          <>
+            <button type="button" className="report-btn" onClick={onDiscuss}>Discuss</button>
+            <button type="button" className="report-btn primary" onClick={onAct}>Act</button>
+            <button type="button" className="report-btn danger" onClick={onDiscard}>Discard</button>
+          </>
+        ) : (
+          <span className="cd-dispute-closed">
+            {report.status === 'discarded' ? 'Report discarded' : 'Case closed'} — actions are no longer available.
+          </span>
+        )}
+        <Link className="report-btn ghost cd-dispute-open" to={`/pages/organizer-report-detail.html?id=${report.id}`}>
+          Open details
+        </Link>
+      </footer>
+    </article>
+  );
+}
+
+/**
+ * Reports are the source of truth. This section renders the exact report
+ * records the organiser reports queue renders (same ids, same statuses) for
+ * this competition only. The status filter narrows the same records.
+ */
 export function DisputesSection({ competitionId }) {
-  const [items, setItems] = useState([]);
-  const [selectedId, setSelectedId] = useState(null);
-  const [filter, setFilter] = useState('all');
-  const [notes, setNotes] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const load = async () => { const response = await DisputesAPI.getByCompetition(competitionId); if (response.ok) setItems(response.data || []); else setError(response.error || 'Could not load disputes.'); };
-  useEffect(() => { load(); }, [competitionId]); // eslint-disable-line react-hooks/exhaustive-deps
-  const visible = items.filter((item) => filter === 'all' || (filter === 'pending' ? pending(item.status) : item.status === filter));
-  const selected = items.find((item) => item.id === selectedId);
-  async function review(action) {
-    if (notes.trim().length < 5) return setError('Enter review notes with at least 5 characters.');
-    setBusy(true); setError('');
-    const response = await DisputesAPI.organizerReview(selected.id, action, notes.trim(), false);
-    setBusy(false);
-    if (!response.ok) return setError(response.error || 'Could not update the dispute.');
-    setNotes(''); await load();
+  const navigate = useNavigate();
+  const [reports, setReports] = useState([]);
+  const [reportsLoading, setReportsLoading] = useState(true);
+  const [reportsError, setReportsError] = useState('');
+  const [discardTarget, setDiscardTarget] = useState(null);
+  const [decisionTarget, setDecisionTarget] = useState(null);
+
+  const loadReports = useCallback(async () => {
+    const response = await ReportsAPI.forCompetition(competitionId);
+    if (response.ok) { setReports(response.data || []); setReportsError(''); }
+    else setReportsError(response.error || 'Could not load reports.');
+    setReportsLoading(false);
+  }, [competitionId]);
+
+  useEffect(() => { loadReports(); }, [loadReports]);
+  useReportSync(loadReports);
+
+  async function discuss(report) {
+    const response = await ReportsAPI.startDiscussion(report.id);
+    if (!response.ok) { showToast(response.error || 'Unable to open the case discussion.', 'error'); return; }
+    navigate(`/pages/case-discussion.html?discussionId=${response.data.discussion.id}`);
   }
-  return <section className="cd-content-panel"><div className="cd-section-heading"><div><h2>Disputes</h2><p>Review reports without leaving the competition workspace.</p></div><select value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">All disputes</option><option value="pending">Pending</option><option value="resolved">Resolved</option><option value="escalated_to_admin">Escalated</option></select></div>
-    {error && <p className="cd-editor-error" role="alert">{error}</p>}
-    <div className={`cd-disputes-layout ${selected ? 'has-selected' : ''}`}><div className="cd-dispute-list">{visible.map((item) => <button key={item.id} className={item.id === selectedId ? 'active' : ''} onClick={() => { setSelectedId(item.id); setNotes(''); setError(''); }}><span><strong>{item.category || item.targetType || 'Dispute'}</strong><small>Filed by @{item.reportedBy || 'participant'}</small></span><em>{String(item.status || '').replaceAll('_', ' ')}</em><p>{item.reason}</p></button>)}{!visible.length && <div className="cd-inline-empty">No disputes in this view.</div>}</div>
-      {selected && <aside className="cd-dispute-detail"><button className="cd-close-inline" aria-label="Close dispute" onClick={() => setSelectedId(null)}>×</button><small>#{String(selected.id).slice(-8)}</small><h3>{selected.targetUserOrTeam || selected.category || 'Competition dispute'}</h3><p>{selected.reason}</p><dl><div><dt>Status</dt><dd>{String(selected.status).replaceAll('_', ' ')}</dd></div><div><dt>Reported by</dt><dd>@{selected.reportedBy}</dd></div></dl>{pending(selected.status) && <><label>Review notes<textarea rows="4" value={notes} onChange={(event) => setNotes(event.target.value)} /></label><div className="cd-editor-actions"><button className="cd-button cd-primary" disabled={busy} onClick={() => review('resolve')}>Resolve</button>{selected.targetType !== 'opponent_team' && <button className="cd-button" disabled={busy} onClick={() => review('escalate_to_admin')}>Escalate</button>}</div></>}</aside>}
-    </div></section>;
+
+  const [filter, setFilter] = useState('all');
+  const visibleReports = filter === 'all' ? reports : reports.filter((report) => report.status === filter);
+
+  return <section className="cd-content-panel">
+    <div className="cd-section-heading">
+      <div><h2>Disputes</h2><p>Participant reports for this competition — the same records shown in your reports queue.</p></div>
+      <select value={filter} onChange={(event) => setFilter(event.target.value)} aria-label="Filter participant reports">
+        {DISPUTE_FILTERS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
+    </div>
+    {reportsError && <p className="cd-editor-error" role="alert">{reportsError}</p>}
+    {reportsLoading ? <div className="cd-inline-empty">Loading reports…</div> : (
+      <div className="cd-dispute-report-list">
+        {visibleReports.map((report) => (
+          <DisputeReportCard
+            key={report.id}
+            report={report}
+            onDiscuss={() => discuss(report)}
+            onAct={() => setDecisionTarget(report)}
+            onDiscard={() => setDiscardTarget(report)}
+          />
+        ))}
+        {!reports.length && <div className="cd-inline-empty">No participant reports for this competition yet.</div>}
+        {!!reports.length && !visibleReports.length && <div className="cd-inline-empty">No reports in this view.</div>}
+      </div>
+    )}
+
+    {discardTarget && (
+      <DiscardModal
+        report={discardTarget}
+        onClose={() => setDiscardTarget(null)}
+        onDone={() => { setDiscardTarget(null); showToast('Report discarded.', 'success'); loadReports(); }}
+      />
+    )}
+    {decisionTarget && (
+      <PlayerDecisionModal
+        report={decisionTarget}
+        onClose={() => setDecisionTarget(null)}
+        onDone={() => { setDecisionTarget(null); showToast('Decision recorded and the participant notified.', 'success'); loadReports(); }}
+      />
+    )}
+  </section>;
 }

@@ -111,7 +111,7 @@ export default function Disputes() {
             <h1 className="page-title">Disputes</h1>
             <p className="page-subtitle">Manage and track match disputes and escalations.</p>
           </div>
-          <Link to="/pages/dispute-escalation.html" className="btn-primary header-btn">Report to Dispute Admin</Link>
+          <Link to="/pages/dispute-escalation.html" className="btn-primary header-btn">Report to Platform Admin</Link>
         </div>
 
         <div className="tabs-row">
@@ -143,7 +143,7 @@ export default function Disputes() {
                   {!notEscalatable && (
                     <button className="btn-table-danger" onClick={() => navigate(`/pages/dispute-escalation.html?id=${d.id}`)}>Escalate</button>
                   )}
-                  {d.status === 'escalated' || d.status === 'escalated_to_admin' ? <span style={{ color: 'var(--accent)', fontSize: 12 }}>Escalated to Dispute Admin</span> : null}
+                  {d.status === 'escalated' || d.status === 'escalated_to_admin' ? <span style={{ color: 'var(--accent)', fontSize: 12 }}>Escalated to Platform Admin</span> : null}
                 </div>
               </div>
             );

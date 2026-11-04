@@ -39,6 +39,11 @@ const BARE_PATHS = new Set([
   '/pages/super-admin/profile.html',
 ]);
 const AUTH_PATHS = new Set(['/pages/login.html', '/pages/signup.html']);
+/** Pages that deliberately render without the site footer (Community Moderator workspace). */
+const NO_FOOTER_PATHS = new Set([
+  '/pages/moderator/reports.html',
+  '/pages/moderator/activity.html',
+]);
 
 function renderRoute(route) {
   const Component = PAGE_COMPONENTS[route.path];
@@ -50,7 +55,7 @@ function renderRoute(route) {
   let shell;
   if (AUTH_PATHS.has(route.path)) shell = <AuthLayout>{page}</AuthLayout>;
   else shell = (
-    <AppLayout offset={!isFull} footerClassName={isBare ? '' : undefined}>
+    <AppLayout offset={!isFull} footerClassName={isBare ? '' : undefined} hideFooter={NO_FOOTER_PATHS.has(route.path)}>
       {page}
     </AppLayout>
   );

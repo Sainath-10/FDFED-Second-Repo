@@ -16,9 +16,7 @@ const normalize = (v) => String(v || '').trim().toLowerCase();
 
 const ROLE_OPTIONS = [
   { value: 'super_admin', label: 'Super Admin' },
-  { value: 'comp_admin', label: 'Comp Admin' },
-  { value: 'dispute_admin', label: 'Dispute Admin' },
-  { value: 'revenue_admin', label: 'Revenue Admin' },
+  { value: 'admin', label: 'Admin' },
   { value: 'community_moderator', label: 'Community Moderator' },
 ];
 
@@ -26,12 +24,9 @@ function formatAdminType(role, adminType) {
   const r = normalize(role);
   const t = normalize(adminType);
   if (r === 'community_moderator' || t === 'community_moderator') return { key: 'community_moderator', label: 'Community Moderator', icon: '🚩', color: '#f472b6', bg: 'rgba(244, 114, 182, 0.15)', border: 'rgba(244, 114, 182, 0.3)' };
-  if (r === 'comp_admin' || t === 'comp_admin') return { key: 'comp_admin', label: 'Comp Admin', icon: '🏆', color: '#38bdf8', bg: 'rgba(56, 189, 248, 0.15)', border: 'rgba(56, 189, 248, 0.3)' };
-  if (r === 'dispute_admin' || t === 'dispute_admin') return { key: 'dispute_admin', label: 'Dispute Admin', icon: '🛡️', color: '#fb923c', bg: 'rgba(251, 146, 60, 0.15)', border: 'rgba(251, 146, 60, 0.3)' };
-  if (r === 'revenue_admin' || t === 'revenue_admin') return { key: 'revenue_admin', label: 'Revenue Admin', icon: '💳', color: '#c084fc', bg: 'rgba(192, 132, 252, 0.15)', border: 'rgba(192, 132, 252, 0.3)' };
   if (r === 'super_admin' || r === 'super-admin' || t === 'super_admin') return { key: 'super_admin', label: 'Super Admin', icon: '⚡', color: '#c6ff33', bg: 'rgba(198, 255, 51, 0.15)', border: 'rgba(198, 255, 51, 0.3)' };
   if (r === 'admin' || t === 'admin') return { key: 'admin', label: 'Admin', icon: '🔧', color: '#94a3b8', bg: 'rgba(148, 163, 184, 0.15)', border: 'rgba(148, 163, 184, 0.3)' };
-  return { key: 'comp_admin', label: 'Comp Admin', icon: '🏆', color: '#38bdf8', bg: 'rgba(56, 189, 248, 0.15)', border: 'rgba(56, 189, 248, 0.3)' };
+  return { key: 'admin', label: 'Admin', icon: '🔧', color: '#94a3b8', bg: 'rgba(148, 163, 184, 0.15)', border: 'rgba(148, 163, 184, 0.3)' };
 }
 
 const statusOf = (account) => (String(account.status || '').toLowerCase() === 'inactive' || account.banned ? 'inactive' : 'active');

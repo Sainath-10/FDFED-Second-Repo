@@ -12,7 +12,10 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { findAccount } from '../../services/auth.js';
 import { LocalReportsAPI } from '../../services/local/reporting.js';
 import useReportSync from '../../hooks/useReportSync.js';
+import EvidenceGallery from '../../components/EvidenceGallery.jsx';
+import { UpliftModal } from '../../components/ReportActionModals.jsx';
 import { capitalise, formatDate, reportCode } from '../../lib/reporting.js';
+import { showToast } from '../../lib/toast.js';
 import '../../styles/pages/admin/dashboard.css';
 
 const isSuperAdmin = (session) => ['super-admin', 'super_admin'].includes(String(session?.role || '').toLowerCase());
@@ -34,6 +37,9 @@ export default function ModeratorActivity() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState(new Set());
+  // The summary cards double as filters for the timeline below.
+  const [filter, setFilter] = useState('all');
+  const [upliftTarget, setUpliftTarget] = useState(null);
 
   const load = useCallback(async () => {
     if (!targetUsername) {
@@ -66,6 +72,12 @@ export default function ModeratorActivity() {
 
   const resolvedCount = rows.filter((row) => row.status === 'resolved').length;
   const discardedCount = rows.filter((row) => row.status === 'discarded').length;
+  const visibleRows = filter === 'all' ? rows : rows.filter((row) => row.status === filter);
+  const emptyCopy = filter === 'resolved'
+    ? 'This Community Moderator has not resolved any reports yet.'
+    : filter === 'discarded'
+      ? 'This Community Moderator has not discarded any reports yet.'
+      : 'This Community Moderator has no resolved or discarded reports yet.';
   const superAdminView = isSuperAdmin(session);
 
   return (
@@ -80,7 +92,7 @@ export default function ModeratorActivity() {
               ← Back to Administrator Directory
             </Link>
           )}
-          <h1 className="admin-title">Moderator <span style={{ color: 'var(--accent,#c6ff33)' }}>Activity Logs</span></h1>
+          <h1 className="admin-title"><span style={{ color: 'var(--accent,#c6ff33)' }}>Activity Logs</span></h1>
           <p className="admin-desc">Resolved and discarded organiser reports handled by this Community Moderator.</p>
         </div>
       </header>
@@ -100,18 +112,37 @@ export default function ModeratorActivity() {
         </div>
 
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-          <div style={{ background: '#141414', border: '1px solid #262626', borderRadius: 12, padding: '12px 18px', textAlign: 'center', minWidth: 110 }}>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 4 }}>Resolved</div>
-            <div id="stat-resolved-count" style={{ fontSize: 20, fontWeight: 900, color: '#22c55e' }}>{resolvedCount}</div>
-          </div>
-          <div style={{ background: '#141414', border: '1px solid #262626', borderRadius: 12, padding: '12px 18px', textAlign: 'center', minWidth: 110 }}>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 4 }}>Discarded</div>
-            <div id="stat-discarded-count" style={{ fontSize: 20, fontWeight: 900, color: '#94a3b8' }}>{discardedCount}</div>
-          </div>
-          <div style={{ background: '#141414', border: '1px solid #262626', borderRadius: 12, padding: '12px 18px', textAlign: 'center', minWidth: 110 }}>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 4 }}>Total Cases</div>
-            <div id="stat-total-count" style={{ fontSize: 20, fontWeight: 900, color: '#c6ff33' }}>{rows.length}</div>
-          </div>
+          {[
+            { key: 'resolved', label: 'Resolved', value: resolvedCount, color: '#22c55e', id: 'stat-resolved-count' },
+            { key: 'discarded', label: 'Discarded', value: discardedCount, color: '#94a3b8', id: 'stat-discarded-count' },
+            { key: 'all', label: 'Total Cases', value: rows.length, color: '#c6ff33', id: 'stat-total-count' },
+          ].map((card) => {
+            const active = filter === card.key;
+            return (
+              <button
+                key={card.key}
+                type="button"
+                aria-pressed={active}
+                title={`Show ${card.label.toLowerCase()} activity`}
+                onClick={() => setFilter(card.key)}
+                style={{
+                  background: active ? 'rgba(198,255,51,0.10)' : '#141414',
+                  border: active ? '1px solid rgba(198,255,51,0.6)' : '1px solid #262626',
+                  boxShadow: active ? '0 0 0 1px rgba(198,255,51,0.25)' : 'none',
+                  borderRadius: 12,
+                  padding: '12px 18px',
+                  textAlign: 'center',
+                  minWidth: 110,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  transition: 'border-color 0.15s ease, background 0.15s ease',
+                }}
+              >
+                <div style={{ fontSize: 11, color: active ? '#c6ff33' : 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 4 }}>{card.label}</div>
+                <div id={card.id} style={{ fontSize: 20, fontWeight: 900, color: card.color }}>{card.value}</div>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -119,7 +150,7 @@ export default function ModeratorActivity() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
           <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: 10 }}><span>🚩 Report Activity Timeline</span></h3>
           <div id="log-count-text" style={{ color: 'var(--text-muted)', fontSize: 13, fontWeight: 600 }}>
-            Showing {rows.length} activity record{rows.length === 1 ? '' : 's'} for {targetUsername || 'this moderator'}
+            Showing {visibleRows.length} activity record{visibleRows.length === 1 ? '' : 's'} for {targetUsername || 'this moderator'}{filter === 'all' ? '' : ` · ${filter} only`}
           </div>
         </div>
 
@@ -133,14 +164,21 @@ export default function ModeratorActivity() {
           <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Loading activity…</div>
         ) : (
           <>
-            <div id="activity-timeline-list" style={{ display: rows.length ? 'flex' : 'none', flexDirection: 'column', gap: 16 }}>
-              {rows.map((row, index) => {
+            <div id="activity-timeline-list" style={{ display: visibleRows.length ? 'flex' : 'none', flexDirection: 'column', gap: 16 }}>
+              {visibleRows.map((row, index) => {
                 const meta = STATUS_META[row.status] || STATUS_META.resolved;
                 const handledAt = row.status === 'discarded' ? row.discardedAt : row.resolvedAt;
                 const key = row.id || `activity-${index}`;
                 const isExpanded = expanded.has(key);
                 const evidence = Array.isArray(row.evidence) ? row.evidence : [];
                 const canOpenReport = !superAdminView;
+                // Any active non-warning decision may be uplifted by the authorised
+                // moderator, including after it has been resolved/appealed.
+                const canUplift = !superAdminView
+                  && row.status === 'resolved'
+                  && !row.uplifted
+                  && !!row.action
+                  && !['warning', 'no_action'].includes(String(row.action));
 
                 return (
                   <div key={key} style={{ background: '#141414', border: '1px solid #262626', borderRadius: 12, padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -160,6 +198,9 @@ export default function ModeratorActivity() {
                       {row.competitionName && <span>🏆 {row.competitionName}</span>}
                       <span>⚡ {capitalise(row.priority)} priority</span>
                       {row.status === 'resolved' && <span>Finding: {capitalise(row.finding)}</span>}
+                      {row.status === 'resolved' && row.action && <span>Action: {capitalise(row.action)}</span>}
+                      {row.appealStatus === 'submitted' && <span style={{ color: '#fb923c', fontWeight: 700 }}>Appeal submitted</span>}
+                      {row.uplifted && <span style={{ color: '#c6ff33', fontWeight: 700 }}>Action uplifted</span>}
                       {row.status === 'discarded' && <span>Reason: {capitalise(row.discardReason)}</span>}
                     </div>
 
@@ -173,6 +214,17 @@ export default function ModeratorActivity() {
                         <span style={{ fontSize: 11 }}>{isExpanded ? '▲' : '▼'}</span>
                         <span>{isExpanded ? 'Hide Details' : 'Details'}</span>
                       </button>
+
+                      {canUplift && (
+                        <button
+                          type="button"
+                          className="btn-table-secondary"
+                          onClick={() => setUpliftTarget(row)}
+                          style={{ marginLeft: 8, padding: '6px 14px', fontSize: 12, fontWeight: 800, borderRadius: 6, border: '1px solid rgba(251,146,60,0.5)', color: '#fb923c', background: 'rgba(251,146,60,0.08)', cursor: 'pointer' }}
+                        >
+                          Uplift
+                        </button>
+                      )}
 
                       {isExpanded && (
                         <div style={{ marginTop: 12, background: '#0d0f14', border: '1px solid rgba(198,255,51,0.25)', borderRadius: 12, padding: '18px 20px' }}>
@@ -188,6 +240,23 @@ export default function ModeratorActivity() {
                             {row.status === 'resolved' && <div><div style={{ fontSize: 11, textTransform: 'uppercase', color: '#64748b', fontWeight: 700, marginBottom: 2 }}>Finding / Action</div><div style={{ color: '#ffffff', fontWeight: 600 }}>{capitalise(row.finding)} · {capitalise(row.action)}</div></div>}
                             {row.status === 'discarded' && <div><div style={{ fontSize: 11, textTransform: 'uppercase', color: '#64748b', fontWeight: 700, marginBottom: 2 }}>Discard reason</div><div style={{ color: '#ffffff', fontWeight: 600 }}>{capitalise(row.discardReason)}</div></div>}
                           </div>
+
+                          {Array.isArray(row.decisionHistory) && row.decisionHistory.length > 0 && (
+                            <div style={{ marginTop: 12, padding: '10px 14px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+                              <strong style={{ color: '#ffffff', display: 'block', marginBottom: 6 }}>Decision history:</strong>
+                              {row.decisionHistory.map((decision) => (
+                                <div key={decision.version} style={{ display: 'flex', flexWrap: 'wrap', gap: 10, padding: '3px 0' }}>
+                                  <span>v{decision.version}</span>
+                                  <span>{capitalise(decision.finding)} · {capitalise(decision.action)}</span>
+                                  <span style={{ color: decision.status === 'uplifted' ? '#fb923c' : '#22c55e', fontWeight: 700 }}>
+                                    {decision.status === 'uplifted' ? 'Uplifted' : 'Active'}
+                                  </span>
+                                  <span>by @{decision.decidedBy}</span>
+                                  {decision.upliftReason && <span>· Uplift reason: {decision.upliftReason}</span>}
+                                </div>
+                              ))}
+                            </div>
+                          )}
 
                           {row.description && (
                             <div style={{ marginTop: 12, padding: '10px 14px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
@@ -206,13 +275,7 @@ export default function ModeratorActivity() {
                           {evidence.length > 0 && (
                             <div style={{ marginTop: 12 }}>
                               <div style={{ fontSize: 11, textTransform: 'uppercase', color: '#64748b', fontWeight: 700, marginBottom: 6 }}>Evidence</div>
-                              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                {evidence.map((file, evidenceIndex) => (
-                                  <a key={`${key}-ev-${evidenceIndex}`} href={file.url} target="_blank" rel="noreferrer" className="btn-table-secondary" style={{ padding: '6px 12px', fontSize: 12 }}>
-                                    {file.filename || `Evidence ${evidenceIndex + 1}`}
-                                  </a>
-                                ))}
-                              </div>
+                              <EvidenceGallery files={evidence} compact />
                             </div>
                           )}
 
@@ -232,16 +295,28 @@ export default function ModeratorActivity() {
               })}
             </div>
 
-            {rows.length === 0 && !error && (
+            {visibleRows.length === 0 && !error && (
               <div id="activity-empty-state" style={{ padding: '60px 20px', textAlign: 'center', background: '#141414', border: '1px dashed #262626', borderRadius: 12 }}>
                 <div style={{ fontSize: 36, marginBottom: 12 }}>📋</div>
                 <h4 style={{ margin: '0 0 6px', color: '#ffffff', fontSize: 16, fontWeight: 700 }}>No Activity Found</h4>
-                <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 13 }}>This Community Moderator has no resolved or discarded reports yet.</p>
+                <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 13 }}>{emptyCopy}</p>
               </div>
             )}
           </>
         )}
       </section>
+
+      {upliftTarget && (
+        <UpliftModal
+          report={upliftTarget}
+          onClose={() => setUpliftTarget(null)}
+          onDone={() => {
+            setUpliftTarget(null);
+            showToast('Action uplifted. The report has returned to the New queue.', 'success');
+            load();
+          }}
+        />
+      )}
     </main>
   );
 }

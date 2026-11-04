@@ -1,7 +1,5 @@
 export enum UserRole {
-  COMP_ADMIN = 'comp_admin',
-  DISPUTE_ADMIN = 'dispute_admin',
-  REVENUE_ADMIN = 'revenue_admin',
+  /** Platform administrator: competition, dispute and revenue operations. */
   SUPER_ADMIN = 'super_admin',
   TEAM_LEAD = 'team_lead',
   PARTICIPANT = 'participant',

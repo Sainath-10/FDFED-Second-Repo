@@ -63,7 +63,7 @@ export class DisputesService {
 
     // §13.3/§14 — notify the support/admin review team (resolved from real
     // accounts by role, never hardcoded usernames).
-    const supportRoles = new Set(['dispute_admin', 'admin', 'super_admin', 'comp_admin']);
+    const supportRoles = new Set(['admin', 'admin', 'super_admin', 'admin']);
     const staff = (await this.userRepository.findAll()).filter((u) => supportRoles.has(String((u as any).role || '').toLowerCase()));
     staff.forEach((admin) => {
       this.notificationsService.create({
@@ -176,7 +176,7 @@ export class DisputesService {
     }
 
     const updated = await this.disputeRepository.update(id, updates);
-    await this.auditLog.record('DISPUTE_ADMIN_RESOLVED', {
+    await this.auditLog.record('ADMIN_RESOLVED', {
       actor: adminUsername,
       entityType: 'dispute',
       entityId: id,

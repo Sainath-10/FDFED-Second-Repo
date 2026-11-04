@@ -97,15 +97,14 @@ npm run preview                                      # serve the built app local
 
 ## 4. About the users
 
-Eight accounts are created automatically. **Every account uses the password `nexus`.**
+These accounts are created automatically. **Every account uses the password `nexus`.**
 
 | Username | Email | Role | Lands on after login |
 |---|---|---|---|
 | `superadmin1` | superadmin1@nexus.gg | `super-admin` | `/pages/super-admin/super-dashboard.html` |
 | `superadmin2` | superadmin2@nexus.gg | `super-admin` | `/pages/super-admin/super-dashboard.html` |
-| `compadmin` | compadmin@nexus.gg | `comp_admin` | `/pages/admin/dashboard.html` |
-| `revenueadmin` | revenueadmin@nexus.gg | `revenue_admin` | `/pages/admin/revenue-transactions.html` |
-| `disputeadmin` | disputeadmin@nexus.gg | `dispute_admin` | `/pages/admin/disputes.html` |
+| `admin` | admin@nexus.gg | `admin` | `/pages/admin/dashboard.html` |
+| `communitymod` | communitymod@nexus.gg | `community_moderator` | `/pages/moderator/reports.html` |
 | `regular1` | regular1@nexus.gg | `participant` | `/pages/profile.html` |
 | `regular2` | regular2@nexus.gg | `participant` | `/pages/profile.html` |
 | `regular3` | regular3@nexus.gg | `participant` | `/pages/profile.html` |
@@ -120,8 +119,9 @@ How the accounts exist in two places (so login works online *and* offline):
    `frontend/src/services/auth.js` (`DEMO_ACCOUNTS`) power the local fallback login used when the
    API is unreachable.
 
-Roles in this app: `participant`, `team_lead`, `comp_admin`, `dispute_admin`, `revenue_admin`,
-`super-admin` (the UI name for the backend's `super_admin`).
+Roles in this app: `participant`, `team_lead`, `community_moderator`, `admin`, `super-admin`
+(the UI name for the backend's `super_admin`). The retired `comp_admin`, `dispute_admin` and
+`revenue_admin` roles no longer exist; their responsibilities are carried by `admin`.
 
 > Seeding is idempotent and only writes a password when an account has none, so a password you
 > change in the UI survives restarts. To reset the roster, clear the `users` table and restart the

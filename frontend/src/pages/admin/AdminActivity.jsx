@@ -1,4 +1,4 @@
-﻿/**
+/**
  * NEXUS ESPORTS — Admin Activity Logs
  *
  * resolves the target
@@ -13,7 +13,7 @@ import NexusData from '../../services/data.js';
 import NexusAPI from '../../services/api.js';
 import '../../styles/pages/admin/dashboard.css';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 const escapeHtml = (str) => String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
@@ -161,9 +161,9 @@ export default function AdminActivity() {
           const u = users.find((x) => String(x.username || x.email).toLowerCase() === username.toLowerCase());
           if (u) {
             const t = String(u.adminType || u.role || '').toLowerCase();
-            if (t.includes('dispute')) detectedType = 'Dispute Admin';
-            else if (t.includes('revenue')) detectedType = 'Revenue Admin';
-            else if (t.includes('comp') || t === 'admin') detectedType = 'Comp Admin';
+            if (t.includes('dispute')) detectedType = 'Platform Admin';
+            else if (t.includes('revenue')) detectedType = 'Admin';
+            else if (t.includes('comp') || t === 'admin') detectedType = 'Admin';
             else if (t.includes('super')) { detectedType = 'Super Admin'; isSuper = true; }
           }
         }

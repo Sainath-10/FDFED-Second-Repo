@@ -58,10 +58,8 @@ async function bootstrap() {
       '**Available Roles:**\n' +
       '- `participant`: Basic user role for participants\n' +
       '- `team_lead`: Can manage teams and competitions\n' +
-      '- `comp_admin`: Competition administrator\n' +
-      '- `dispute_admin`: Dispute administrator\n' +
-      '- `revenue_admin`: Revenue administrator\n' +
-      '- `admin`: Administrative access to most features\n' +
+      '- `community_moderator`: Reviews reports against organisers\n' +
+      '- `admin`: Competition, dispute and revenue administration\n' +
       '- `super_admin`: Full system access including user management\n\n' +
       '**Authorization:** Provide a valid JWT token in the `Authorization: Bearer <token>` header.',
     )

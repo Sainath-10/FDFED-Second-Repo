@@ -9,6 +9,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { LocalReportsAPI as ReportsAPI } from '../services/local/reporting.js';
 import useReportSync from '../hooks/useReportSync.js';
 import { DiscardModal, PlayerDecisionModal } from '../components/ReportActionModals.jsx';
+import EvidenceGallery from '../components/EvidenceGallery.jsx';
 import { PRIORITY_META, capitalise, formatDate, reportCode } from '../lib/reporting.js';
 import { showToast } from '../lib/toast.js';
 import '../styles/pages/reports.css';
@@ -104,13 +105,7 @@ export default function OrganizerReportDetail() {
       {(!report.evidence || report.evidence.length === 0) ? (
         <div className="report-empty">No evidence attached.</div>
       ) : (
-        <div className="evidence-list">
-          {report.evidence.map((file) => (
-            <a className="evidence-item" key={file.id} href={file.url} target="_blank" rel="noreferrer">
-              {file.filename || 'Evidence'}
-            </a>
-          ))}
-        </div>
+        <EvidenceGallery files={report.evidence} />
       )}
 
       <h2 style={{ fontSize: 15, color: '#e2e8f0', margin: '22px 0 10px' }}>Status history</h2>

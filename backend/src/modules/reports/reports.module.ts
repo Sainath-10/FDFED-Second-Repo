@@ -12,6 +12,7 @@ import { TeamEntity } from '../../entities/team.entity';
 import { MatchEntity } from '../../entities/match.entity';
 import { ChatMessageEntity } from '../../entities/chat-message.entity';
 import { AuditLogEntity } from '../../entities/audit-log.entity';
+import { CompetitionRemovalEntity } from '../../entities/competition-removal.entity';
 import { ReportsController } from './reports.controller';
 import { ReportsService } from './reports.service';
 import { CompetitionsModule } from '../competitions/competitions.module';
@@ -34,6 +35,7 @@ import { ReputationModule } from '../reputation/reputation.module';
       MatchEntity,
       ChatMessageEntity,
       AuditLogEntity,
+      CompetitionRemovalEntity,
     ]),
     CompetitionsModule,
     AuthModule,

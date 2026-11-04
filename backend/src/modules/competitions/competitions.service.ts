@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { CompetitionRepository } from './repositories/competition.repository';
 import { UserRepository } from '../auth/repositories/user.repository';
 import { TeamEntity } from '../../entities/team.entity';
+import { CompetitionRemovalEntity } from '../../entities/competition-removal.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditLogService } from '../../common/audit/audit.service';
 import { ReputationService } from '../reputation/reputation.service';
@@ -32,6 +33,8 @@ export class CompetitionsService {
     private userRepository: UserRepository,
     @InjectRepository(TeamEntity)
     private teamRepository: Repository<TeamEntity>,
+    @InjectRepository(CompetitionRemovalEntity)
+    private removalRepository: Repository<CompetitionRemovalEntity>,
     private notificationsService: NotificationsService,
     private auditLog: AuditLogService,
     private reputation: ReputationService,
@@ -171,9 +174,24 @@ export class CompetitionsService {
     return competition as any;
   }
 
-  async getCompetitionById(id: string): Promise<ICompetition> {
+  async getCompetitionById(id: string, viewerUsername?: string): Promise<ICompetition> {
     const comp = await this.competitionRepository.findById(id);
     if (!comp) return comp;
+    // A removed player is not a participant of this competition any more. The
+    // check runs against the database on every read, so a cached page or an old
+    // URL cannot restore access. Public/ANONYMOUS reads are unaffected.
+    if (viewerUsername) {
+      const removal = await this.removalRepository
+        .createQueryBuilder('removal')
+        .where('removal.competitionId = :id', { id })
+        .andWhere('lower(removal.username) = :username', { username: String(viewerUsername).toLowerCase() })
+        .getOne();
+      if (removal) {
+        throw new ForbiddenException(
+          'You have been removed from this competition. You can no longer access its team or competition management features.',
+        );
+      }
+    }
     // §2.4 — never expose a private competition's join code on the public
     // detail endpoint. The organizer-only /competitions/:id/join-code route
     // is the single authorized reveal path.
@@ -201,7 +219,7 @@ export class CompetitionsService {
     const comp = await this.competitionRepository.findById(competitionId);
     if (!comp) throw new NotFoundException(`Competition with ID ${competitionId} not found`);
     const isOrganizer = comp.createdBy === requesterUsername || (comp.organizers || []).includes(requesterUsername);
-    const isAdmin = ['admin', 'super_admin', 'comp_admin'].includes(requesterRole);
+    const isAdmin = ['admin', 'super_admin', 'admin'].includes(requesterRole);
     if (!isOrganizer && !isAdmin) {
       throw new ForbiddenException('Only organizers of this competition can view its join code.');
     }
@@ -283,7 +301,7 @@ export class CompetitionsService {
     if (!comp) throw new NotFoundException(`Competition with ID ${id} not found`);
 
     const isOrganizer = comp.createdBy === requesterUsername || (comp.organizers || []).includes(requesterUsername);
-    const isAdmin = ['admin', 'super_admin', 'comp_admin'].includes(requesterRole);
+    const isAdmin = ['admin', 'super_admin', 'admin'].includes(requesterRole);
     if (!isOrganizer && !isAdmin) {
       throw new ForbiddenException('Only an organizer of this competition (or an admin) can update it.');
     }
@@ -430,7 +448,7 @@ export class CompetitionsService {
     const comp = await this.competitionRepository.findById(id);
     if (!comp) throw new NotFoundException(`Competition with ID ${id} not found`);
     const isOrganizer = comp.createdBy === requesterUsername || (comp.organizers || []).includes(requesterUsername);
-    const isAdmin = ['admin', 'super_admin', 'comp_admin'].includes(requesterRole);
+    const isAdmin = ['admin', 'super_admin', 'admin'].includes(requesterRole);
     if (!isOrganizer && !isAdmin) {
       throw new ForbiddenException('Only organizers of this competition (or admins) can view participant contact details.');
     }
@@ -463,7 +481,7 @@ export class CompetitionsService {
     if (!comp) throw new NotFoundException(`Competition with ID ${id} not found`);
 
     const isOrganizer = comp.createdBy === requesterUsername || (comp.organizers || []).includes(requesterUsername);
-    const isAdmin = ['admin', 'super_admin', 'comp_admin'].includes(requesterRole);
+    const isAdmin = ['admin', 'super_admin', 'admin'].includes(requesterRole);
     if (!isOrganizer && !isAdmin) {
       throw new ForbiddenException('Only an organizer of this competition (or an admin) can end it.');
     }

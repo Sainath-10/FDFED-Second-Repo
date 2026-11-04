@@ -18,7 +18,7 @@ export default function AddAdmin() {
   const navigate = useNavigate();
   const { session } = useAuth();
   const [username, setUsername] = useState('');
-  const [adminType, setAdminType] = useState('comp_admin');
+  const [adminType, setAdminType] = useState('admin');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -72,7 +72,7 @@ export default function AddAdmin() {
 
           <div>
             <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#cbd5e1', marginBottom: 8 }}>Username or Email *</label>
-            <input type="text" id="page-admin-username" className="form-input" placeholder="e.g. disputeadmin or name@nexus.gg" required value={username} onChange={(e) => setUsername(e.target.value)} style={{ width: '100%', padding: '12px 16px', background: '#0f172a', border: '1px solid #334155', borderRadius: 10, color: '#fff', fontSize: 14 }} />
+            <input type="text" id="page-admin-username" className="form-input" placeholder="e.g. communitylead or name@nexus.gg" required value={username} onChange={(e) => setUsername(e.target.value)} style={{ width: '100%', padding: '12px 16px', background: '#0f172a', border: '1px solid #334155', borderRadius: 10, color: '#fff', fontSize: 14 }} />
             <p style={{ margin: '6px 0 0', fontSize: 12, color: '#64748b' }}>
               A new account is created if this user does not exist yet; an existing account is elevated. New accounts use the default password <strong>nexus</strong>.
             </p>
@@ -81,10 +81,8 @@ export default function AddAdmin() {
           <div>
             <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#cbd5e1', marginBottom: 8 }}>Admin Type / Role *</label>
             <select id="page-admin-type" className="form-select" required value={adminType} onChange={(e) => setAdminType(e.target.value)} style={{ width: '100%', padding: '12px 16px', background: '#0f172a', border: '1px solid #334155', borderRadius: 10, color: '#fff', fontSize: 14, cursor: 'pointer' }}>
-              <option value="comp_admin">🏆 Competition Admin (comp_admin)</option>
-              <option value="dispute_admin">🛡️ Dispute Admin (dispute_admin)</option>
-              <option value="revenue_admin">💳 Revenue Admin (revenue_admin)</option>
               <option value="super_admin">⚡ Super Admin (super_admin)</option>
+              <option value="admin">🔧 Platform Admin (admin)</option>
               <option value="community_moderator">🚩 Community Moderator (community_moderator)</option>
             </select>
           </div>

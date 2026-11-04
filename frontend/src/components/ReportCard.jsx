@@ -11,7 +11,7 @@ import {
   reportCode,
 } from '../lib/reporting.js';
 
-export default function ReportCard({ report, actions = null, detailHref = null }) {
+export default function ReportCard({ report, actions = null, detailHref = null, direction = null, statusLabel = null }) {
   const priority = PRIORITY_META[report.priority] || PRIORITY_META.medium;
   return (
     <article className="report-card">
@@ -27,8 +27,18 @@ export default function ReportCard({ report, actions = null, detailHref = null }
           {capitalise(report.reasonCode)}
         </span>
         <span className="report-pill" style={{ color: '#cbd5e1', border: '1px solid #334155' }}>
-          {STATUS_LABEL[report.status] || capitalise(report.status)}
+          {statusLabel || STATUS_LABEL[report.status] || capitalise(report.status)}
         </span>
+        {direction && (
+          <span
+            className="report-pill"
+            style={direction === 'filed-against'
+              ? { color: '#fb923c', background: 'rgba(251,146,60,0.12)', border: '1px solid rgba(251,146,60,0.4)' }
+              : { color: '#60a5fa', background: 'rgba(96,165,250,0.12)', border: '1px solid rgba(96,165,250,0.4)' }}
+          >
+            {direction === 'filed-against' ? 'Filed against you' : 'Filed by you'}
+          </span>
+        )}
       </div>
 
       <p className="report-people">
@@ -50,7 +60,7 @@ export default function ReportCard({ report, actions = null, detailHref = null }
       <div className="report-actions">
         {actions}
         {detailHref && (
-          <Link className="report-btn" to={detailHref}>
+          <Link className="report-btn report-detail-link" to={detailHref}>
             Open details
           </Link>
         )}

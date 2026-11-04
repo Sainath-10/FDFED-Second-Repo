@@ -69,7 +69,7 @@ export default function DisputeEscalation() {
     } catch (e) {
       console.error('Failed to update dispute status:', e);
     }
-    showToast('Dispute escalated to Dispute Admin successfully!');
+    showToast('Dispute escalated to Platform Admin successfully!');
     setTimeout(() => navigate('/pages/disputes.html'), 1400);
   }
 
@@ -81,7 +81,7 @@ export default function DisputeEscalation() {
       </Link>
 
       <h1 className="page-title">Escalate Dispute</h1>
-      <p className="page-subtitle">Send an unresolved dispute to the Dispute Admin for final review.</p>
+      <p className="page-subtitle">Send an unresolved dispute to the Platform Admin for final review.</p>
 
       <div className="layout-grid">
         <div className="form-card">
@@ -108,7 +108,7 @@ export default function DisputeEscalation() {
 
             <div className="form-group">
               <label className="form-label">Summary of Escalation</label>
-              <textarea className="form-textarea form-textarea-tall" placeholder="Briefly explain why this dispute needs Dispute Admin review. Include any new information not covered in the original dispute." value={summary} onChange={(e) => setSummary(e.target.value)} disabled={ended} />
+              <textarea className="form-textarea form-textarea-tall" placeholder="Briefly explain why this dispute needs Platform Admin review. Include any new information not covered in the original dispute." value={summary} onChange={(e) => setSummary(e.target.value)} disabled={ended} />
             </div>
 
             <div className="form-group">
@@ -125,11 +125,11 @@ export default function DisputeEscalation() {
 
             <div className="warning-box">
               <p className="warning-text">
-                ⚠️ <strong>Important:</strong> Dispute Admin escalations are reserved for serious unresolved matters. Frivolous escalations may result in account restrictions. Dispute Admins typically respond within 72 hours.
+                ⚠️ <strong>Important:</strong> Platform Admin escalations are reserved for serious unresolved matters. Frivolous escalations may result in account restrictions. Platform Admins typically respond within 72 hours.
               </p>
             </div>
 
-            <button type="submit" className="btn-auth-submit" style={{ fontSize: 16 }} disabled={ended}>Send to Dispute Admin</button>
+            <button type="submit" className="btn-auth-submit" style={{ fontSize: 16 }} disabled={ended}>Send to Platform Admin</button>
           </form>
         </div>
 
@@ -139,7 +139,7 @@ export default function DisputeEscalation() {
             <div className="guidelines-list">
               <p>✅ Only escalate if the admin response is unsatisfactory or delayed 48h+.</p>
               <p>✅ Include all relevant evidence upfront to speed up resolution.</p>
-              <p>✅ Be specific — Dispute Admins review dozens of cases daily.</p>
+              <p>✅ Be specific — Platform Admins review dozens of cases daily.</p>
               <p>❌ Do not escalate the same dispute twice without new evidence.</p>
               <p>❌ Personal grievances or ranking disputes are not grounds for escalation.</p>
             </div>
@@ -147,7 +147,7 @@ export default function DisputeEscalation() {
           <div className="comp-sidebar-block">
             <h3>Response Times</h3>
             <div className="info-row"><span className="key">Admin Review</span><span className="val">24–48h</span></div>
-            <div className="info-row"><span className="key">Dispute Admin</span><span className="val">48–72h</span></div>
+            <div className="info-row"><span className="key">Platform Admin</span><span className="val">48–72h</span></div>
             <div className="info-row"><span className="key">Final Decision</span><span className="val">Binding</span></div>
           </div>
         </div>

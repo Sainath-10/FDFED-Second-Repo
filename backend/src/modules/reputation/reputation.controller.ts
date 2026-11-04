@@ -154,6 +154,12 @@ export class ReputationController {
     return this.reputation.getProfile(req.user.username);
   }
 
+  @Get('me/overview')
+  @ApiOperation({ summary: 'My organiser reputation, warnings and history' })
+  async myOverview(@Request() req: any) {
+    return this.reputation.getOrganiserOverview(req.user.username);
+  }
+
   @Get('prize-pool-exceptions/mine')
   @ApiOperation({ summary: 'My prize-pool exception requests' })
   async myExceptions(@Request() req: any) {
@@ -162,7 +168,7 @@ export class ReputationController {
 
   @Get('prize-pool-exceptions')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN, UserRole.COMP_ADMIN, UserRole.COMMUNITY_MODERATOR)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COMMUNITY_MODERATOR)
   @ApiOperation({ summary: 'Prize-pool exception requests (administrative review)' })
   async exceptions(@Query('status') status?: string) {
     return this.reputation.listExceptions({ status });
@@ -176,7 +182,7 @@ export class ReputationController {
 
   @Post('prize-pool-exceptions/:id/review')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN, UserRole.COMP_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
   @ApiOperation({ summary: 'Approve or reject a prize-pool exception' })
   async reviewException(@Param('id') id: string, @Body() dto: ReviewExceptionDto, @Request() req: any) {
     return this.reputation.reviewException(id, dto.status, dto.note || '', req.user.username);
@@ -197,14 +203,30 @@ export class ReputationController {
   async profile(@Param('username') username: string, @Request() req: any) {
     const role = String(req.user?.role || '');
     const isSelf = String(req.user?.username).toLowerCase() === String(username).toLowerCase();
-    const allowed = isSelf || ['community_moderator', 'super_admin', 'admin', 'comp_admin'].includes(role);
+    const allowed = isSelf || ['community_moderator', 'super_admin', 'admin', 'admin'].includes(role);
     if (!allowed) throw new ForbiddenException('You can only view your own reputation profile.');
     return this.reputation.getProfile(username);
   }
 
+  @Get('user/:username/public')
+  @ApiOperation({ summary: 'Public organiser reputation context for a competition' })
+  async publicOverview(@Param('username') username: string) {
+    return this.reputation.getPublicOrganiserOverview(username);
+  }
+
+  @Get('user/:username/overview')
+  @ApiOperation({ summary: 'Organiser reputation, warnings and history' })
+  async overview(@Param('username') username: string, @Request() req: any) {
+    const role = String(req.user?.role || '');
+    const isSelf = String(req.user?.username).toLowerCase() === String(username).toLowerCase();
+    const allowed = isSelf || ['community_moderator', 'super_admin', 'admin', 'admin'].includes(role);
+    if (!allowed) throw new ForbiddenException('You can only view your own reputation overview.');
+    return this.reputation.getOrganiserOverview(username);
+  }
+
   @Get('user/:username/history')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.COMMUNITY_MODERATOR, UserRole.SUPER_ADMIN, UserRole.COMP_ADMIN)
+  @Roles(UserRole.COMMUNITY_MODERATOR, UserRole.SUPER_ADMIN, UserRole.ADMIN)
   @ApiOperation({ summary: 'Reputation and sanction history' })
   async history(@Param('username') username: string) {
     return this.reputation.getHistory(username);

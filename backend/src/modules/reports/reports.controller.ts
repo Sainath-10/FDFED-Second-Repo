@@ -132,7 +132,7 @@ export class ReportsController {
   // ─── Maintenance ────────────────────────────────────────────────────────────
   @Post('maintenance/escalate')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN, UserRole.COMP_ADMIN, UserRole.COMMUNITY_MODERATOR)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COMMUNITY_MODERATOR)
   @ApiOperation({ summary: 'Run the deadline/reminder sweep (also runs periodically)' })
   async escalate(@Request() req: any) {
     return this.reports.escalateOverdue();

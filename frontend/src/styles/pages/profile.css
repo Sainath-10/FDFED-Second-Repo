@@ -165,9 +165,22 @@
   gap: 4px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   margin-bottom: 24px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(198, 255, 51, 0.35) transparent;
+}
+
+.profile-tabs::-webkit-scrollbar { height: 5px; }
+.profile-tabs::-webkit-scrollbar-thumb {
+  background: rgba(198, 255, 51, 0.35);
+  border-radius: 999px;
 }
 
 .ptab {
+  flex: 0 0 auto;
+  white-space: nowrap;
   font-size: 13px;
   font-weight: 700;
   color: var(--text-muted);
@@ -657,4 +670,107 @@ input:checked + .nexus-slider:before {
 .btn-logout:hover {
   background: #b8f020 !important;
   transform: translateY(-2px);
+}
+
+/* ── Organiser Reputation dashboard ── */
+.rep-dashboard { display: grid; gap: 14px; }
+.rep-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  min-width: 0;
+}
+.rep-panel-head h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  color: var(--text-white);
+}
+.rep-panel-head p { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-muted); }
+.rep-current { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.rep-explain { margin: 0; color: var(--text-light); font-size: 13px; line-height: 1.55; }
+.rep-alert { color: #f87171; font-size: 11.5px; font-weight: 700; }
+.rep-facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px 20px;
+}
+.rep-facts div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.rep-facts dt {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.rep-facts dd { margin: 0; color: var(--text-white); font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
+.rep-stat-row { display: flex; align-items: flex-start; gap: 26px; flex-wrap: wrap; }
+.rep-stat-row .n { display: block; font-size: 24px; font-weight: 800; line-height: 1.1; color: var(--text-white); }
+.rep-stat-row .l {
+  display: block;
+  margin-top: 4px;
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.rep-level-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.rep-level-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  min-width: 0;
+}
+.rep-level-tile .dot { width: 8px; height: 8px; border-radius: 50%; }
+.rep-level-name { font-size: 12px; font-weight: 800; }
+.rep-level-tile strong { font-size: 22px; font-weight: 800; color: var(--text-white); line-height: 1.1; }
+.rep-level-tile small {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.rep-footnote { margin: 0; color: var(--text-muted); font-size: 11px; line-height: 1.5; }
+.rep-timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.rep-timeline li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  min-width: 0;
+}
+.rep-timeline li:last-child { border-bottom: none; }
+.rep-timeline-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
+.rep-transition {
+  color: var(--text-white);
+  font-size: 13px;
+  font-weight: 700;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.rep-arrow { color: var(--text-muted); margin: 0 3px; }
+.rep-timeline time { margin-left: auto; color: var(--text-muted); font-size: 11.5px; white-space: nowrap; }
+.rep-empty {
+  margin: 0;
+  padding: 16px;
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+.rep-privacy { margin: 0; color: var(--text-muted); font-size: 11.5px; line-height: 1.5; }
+@media (max-width: 720px) {
+  .rep-level-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rep-panel { padding: 16px; }
 }

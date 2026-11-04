@@ -100,6 +100,25 @@
   opacity: 0.8;
 }
 
+/* Page-level tabs (Reports / Case Discussions) reuse the same pill styling. */
+.reports-tabs.page-tabs {
+  gap: 10px;
+  margin-bottom: 22px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--report-border);
+}
+
+.reports-tabs.page-tabs .reports-tab {
+  padding: 9px 20px;
+  font-size: 14px;
+}
+
+.reports-tabs.page-tabs .reports-tab.active {
+  background: rgba(198, 255, 51, 0.14);
+  border-color: rgba(198, 255, 51, 0.65);
+  color: #c6ff33;
+}
+
 .reports-list {
   display: grid;
   gap: 12px;
@@ -155,11 +174,81 @@
   word-break: break-word;
 }
 
+/* One clean action row: review actions grouped left, Open details pinned right. */
 .report-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
+}
+.report-actions .report-btn,
+.report-actions .report-detail-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 14px;
+  line-height: 1.2;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.report-actions .report-detail-link {
+  margin-left: auto;
+  border-color: rgba(148, 163, 184, 0.55);
+  background: rgba(148, 163, 184, 0.06);
+  color: #e2e8f0;
+}
+.report-actions .report-detail-link:hover {
+  border-color: #c6ff33;
+  color: #c6ff33;
+}
+
+/* Complaint context shown when reporting an organiser after a decision. */
+.report-context-card {
+  max-width: 720px;
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  background: rgba(251, 146, 60, 0.08);
+  border: 1px solid rgba(251, 146, 60, 0.4);
+  border-radius: 10px;
+}
+.report-context-head {
+  color: #fb923c;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  margin-bottom: 10px;
+}
+.report-context-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 4px 0;
+  font-size: 13px;
+  color: #cbd5e1;
+}
+.report-context-row strong { color: #e2e8f0; }
+.report-context-note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #94a3b8;
+}
+
+/* Competition access revoked after removal. */
+.comp-removed-banner {
+  margin-bottom: 20px;
+  padding: 14px 18px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  border-radius: 10px;
+  color: #fca5a5;
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+@media (max-width: 640px) {
+  .report-actions .report-detail-link { margin-left: 0; }
 }
 
 .report-btn {
@@ -512,7 +601,103 @@
 
 @media (max-width: 640px) {
   .reports-page h1.reports-title { font-size: 21px; }
+  .reports-tabs.page-tabs .reports-tab { flex: 1 1 140px; justify-content: center; }
   .report-card { padding: 13px; }
+  .report-actions { gap: 8px; }
   .reports-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .report-modal { padding: 16px; }
+}
+/* Evidence upload — aligned button, filename row and non-overflowing list */
+.evidence-upload {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 10px 12px 10px 14px;
+  background: #0b1420;
+  border: 1px solid var(--report-border);
+  border-radius: 9px;
+  min-width: 0;
+}
+.evidence-upload:focus-within { border-color: rgba(198, 255, 51, 0.6); }
+.report-field input.evidence-upload-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+.evidence-upload-btn {
+  flex: 0 0 auto;
+  margin-left: 4px;
+  border: 1px solid rgba(198, 255, 51, 0.45);
+  background: rgba(198, 255, 51, 0.12);
+  color: #c6ff33;
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.evidence-upload-btn:hover { background: rgba(198, 255, 51, 0.2); }
+.evidence-upload-input:focus-visible + .evidence-upload-btn {
+  outline: 2px solid #c6ff33;
+  outline-offset: 2px;
+}
+.evidence-upload-name {
+  flex: 1 1 160px;
+  min-width: 0;
+  color: var(--report-muted);
+  font-size: 12.5px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.evidence-file-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+.evidence-file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  background: #0b1420;
+  border: 1px solid var(--report-border);
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+.evidence-file-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: #cbd5e1;
+}
+.evidence-file-remove {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: 1px solid var(--report-border);
+  background: transparent;
+  color: var(--report-muted);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+}
+.evidence-file-remove:hover { color: #f87171; border-color: rgba(239, 68, 68, 0.5); }
+@media (max-width: 480px) {
+  .evidence-upload { padding: 10px; gap: 8px 10px; }
+  .evidence-upload-btn { margin-left: 0; }
+  .evidence-upload-name { flex-basis: 100%; }
 }

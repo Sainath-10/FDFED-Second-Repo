@@ -22,10 +22,11 @@ export default function ReportForm() {
   const targetRole = params.get('role') || 'player';
   const matchId = params.get('matchId') || '';
   const source = params.get('source') || 'report-button';
+  const originalReportId = params.get('originalReportId') || '';
+  const [originalReport, setOriginalReport] = useState(null);
 
   const [reasonCode, setReasonCode] = useState('cheating');
   const [description, setDescription] = useState('');
-  const [incidentAt, setIncidentAt] = useState('');
   const [evidence, setEvidence] = useState([]);
   const [restriction, setRestriction] = useState(null);
   const [error, setError] = useState('');
@@ -37,6 +38,17 @@ export default function ReportForm() {
   useEffect(() => {
     if (!reasons.some((r) => r.code === reasonCode)) setReasonCode(reasons[0]?.code || 'other');
   }, [reasons, reasonCode]);
+
+  useEffect(() => {
+    if (!originalReportId) return;
+    ReportsAPI.mine()
+      .then((res) => {
+        if (res.ok && Array.isArray(res.data)) {
+          setOriginalReport(res.data.find((row) => String(row.id) === originalReportId) || null);
+        }
+      })
+      .catch(() => undefined);
+  }, [originalReportId]);
 
   useEffect(() => {
     if (!compId) return;
@@ -88,8 +100,8 @@ export default function ReportForm() {
         reasonCode,
         description: description.trim(),
         matchId: matchId || undefined,
-        incidentAt: incidentAt ? new Date(incidentAt).toISOString() : undefined,
         sourcePage: source,
+        originalReportId: originalReportId || undefined,
         evidence: payload,
       });
       if (!res.ok) {
@@ -145,6 +157,25 @@ export default function ReportForm() {
         </div>
       )}
 
+      {originalReportId && (
+        <div className="report-context-card">
+          <div className="report-context-head">Complaint about an organiser decision</div>
+          {originalReport ? (
+            <>
+              <div className="report-context-row"><span>Original report</span><strong>{originalReport.code}</strong></div>
+              <div className="report-context-row"><span>Decision</span><strong>{capitalise(originalReport.finding)} · {capitalise(originalReport.action)}</strong></div>
+              <div className="report-context-row"><span>Recorded by</span><strong>@{originalReport.resolvedBy}</strong></div>
+              <p className="report-context-note">
+                This is a new, independent report reviewed by the Community Moderator. The original report and
+                its decision are not changed by submitting it.
+              </p>
+            </>
+          ) : (
+            <p className="report-context-note">Loading the original decision…</p>
+          )}
+        </div>
+      )}
+
       <form onSubmit={submit} style={{ maxWidth: 720 }}>
         {error && <div className="report-inline-error">{error}</div>}
 
@@ -183,34 +214,42 @@ export default function ReportForm() {
           <span className="hint">{description.trim().length}/15 characters minimum</span>
         </div>
 
-        <div className="report-form-grid">
-          <div className="report-field">
-            <label htmlFor="incident">Incident date/time <span className="hint">Optional</span></label>
-            <input id="incident" type="datetime-local" value={incidentAt} onChange={(e) => setIncidentAt(e.target.value)} />
+        <div className="report-field">
+          <label htmlFor="evidence">Evidence <span className="hint">Optional, up to 5 images (5 MB each)</span></label>
+          <div className="evidence-upload">
+            <input
+              id="evidence"
+              className="evidence-upload-input"
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              multiple
+              onChange={addFiles}
+            />
+            <label className="evidence-upload-btn" htmlFor="evidence">Choose files</label>
+            <span className="evidence-upload-name">
+              {evidence.length
+                ? `${evidence.length} ${evidence.length === 1 ? 'file' : 'files'} selected`
+                : 'No files selected'}
+            </span>
           </div>
-          <div className="report-field">
-            <label htmlFor="evidence">Evidence <span className="hint">Optional, up to 5 images (5 MB each)</span></label>
-            <input id="evidence" type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={addFiles} />
-          </div>
+          {evidence.length > 0 && (
+            <ul className="evidence-file-list">
+              {evidence.map((file, index) => (
+                <li className="evidence-file" key={`${file.name}-${index}`}>
+                  <span className="evidence-file-name" title={file.name}>{file.name}</span>
+                  <button
+                    type="button"
+                    className="evidence-file-remove"
+                    aria-label={`Remove ${file.name}`}
+                    onClick={() => setEvidence(evidence.filter((_, i) => i !== index))}
+                  >
+                    ✕
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
-
-        {evidence.length > 0 && (
-          <div className="evidence-list">
-            {evidence.map((file, index) => (
-              <span className="evidence-item" key={`${file.name}-${index}`}>
-                {file.name}
-                <button
-                  type="button"
-                  className="report-btn ghost"
-                  style={{ padding: '2px 6px' }}
-                  onClick={() => setEvidence(evidence.filter((_, i) => i !== index))}
-                >
-                  ✕
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
 
         <div className="report-modal-actions" style={{ justifyContent: 'flex-start', marginTop: 20 }}>
           <button type="submit" className="report-btn primary" disabled={busy || locked}>
@@ -219,7 +258,7 @@ export default function ReportForm() {
           <button
             type="button"
             className="report-btn ghost"
-            onClick={() => { setDescription(''); setEvidence([]); setIncidentAt(''); setError(''); }}
+            onClick={() => { setDescription(''); setEvidence([]); setError(''); }}
           >
             Discard
           </button>

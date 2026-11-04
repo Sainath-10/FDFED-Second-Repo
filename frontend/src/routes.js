@@ -30,9 +30,6 @@ export const ROLE_ROUTES = {
   team_lead: '/pages/profile.html',
   teamlead: '/pages/profile.html',
   admin: '/pages/admin/dashboard.html',
-  comp_admin: '/pages/admin/dashboard.html',
-  dispute_admin: '/pages/admin/disputes.html',
-  revenue_admin: '/pages/admin/revenue-transactions.html',
   'super-admin': '/pages/super-admin/super-dashboard.html',
   super_admin: '/pages/super-admin/super-dashboard.html',
   community_moderator: '/pages/moderator/reports.html',
@@ -42,7 +39,7 @@ export const ROLE_ROUTES = {
  * Roles allowed into the admin area. Per the current admin/dispute model the
  * Super Admin has its own area and no admin-route access, so it is excluded.
  */
-export const ADMIN_ROLES = ['admin', 'comp_admin', 'dispute_admin', 'revenue_admin'];
+export const ADMIN_ROLES = ['admin'];
 export const SUPER_ADMIN_ROLES = ['super-admin'];
 export const TEAM_LEAD_ROLES = ['team_lead'];
 /** Handles reports against organisers only. */

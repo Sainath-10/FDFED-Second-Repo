@@ -63,7 +63,7 @@ export default function RevokeAdmin() {
 
           <div>
             <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#cbd5e1', marginBottom: 8 }}>Admin Username or Email *</label>
-            <input type="text" id="page-revoke-username" className="form-input" placeholder="e.g. compadmin@nexus.gg" required value={username} onChange={(e) => setUsername(e.target.value)} style={{ width: '100%', padding: '12px 16px', background: '#0f172a', border: '1px solid #334155', borderRadius: 10, color: '#fff', fontSize: 14 }} />
+            <input type="text" id="page-revoke-username" className="form-input" placeholder="e.g. communitylead@nexus.gg" required value={username} onChange={(e) => setUsername(e.target.value)} style={{ width: '100%', padding: '12px 16px', background: '#0f172a', border: '1px solid #334155', borderRadius: 10, color: '#fff', fontSize: 14 }} />
           </div>
 
           <div>

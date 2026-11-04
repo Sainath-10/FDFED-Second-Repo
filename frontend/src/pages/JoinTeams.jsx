@@ -14,6 +14,7 @@ import NexusData from '../services/data.js';
 import NexusTeamWorkflow from '../services/teamWorkflow.js';
 import useJoinCodeGate from '../hooks/useJoinCodeGate.jsx';
 import { TeamsAPI } from '../services/api.js';
+import { LocalReportsAPI } from '../services/local/reporting.js';
 import { showToast } from '../lib/toast.js';
 import PlayerFeeModal from '../components/PlayerFeeModal.jsx';
 import '../styles/pages/join-teams.css';
@@ -48,7 +49,20 @@ export default function JoinTeams() {
   const [version, setVersion] = useState(0);
   const [checkout, setCheckout] = useState(null); // { teamId, teamName, requestId, feeAmount }
   const [paying, setPaying] = useState(false);
+  const [isRemoved, setIsRemoved] = useState(false);
   const listRef = useRef(null);
+
+  // A removed player cannot re-enter a competition through its join page, an
+  // old bookmark or a ?teamId= direct-join link. The backend rejects the same
+  // requests; this keeps the page honest.
+  useEffect(() => {
+    let cancelled = false;
+    if (!id || !session?.username) { setIsRemoved(false); return undefined; }
+    LocalReportsAPI.removalStatus(id)
+      .then((res) => { if (!cancelled && res.ok && res.data) setIsRemoved(!!res.data.removed); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [id, session && session.username]);
 
   const comp = useMemo(
     () => (id && NexusData ? NexusData.getCompetitionById(id) : null),
@@ -168,6 +182,20 @@ export default function JoinTeams() {
       card.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   }, [comp, preferredTeamId, version]);
+
+  if (isRemoved) {
+    return (
+      <main className="join-page">
+        <div
+          role="alert"
+          style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.45)', borderRadius: 10, padding: '14px 18px', color: '#fca5a5', fontSize: 14, fontWeight: 700, lineHeight: 1.5, marginBottom: 20 }}
+        >
+          You have been removed from this competition. You can no longer access its team or competition management features.
+        </div>
+        <Link to="/pages/my-reports.html" className="create-team-cta">View your reports</Link>
+      </main>
+    );
+  }
 
   if (!comp) {
     return <main className="join-page"><a href="/pages/comp-info.html" className="back-btn" onClick={(e) => { e.preventDefault(); navigate('/pages/competitions.html'); }}>Back to Competition</a></main>;
