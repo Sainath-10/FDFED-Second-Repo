@@ -347,7 +347,8 @@ async function competitionServiceTests() {
 
   await test('competitions can be created without any identity verification', async () => {
     const service = makeService(null);
-    await expectThrow(() => service.createCompetition(validDto, 'bob', 'u2'), ForbiddenException, 'verification is required');
+    const comp: any = await service.createCompetition(validDto, 'bob', 'u2');
+    assert.equal(comp.createdBy, 'bob');
   });
 
   await test('a registered player cannot also be made a co-organizer', async () => {

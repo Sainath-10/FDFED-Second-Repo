@@ -40,15 +40,9 @@ export class CompetitionsService {
     @Optional() private lifecycle?: LifecycleService,
   ) {}
 
-  /** Mock-verification gate (§12.4). Backend enforcement — frontend UI alone is insufficient. */
-  private async assertVerified(userId: string, context: string) {
+  private async requireUser(userId: string) {
     const user = await this.userRepository.findById(userId);
     if (!user) throw new BadRequestException('Authenticated user no longer exists.');
-    if (String(user.verificationStatus || '').toLowerCase() !== 'verified') {
-      throw new ForbiddenException(
-        `Simulated Aadhaar verification is required before you can ${context}. Open your Profile → Verification to complete the (simulated) verification flow.`,
-      );
-    }
     return user;
   }
 
@@ -57,9 +51,8 @@ export class CompetitionsService {
     createdBy: string = 'system',
     authenticatedUserId?: string,
   ): Promise<ICompetition> {
-    // §12.4 verification gate — enforced on the backend
     if (authenticatedUserId) {
-      const organizer: any = await this.assertVerified(authenticatedUserId, 'create or publish a competition');
+      const organizer: any = await this.requireUser(authenticatedUserId);
       // §9.5 — repeated cancellations/fraud lower the trust score and block new competitions.
       const minimum = Number(process.env.MIN_ORGANIZER_TRUST_SCORE ?? DEFAULT_MIN_ORGANIZER_TRUST);
       if (!organizerTrusted(organizer.organizerTrustScore, minimum)) {

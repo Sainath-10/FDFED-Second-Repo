@@ -111,7 +111,7 @@ export class LifecycleService implements OnModuleInit, OnModuleDestroy {
   }
   private async verified(m: EntityManager, username: string) {
     const user = await m.findOneBy(User, { username });
-    if (!user || user.banned || user.verificationStatus !== 'verified') throw new ForbiddenException('A verified account is required.');
+    if (!user || user.banned) throw new ForbiddenException('An active, non-banned account is required.');
     return user;
   }
   private async penalize(m: EntityManager, username: string, points: number) {
