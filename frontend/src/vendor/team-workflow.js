@@ -155,6 +155,9 @@
   const SERVER_NOTIFICATION_TYPES = ['team-disbanded', 'team-member-removed', 'team-invite', 'team-invite-result', 'team-join-request', 'team-join-payment', 'team-join-paid', 'join-request-approved', 'join-request-updated'];
   // Final outcomes: older records were saved as pending, but nothing is awaiting an answer.
   const CLOSED_NOTIFICATION_TYPES = ['team-disbanded', 'team-member-removed'];
+  // Payment lifecycle notices (fees, escrow, payouts, refunds). They are updates, never requests.
+  const PAYMENT_NOTIFICATION_TYPES = ['competition-live', 'new-competition-alert', 'registration-confirmed', 'new-team-joined', 'prize-pool-confirmed', 'prize-pool-reminder', 'prize-pool-urgent', 'tournament-completed', 'winner-payout', 'organizer-revenue-released', 'refund-apology', 'registration-refunded', 'competition-cancelled-player', 'competition-cancelled-organizer', 'settlement-reversed-organizer', 'held-prize-distributed', 'trust-score-reviewed'];
+  const isPaymentNotification = item => !!item && (PAYMENT_NOTIFICATION_TYPES.includes(item.type) || (item.meta && item.meta.category === 'payment'));
   const INVITE_STATUS_TO_NOTIFICATION = { accepted: 'approved', declined: 'rejected', revoked: 'rejected' };
 
   async function syncServerNotifications(username) {
@@ -166,7 +169,12 @@
         api.Teams.getInvites(username)
       ]);
       const incoming = notifRes && notifRes.ok && Array.isArray(notifRes.data)
-        ? notifRes.data.filter(item => SERVER_NOTIFICATION_TYPES.includes(item.type))
+        ? notifRes.data
+          .filter(item => SERVER_NOTIFICATION_TYPES.includes(item.type) || isPaymentNotification(item))
+          // Older builds saved a second, generic "Competition live" notice next to the detailed one.
+          .filter((item, _, all) => !(item.type === 'competition-live' && item.title === 'Competition live'
+            && all.some(other => other !== item && other.type === 'competition-live' && other.meta && item.meta && other.meta.compId === item.meta.compId)))
+          .map(item => (isPaymentNotification(item) ? { ...item, status: 'info', body: String(item.body || '').replace(/^Mock: /, '') } : item))
         : [];
       // Older removal notices made in this browser have no reason; the backend's copy replaces them.
       const removals = incoming.filter(item => item.type === 'team-member-removed').map(item => String(item.body || ''));

@@ -14,8 +14,10 @@ import '../styles/pages/competitions.css';
 
 const FILTERS = ['all', 'featured', 'live', 'hot', 'new', 'league', 'tournament'];
 
+/** Cancelled, completed, settled and unpaid-draft competitions are not open to browse. */
 function isHidden(comp) {
-  return comp.ended || comp.status === 'completed';
+  if (comp.paymentStatus === 'AWAITING_PLATFORM_FEE') return true;
+  return NexusData?.isClosedCompetition ? NexusData.isClosedCompetition(comp) : (comp.ended || comp.status === 'completed');
 }
 
 export default function Competitions() {
@@ -36,7 +38,8 @@ export default function Competitions() {
     (async () => {
       try {
         const apiComps = await Promise.race([
-          NexusData.fetchActiveCompetitionsFromAPI(),
+          // Full list, so a competition cancelled since the last visit updates the local cache too.
+          NexusData.fetchCompetitionsFromAPI(),
           new Promise((resolve) => setTimeout(() => resolve(null), 2000)),
         ]);
         if (!cancelled && apiComps && apiComps.length > 0) {

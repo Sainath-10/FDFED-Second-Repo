@@ -232,6 +232,65 @@ function formatApiDateRange(startDate, endDate) {
   return `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`;
 }
 
+/**
+ * Prize breakdown from the server's prize distribution (integer paise, in
+ * finishing order). This is what settlement actually pays, so it is the
+ * source of truth for the "Prize Breakdown" shown to players.
+ */
+const PRIZE_PLACE_LABELS = ['1st Place', '2nd Place', '3rd Place'];
+function prizeBreakdownFromApi(c) {
+  const parts = Array.isArray(c.prizeDistributionMinor) ? c.prizeDistributionMinor.map(Number).filter(n => n > 0) : [];
+  if (!parts.length) return undefined; // legacy competitions: keep any locally known breakdown
+  return parts.map((minor, i) => ({
+    place: PRIZE_PLACE_LABELS[i] || `${i + 1}th Place`,
+    amount: `₹${(minor / 100).toLocaleString('en-IN')}`,
+  }));
+}
+
+/** Server-owned fields: a cached local copy must never override these. */
+const SERVER_OWNED_FIELDS = ['status', 'badge', 'badgeClass', 'startDate', 'endDate', 'registrationOpenAt', 'registrationCloseAt', 'paymentStatus', 'organizerPaid', 'prizePoolPaid', 'platformFee', 'prize', 'prizePool', 'prizes', 'prizeDistributionMinor', 'feeType', 'entryFeeAmount', 'abandonedReason', 'endedAt'];
+
+/** Payment states after which a competition is over (cancelled, refunded, settled, expired…). */
+const CLOSED_PAYMENT_STATES = ['PRIZE_RELEASED', 'REFUND_ISSUED', 'CANCELLED', 'EXPIRED', 'ABANDONED', 'REVERSED'];
+const CANCELLED_PAYMENT_STATES = ['REFUND_ISSUED', 'CANCELLED', 'EXPIRED', 'ABANDONED'];
+
+/** True when a competition was cancelled (by the organizer, finance, or automatically). */
+function isCancelledCompetition(c) {
+  return !!c && (String(c.status || '').toLowerCase() === 'cancelled' || CANCELLED_PAYMENT_STATES.includes(c.paymentStatus));
+}
+/** True when a competition no longer accepts players: completed, settled, or cancelled. */
+function isClosedCompetition(c) {
+  return !!c && (!!c.ended || ['completed', 'cancelled'].includes(String(c.status || '').toLowerCase()) || CLOSED_PAYMENT_STATES.includes(c.paymentStatus));
+}
+const time = (v) => (v ? +new Date(v) : NaN);
+const shortDate = (v) => new Date(v).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+
+/**
+ * Whether new teams/players can join right now, mirroring the server's rules:
+ * not before registration opens, not after it closes, never once play has started.
+ */
+function registrationState(c, now = Date.now()) {
+  if (!c) return { open: false, reason: 'missing', label: 'Competition unavailable' };
+  if (isCancelledCompetition(c)) return { open: false, reason: 'cancelled', label: 'Competition cancelled' };
+  if (isClosedCompetition(c)) return { open: false, reason: 'ended', label: 'Competition ended' };
+  if (c.paymentStatus === 'AWAITING_PLATFORM_FEE') return { open: false, reason: 'draft', label: 'Not published yet' };
+  if (time(c.startDate) <= now) return { open: false, reason: 'started', label: 'Registration closed — competition started', detail: `Started ${shortDate(c.startDate)}` };
+  if (time(c.registrationCloseAt) <= now) return { open: false, reason: 'closed', label: 'Registration closed', detail: `Closed ${shortDate(c.registrationCloseAt)}` };
+  if (time(c.registrationOpenAt) > now) return { open: false, reason: 'not_open', label: `Registration opens ${shortDate(c.registrationOpenAt)}` };
+  const closesAt = c.registrationCloseAt || c.startDate;
+  return { open: true, reason: 'open', label: 'Registration open', detail: closesAt ? `Closes ${shortDate(closesAt)}` : '' };
+}
+
+function apiBadge(c) {
+  if (isCancelledCompetition(c)) return { badge: 'Cancelled', badgeClass: 'cancelled' };
+  if (c.status === 'completed' || CLOSED_PAYMENT_STATES.includes(c.paymentStatus)) return { badge: 'Completed', badgeClass: 'ended' };
+  if (c.status === 'draft') return { badge: c.badge || 'Draft', badgeClass: c.badgeClass || 'hot' };
+  const reg = registrationState(c);
+  if (reg.reason === 'started') return { badge: 'In progress', badgeClass: 'hot' };
+  if (reg.reason === 'closed') return { badge: 'Registration closed', badgeClass: 'ended' };
+  return { badge: c.badge || 'Open', badgeClass: c.badgeClass || 'live' };
+}
+
 function mapApiCompetition(c) {
   return {
     id: c.id,
@@ -241,14 +300,17 @@ function mapApiCompetition(c) {
     status: c.status || 'active',
     startDate: c.startDate,
     endDate: c.endDate,
+    registrationOpenAt: c.registrationOpenAt || null,
+    registrationCloseAt: c.registrationCloseAt || null,
     createdAt: c.createdAt,
     createdBy: c.createdBy,
     organizerId: c.createdBy,
     visibility: c.visibility || 'public',
     organizers: Array.isArray(c.organizers) ? c.organizers : [c.createdBy].filter(Boolean),
     approvalStatus: c.approvalStatus || 'approved',
-    badge: c.badge || (c.status === 'active' ? 'Active' : c.status === 'draft' ? 'Draft' : 'Completed'),
-    badgeClass: c.badgeClass || (c.status === 'active' ? 'live' : 'hot'),
+    ...apiBadge(c),
+    abandonedReason: c.abandonedReason || null,
+    endedAt: c.endedAt || null,
     game: c.game || 'Unknown Game',
     type: c.type || 'tournament',
     dates: c.dates || formatApiDateRange(c.startDate, c.endDate),
@@ -265,6 +327,10 @@ function mapApiCompetition(c) {
     entryFeeAmount: c.entryFeeAmount || 0,
     entryFee: c.entryFee || 'Free',
     organizerPaid: !!c.organizerPaid,
+    paymentStatus: c.paymentStatus,
+    prizePoolPaid: c.prizePoolPaid,
+    prizeDistributionMinor: Array.isArray(c.prizeDistributionMinor) ? c.prizeDistributionMinor : undefined,
+    prizes: prizeBreakdownFromApi(c),
     img: c.img,
     bannerColor: c.bannerColor || '#1a2e2e',
     teams: Array.isArray(c.teams) ? c.teams : [],
@@ -298,6 +364,9 @@ function mergeCompetitions(localComps, apiComps) {
       merged[idx] = Object.assign({}, apiComp, local, {
         dbId: local.dbId || apiComp.dbId || apiComp.id,
         backendSynced: true,
+      });
+      SERVER_OWNED_FIELDS.forEach(field => {
+        if (apiComp[field] !== undefined) merged[idx][field] = apiComp[field];
       });
       keys.forEach(key => index.set(key, idx));
     } else {
@@ -688,7 +757,11 @@ async function fetchActiveCompetitionsFromAPI() {
     return [];
   }
 
-  return mergeCompetitions(loadCompetitions(), (result.data || []).map(mapApiCompetition)); /*
+  const active = (result.data || []).map(mapApiCompetition);
+  const activeIds = new Set(active.map(c => String(c.id)));
+  // A cached server competition missing from the active list was cancelled or ended on the server.
+  return mergeCompetitions(loadCompetitions(), active)
+    .filter(c => !c.backendSynced || activeIds.has(String(c.dbId || c.id)) || activeIds.has(String(c.id))); /*
     id: c.id,
     name: c.name,
     description: c.description,
@@ -1353,6 +1426,7 @@ window.NexusData = {
   fetchCompetitionsFromAPI, fetchActiveCompetitionsFromAPI, mapApiCompetition, mergeCompetitions,
   goToComp, goToParticipant,
   getApprovalStatus, setCompetitionApproval, getCompetitionsForPublic,
+  isClosedCompetition, isCancelledCompetition, registrationState,
   addCoOrganizer: addCoOrganizerToComp,
   removeCoOrganizer: removeCoOrganizerFromComp,
   setTeamRegistrationStatus,

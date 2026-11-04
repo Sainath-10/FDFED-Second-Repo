@@ -1,3 +1,4 @@
+import { LifecycleService, managed } from '../payments/lifecycle.service';
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Inject, Optional, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -27,6 +28,7 @@ export class TeamsService {
     private revenueRepo: Repository<RevenueTransactionEntity>,
     @Optional() @Inject(forwardRef(() => MatchesService))
     private matchesService?: MatchesService,
+    @Optional() private lifecycle?: LifecycleService,
   ) {}
 
   async verifyTeamOwnership(teamId: string, user: any): Promise<ITeam> {
@@ -66,6 +68,12 @@ export class TeamsService {
     const competition = await this.competitionRepository.findById(competitionId);
     if (!competition) {
       throw new NotFoundException(`Competition with ID ${competitionId} not found`);
+    }
+    if (competition.paymentStatus === 'AWAITING_PLATFORM_FEE') throw new ForbiddenException('Platform fee payment is pending.');
+    if (managed(competition)) {
+      const team = await this.lifecycle.registerTeam(createTeamDto, user);
+      await this.matchesService?.syncRosterAfterRegistration(competitionId);
+      return team;
     }
     if (competition.approvalStatus && competition.approvalStatus !== 'approved') {
       throw new ForbiddenException('This competition is not accepting team registrations.');
@@ -171,6 +179,7 @@ export class TeamsService {
     if (updateTeamDto.members && competition && isCompetitionStarted(competition as any)) {
       throw new ForbiddenException('The competition has started: team membership can no longer be changed. Use the dispute/report workflow instead.');
     }
+    if (managed(competition) && updateTeamDto.members) throw new BadRequestException('Use invitations or join requests to change a payment-managed roster.');
     if (updateTeamDto.members) {
       await this.assertCapacity(team.competitionId, team, updateTeamDto.members.length);
     }
@@ -201,6 +210,7 @@ export class TeamsService {
       throw new ForbiddenException('The competition has started: new players can no longer be added.');
     }
 
+    if (managed(competition)) throw new BadRequestException('Use invitations so players can confirm their own registration payment.');
     const member = String(addTeamMemberDto.memberId || '').trim().replace(/^@/, '');
     if (!member) throw new BadRequestException('Member username is required.');
 
@@ -257,6 +267,7 @@ export class TeamsService {
       throw new BadRequestException('Cannot remove the team leader. Disband the team instead.');
     }
 
+    if (managed(competition) && competition.feeType === 'per_player') throw new ForbiddenException('Paid participants require finance review; disband to refund the team before start.');
     // Authoritative payment check — frontend-supplied payment status is never trusted
     const hasPaid = await this.participantHasPaid(team.competitionId, member);
     if (hasPaid) {
@@ -316,6 +327,10 @@ export class TeamsService {
       throw new BadRequestException('A meaningful disband reason (at least 10 characters) is required.');
     }
 
+    if (managed(competition)) {
+      const updated = await this.lifecycle.disband(teamId, user, meaningfulReason);
+      return { team: updated, refunds: [] };
+    }
     const members = [...(team.memberUsernames || [])].filter(
       (m) => m && String(m).toLowerCase() !== String(team.leaderId || '').toLowerCase(),
     );
@@ -448,12 +463,35 @@ export class TeamsService {
     return this.teamRepository.addWarning(teamId, issuedBy);
   }
 
-  async banTeam(teamId: string, issuedBy: string) {
-    return this.teamRepository.banTeam(teamId, issuedBy);
+  /** Only an organizer of the team's competition (or a competition admin) may change a team's standing. */
+  private async assertCompetitionManager(teamId: string, user: any) {
+    const team = await this.teamRepository.findById(teamId);
+    if (!team) throw new NotFoundException(`Team with ID ${teamId} not found`);
+    const competition = await this.competitionRepository.findById(team.competitionId);
+    const actor = String(user?.username || '').toLowerCase();
+    const organizer = !!competition && [competition.createdBy, ...(competition.organizers || [])].some((name) => String(name || '').toLowerCase() === actor);
+    if (!organizer && !['admin', 'super_admin', 'comp_admin'].includes(String(user?.role || ''))) {
+      throw new ForbiddenException('Only an organizer of this competition (or a competition admin) can change a team’s status.');
+    }
+    return { team, competition };
   }
 
-  async setStatus(teamId: string, status: string, issuedBy: string) {
-    return this.teamRepository.setStatus(teamId, status, issuedBy);
+  async banTeam(teamId: string, user: any, reason = 'Banned by the organizer') {
+    const { competition } = await this.assertCompetitionManager(teamId, user);
+    // Payment-managed: the banned team is refunded so the organizer never keeps its fee.
+    if (managed(competition)) return this.lifecycle.removeTeam(teamId, user, 'banned', reason);
+    return this.teamRepository.banTeam(teamId, user.username);
+  }
+
+  async setStatus(teamId: string, status: string, user: any, reason = 'Removed by the organizer') {
+    const { team, competition } = await this.assertCompetitionManager(teamId, user);
+    if (managed(competition)) {
+      if (status === 'banned' || status === 'rejected') return this.lifecycle.removeTeam(teamId, user, status, reason);
+      if (['banned', 'rejected', 'disbanded'].includes(team.status) && status !== team.status) {
+        throw new BadRequestException('This team was removed and refunded, so it cannot be reinstated. Its players can register again.');
+      }
+    }
+    return this.teamRepository.setStatus(teamId, status, user.username);
   }
 
   async createJoinRequest(teamId: string, competitionId: string, user: any, message?: string, joinCode?: string) {
@@ -577,6 +615,7 @@ export class TeamsService {
     await this.assertRosterOpen(team, competition);
     await this.assertNotOnAnotherTeam(team, req.fromUsername, `@${req.fromUsername} is already in another team for this competition.`);
 
+    if (managed(competition)) feeAlreadyPaid = false;
     const fee = this.playerFeeDue(competition);
     if (fee > 0 && !feeAlreadyPaid) {
       const awaiting = await this.teamRepository.updateJoinRequest(id, 'awaiting_payment', reviewer);
@@ -606,6 +645,8 @@ export class TeamsService {
 
   /** The player pays after being accepted, which is what puts them on the roster. */
   async payJoinRequest(id: string, user: any) {
+    const paymentRequest = await this.teamRepository.findJoinRequestById(id);
+    if (paymentRequest && managed(await this.competitionRepository.findById(paymentRequest.competitionId))) return this.lifecycle.join(id, user);
     const req = await this.teamRepository.findJoinRequestById(id);
     if (!req) throw new NotFoundException(`Join request with ID ${id} not found`);
     const username = String(user?.username || '');
@@ -766,6 +807,7 @@ export class TeamsService {
     if (invite.status !== 'pending') {
       throw new BadRequestException('This invitation was already handled.');
     }
+    if (status === 'accepted' && managed(await this.competitionRepository.findById(invite.competitionId))) return this.lifecycle.join(id, user, true);
     const decision = String(status || '').toLowerCase();
     if (decision !== 'accepted' && decision !== 'declined') {
       throw new BadRequestException('Status must be accepted or declined.');

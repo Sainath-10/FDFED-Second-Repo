@@ -6,6 +6,7 @@
  */
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { getToken } from '../../services/api.js';
 import { showToast } from '../../lib/toast.js';
 import '../../styles/pages/super-admin/super-dashboard.css';
 import '../../styles/pages/super-admin/users.css';
@@ -103,6 +104,7 @@ export default function AddAdmin() {
             <select id="page-admin-type" className="form-select" required value={adminType} onChange={(e) => setAdminType(e.target.value)} style={{ width: '100%', padding: '12px 16px', background: '#0f172a', border: '1px solid #334155', borderRadius: 10, color: '#fff', fontSize: 14, cursor: 'pointer' }}>
               <option value="comp_admin">🏆 Competition Admin (comp_admin)</option>
               <option value="dispute_admin">🛡️ Dispute Admin (dispute_admin)</option>
+              <option value="finance_moderator">💰 Finance Moderator (finance_moderator)</option>
               <option value="revenue_admin">💳 Revenue Admin (revenue_admin)</option>
               <option value="super_admin">⚡ Super Admin (super_admin)</option>
             </select>

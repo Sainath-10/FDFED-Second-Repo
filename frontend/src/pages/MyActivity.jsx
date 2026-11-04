@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
+import { CompetitionsAPI } from '../services/api.js';
 import NexusData from '../services/data.js';
 import { showToast } from '../lib/toast.js';
 import '../styles/pages/my-activity.css';
@@ -27,8 +28,19 @@ function formatPrizePool(prize) {
   return str.toLowerCase().includes('prize pool') ? str : `${str} Prize Pool`;
 }
 
-const badgeClass = (s) => ({ ongoing: 'act-badge-ongoing', completed: 'act-badge-completed', upcoming: 'act-badge-upcoming' }[s] || 'act-badge-ongoing');
-const statusLabel = (s) => ({ ongoing: 'Ongoing', completed: 'Completed', upcoming: 'Upcoming' }[s] || s);
+const badgeClass = (s) => ({ ongoing: 'act-badge-ongoing', completed: 'act-badge-completed', upcoming: 'act-badge-upcoming', cancelled: 'act-badge-cancelled' }[s] || 'act-badge-ongoing');
+const statusLabel = (s) => ({ ongoing: 'Ongoing', completed: 'Completed', upcoming: 'Upcoming', cancelled: 'Cancelled', active: 'Active' }[s] || s);
+/** Organizer-facing money status of a competition. */
+function organizerBadge(comp) {
+  const p = comp.paymentStatus;
+  if (p === 'AWAITING_PLATFORM_FEE') return { label: 'Payment pending — resume checkout', style: undefined };
+  if (NexusData?.isCancelledCompetition?.(comp)) return { label: p === 'EXPIRED' ? 'Draft expired' : 'Cancelled — players refunded', cls: 'act-badge-cancelled' };
+  if (p === 'REVERSED') return { label: 'Settlement reversed', cls: 'act-badge-cancelled' };
+  if (p === 'PRIZE_RELEASED') return { label: 'Settled — payouts released', cls: 'act-badge-completed' };
+  if (p === 'COMPLETED') return { label: 'Awaiting finance review', cls: 'act-badge-upcoming' };
+  if (comp.approvalStatus === 'pending') return { label: '⏳ Pending Admin Approval', style: { background: 'rgba(251,146,60,0.15)', border: '1px solid #fb923c', color: '#fb923c' } };
+  return { label: 'Approved (Live)', cls: 'act-approved' };
+}
 const teamRegClass = (s) => ({ pending: 'act-badge-upcoming', approved: 'act-badge-ongoing', rejected: 'act-badge-completed' }[s] || 'act-badge-upcoming');
 const teamRegLabel = (s) => ({ pending: 'Team Pending', approved: 'Team Approved', rejected: 'Team Rejected' }[s] || 'Team Pending');
 
@@ -101,6 +113,14 @@ export default function MyActivity() {
   const navigate = useNavigate();
   const [version, setVersion] = useState(0);
   const [query, setQuery] = useState('');
+  const [drafts, setDrafts] = useState([]);
+  useEffect(() => {
+    let active = true;
+    if (session?.username) CompetitionsAPI.getByOrganizer(encodeURIComponent(session.username)).then(result => {
+      if (active && result.ok) setDrafts(result.data.filter(comp => comp.paymentStatus === 'AWAITING_PLATFORM_FEE'));
+    });
+    return () => { active = false; };
+  }, [session?.username]);
 
   useEffect(() => {
     if (!NexusData || typeof NexusData.fetchCompetitionsFromAPI !== 'function') return undefined;
@@ -113,10 +133,11 @@ export default function MyActivity() {
 
   const buckets = useMemo(() => {
     const allComps = NexusData ? NexusData.loadCompetitions() : [];
-    return buildBuckets(allComps, session);
-  }, [session, version]);
+    return buildBuckets([...drafts, ...allComps.filter(comp => !drafts.some(draft => draft.id === comp.id))], session);
+  }, [session, version, drafts]);
 
   function openComp(comp) {
+    if (comp.paymentStatus === 'AWAITING_PLATFORM_FEE') { navigate(`/pages/competition-payment.html?id=${encodeURIComponent(comp.id)}`); return; }
     if (comp.role === 'participant') { navigate(`/pages/comp-participant.html?id=${encodeURIComponent(comp.id)}`); return; }
     if (comp.role === 'teamlead') {
       const status = normalize(comp.teamStatus || 'approved');
@@ -157,9 +178,7 @@ export default function MyActivity() {
           <div className="act-card-badges">
             <span className={`act-badge ${typeClass}`}>{typeLabel}</span>
             <span className={`act-badge ${badgeClass(comp.status)}`}>{statusLabel(comp.status)}</span>
-            {comp.role === 'organizer' && (comp.approvalStatus === 'pending'
-              ? <span className="act-badge" style={{ background: 'rgba(251,146,60,0.15)', border: '1px solid #fb923c', color: '#fb923c' }}>⏳ Pending Admin Approval</span>
-              : <span className="act-badge act-approved">Approved (Live)</span>)}
+            {comp.role === 'organizer' && (() => { const b = organizerBadge(comp); return <span className={`act-badge ${b.cls || ''}`} style={b.style}>{b.label}</span>; })()}
             {comp.role === 'teamlead' && <span className={`act-badge ${teamRegClass(comp.teamStatus || 'pending')}`}>{teamRegLabel(comp.teamStatus || 'pending')}</span>}
             {comp.userCreated && <span className="act-badge" style={{ background: 'rgba(198,255,51,0.12)', border: '1px solid rgba(198,255,51,0.35)', color: '#c6ff33' }}>My Team</span>}
             {comp.teamJoined && comp.role === 'participant' && <span className="act-badge" style={{ background: 'rgba(96,165,250,0.12)', border: '1px solid rgba(96,165,250,0.35)', color: '#60a5fa' }}>{comp.teamJoined}</span>}

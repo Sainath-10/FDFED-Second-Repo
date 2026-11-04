@@ -115,7 +115,8 @@ export default function CompetitionDetail() {
   const playedCount = matches.filter((m) => m.status !== 'bye').length;
   const byeCount = matches.filter((m) => m.status === 'bye').length;
   const live = matches.filter((m) => m.status === 'live').length;
-  const ended = Boolean(comp?.ended || comp?.status === 'completed');
+  const cancelledComp = Boolean(comp && (String(comp.status || '').toLowerCase() === 'cancelled' || ['REFUND_ISSUED', 'CANCELLED', 'EXPIRED', 'ABANDONED'].includes(comp.paymentStatus)));
+  const ended = Boolean(comp?.ended || comp?.status === 'completed' || cancelledComp || ['PRIZE_RELEASED', 'REVERSED'].includes(comp?.paymentStatus));
   const isLeague = /league|robin/i.test(`${comp?.type} ${comp?.format}`);
   const creator = comp?.createdBy || comp?.organizerId;
   const organizers = [...new Set([creator, ...(comp?.organizers || [])].filter(Boolean))];
@@ -164,7 +165,7 @@ export default function CompetitionDetail() {
   return <main className="cd-page">
     <div className="cd-breadcrumb"><Link to="/pages/my-activity.html">My activity</Link><span>/</span><span>Competition center</span></div>
     <header className="cd-hero" style={{ '--cover': `url("${banner}")` }}>
-      <div className="cd-hero-copy"><div className="cd-eyebrow"><span className={`cd-dot ${ended ? 'ended' : ''}`} />{ended ? 'Completed' : comp.status || 'Upcoming'}<span className="cd-divider">/</span>{comp.game || 'Esports'}</div>
+      <div className="cd-hero-copy"><div className="cd-eyebrow"><span className={`cd-dot ${ended ? 'ended' : ''}`} />{cancelledComp ? 'Cancelled' : ended ? 'Completed' : comp.status || 'Upcoming'}<span className="cd-divider">/</span>{comp.game || 'Esports'}</div>
         <h1>{comp.name}</h1><p>{comp.format || comp.type || 'Tournament'}<span>•</span>{comp.location || 'Online'}{comp.season && <><span>•</span>{comp.season}</>}</p>
       </div>
       <div className="cd-hero-stats"><div><strong>{teams.length}</strong><span>Teams</span></div><div><strong>{current.loading && !current.matches ? '—' : matches.length}</strong><span>Fixtures</span></div><div><strong>{completed}<small>/{playedCount}</small></strong><span>Completed</span></div></div>
@@ -172,9 +173,10 @@ export default function CompetitionDetail() {
 
     <nav className="cd-nav" aria-label="Competition sections">
       {availableTabs.map((value) => <button key={value} type="button" aria-current={activeTab === value ? 'page' : undefined} className={activeTab === value ? 'active' : ''} onClick={() => tab(value)}>{value === 'fixtures' && <Icon name="bracket" size={16} />}{value[0].toUpperCase() + value.slice(1)}</button>)}
-      {canManage && <>{comp.feeType && comp.feeType !== 'free' && <Link to={route('organizer-revenue')}>Transactions</Link>}{!ended && <Link to={route('edit-competition')}>Settings</Link>}</>}
+      {canManage && <><Link to={`/pages/competition-payment.html?id=${encodeURIComponent(apiId)}`}>Payments &amp; prize pool</Link>{comp.feeType && comp.feeType !== 'free' && <Link to={route('organizer-revenue')}>Transactions</Link>}{!ended && <Link to={route('edit-competition')}>Settings</Link>}</>}
     </nav>
 
+    {cancelledComp && <div className="cd-notice" role="status"><div><p><strong>This competition has been cancelled.</strong> {comp.abandonedReason ? `Reason: ${comp.abandonedReason}. ` : ''}{comp.organizerPaid ? 'All registration fees were refunded in full.' : 'Nothing was charged.'}</p></div></div>}
     {!!current.errors.length && <div className="cd-notice" role="alert"><div>{current.errors.map((error) => <p key={error}>{error}</p>)}{matches.length > 0 && <small>Showing the last available fixtures until refresh succeeds.</small>}</div><button className="cd-button" onClick={() => setRevision((v) => v + 1)} disabled={current.loading}>Retry</button></div>}
 
     {activeTab === 'fixtures' && <section className="cd-fixtures" aria-labelledby="cd-fixture-title">

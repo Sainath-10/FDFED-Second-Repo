@@ -35,8 +35,7 @@ export class MatchesController {
   }
 
   @Post()
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.TEAM_LEAD, UserRole.COMP_ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create / schedule a match (Organizers / Admins only)' })
   async create(
@@ -53,7 +52,10 @@ export class MatchesController {
       createdBy?: string;
     },
   ) {
-    const createdBy = req.user?.username || body.createdBy || 'system';
+    // Only this competition's organizers (or competition admins) may add fixtures;
+    // a fabricated "Final" would otherwise decide who receives the prize pool.
+    await this.service.assertOrganizer(body.competitionId, req.user.username, req.user.role);
+    const createdBy = req.user.username;
     return this.service.create({
       ...body,
       createdBy,

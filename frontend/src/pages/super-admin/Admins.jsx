@@ -12,7 +12,7 @@ import '../../styles/pages/super-admin/users.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const ACCOUNTS_KEY = 'nexus.auth.accounts';
-const ADMIN_TYPES = ['comp_admin', 'dispute_admin', 'revenue_admin', 'super_admin', 'super-admin', 'admin'];
+const ADMIN_TYPES = ['finance_moderator', 'comp_admin', 'dispute_admin', 'revenue_admin', 'super_admin', 'super-admin', 'admin'];
 const normalize = (v) => String(v || '').trim().toLowerCase();
 
 function formatAdminType(role, adminType) {
@@ -20,6 +20,7 @@ function formatAdminType(role, adminType) {
   const t = normalize(adminType);
   if (r === 'comp_admin' || t === 'comp_admin') return { label: 'Comp Admin', icon: '🏆', color: '#38bdf8', bg: 'rgba(56, 189, 248, 0.15)', border: 'rgba(56, 189, 248, 0.3)' };
   if (r === 'dispute_admin' || t === 'dispute_admin') return { label: 'Dispute Admin', icon: '🛡️', color: '#fb923c', bg: 'rgba(251, 146, 60, 0.15)', border: 'rgba(251, 146, 60, 0.3)' };
+  if (r === 'finance_moderator' || t === 'finance_moderator') return { label: 'Finance Moderator', icon: '💰', color: '#c084fc', bg: 'rgba(192,132,252,0.15)', border: 'rgba(192,132,252,0.3)' };
   if (r === 'revenue_admin' || t === 'revenue_admin') return { label: 'Revenue Admin', icon: '💳', color: '#c084fc', bg: 'rgba(192, 132, 252, 0.15)', border: 'rgba(192, 132, 252, 0.3)' };
   if (r === 'super_admin' || r === 'super-admin' || t === 'super_admin') return { label: 'Super Admin', icon: '⚡', color: '#c6ff33', bg: 'rgba(198, 255, 51, 0.15)', border: 'rgba(198, 255, 51, 0.3)' };
   return { label: 'Comp Admin', icon: '🏆', color: '#38bdf8', bg: 'rgba(56, 189, 248, 0.15)', border: 'rgba(56, 189, 248, 0.3)' };

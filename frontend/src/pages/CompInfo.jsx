@@ -28,7 +28,7 @@ const TABS = [
   { id: 'general-chat', label: 'General chat' },
 ];
 
-const STATUS_MAP = { ongoing: 'Ongoing', upcoming: 'Registration Open', completed: 'Completed', live: 'LIVE' };
+const STATUS_MAP = { ongoing: 'Ongoing', upcoming: 'Registration Open', active: 'Active', completed: 'Completed', cancelled: 'Cancelled', live: 'LIVE' };
 const TYPE_MAP = { tournament: 'Single Elimination', league: 'Round Robin' };
 const PRIZE_ICONS = ['🥇', '🥈', '🥉'];
 
@@ -97,7 +97,15 @@ export default function CompInfo() {
   const { session } = useAuth();
 
   const compId = params.get('id') || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('last_comp_id') : '') || '';
-  const comp = useMemo(() => (compId && NexusData ? NexusData.getCompetitionById(compId) : null), [compId]);
+  const [syncVersion, setSyncVersion] = useState(0);
+  const comp = useMemo(() => (compId && NexusData ? NexusData.getCompetitionById(compId) : null), [compId, syncVersion]);
+  // The cached copy may predate a cancellation or settlement: refresh it from the server once.
+  useEffect(() => {
+    if (!NexusData || typeof NexusData.fetchCompetitionsFromAPI !== 'function') return undefined;
+    let active = true;
+    NexusData.fetchCompetitionsFromAPI().then(() => { if (active) setSyncVersion((v) => v + 1); }).catch(() => {});
+    return () => { active = false; };
+  }, [compId]);
 
   const [tab, setTab] = useState(() => {
     const requestedTab = params.get('tab');
@@ -260,7 +268,16 @@ export default function CompInfo() {
   let showDispute = isOwner;
   let rejectedNotice = false;
 
-  if (!isOwner) {
+  const cancelledComp = !!NexusData?.isCancelledCompetition?.(comp);
+  const registration = NexusData?.registrationState ? NexusData.registrationState(comp) : { open: true };
+  if (!isOwner && !registration.open && !(myTeam && teamStatus !== 'rejected')) {
+    // Same rules the server enforces: no joining before it opens, after it closes, or once play has started.
+    registerLabel = registration.label;
+    registerDisabled = true;
+    registerStyle = { background: '#1a1a1a', color: 'var(--text-muted)', border: '1px solid rgba(255,255,255,0.15)', cursor: 'not-allowed' };
+    showCreate = false;
+    showDispute = false;
+  } else if (!isOwner) {
     if (myTeam && teamStatus !== 'rejected') {
       if (teamStatus === 'banned') {
         registerLabel = '🚫 Team Banned from Tournament';
@@ -459,6 +476,14 @@ export default function CompInfo() {
             <span className={`comp-badge ${comp.badgeClass || ''}`} id="comp-hero-badge" style={{ position: 'absolute', top: 20, right: 20, zIndex: 3 }}>{comp.badge}</span>
           )}
         </div>
+
+        {cancelledComp && (
+          <div role="status" id="comp-cancelled-notice" style={{ margin: '0 0 20px', padding: '14px 18px', borderRadius: 12, border: '1px solid rgba(248,113,113,0.45)', background: 'rgba(231,0,11,0.08)', color: 'var(--text-light)', fontSize: 14, lineHeight: 1.55 }}>
+            <strong style={{ color: '#f87171' }}>This competition has been cancelled.</strong>{' '}
+            {comp.abandonedReason ? `Reason: ${comp.abandonedReason}. ` : ''}
+            {comp.organizerPaid ? 'Every registered player was refunded their entry fee in full. Check Payments in the sidebar for your refund.' : 'Nothing was charged.'}
+          </div>
+        )}
 
         <div className="comp-info-body">
           <div className="comp-info-details">
@@ -715,6 +740,9 @@ export default function CompInfo() {
               <button id="btn-share-comp" className="btn-outline" style={{ width: '100%', textAlign: 'center', padding: 11, fontSize: 13, cursor: 'pointer', background: 'none', opacity: 0.8 }} onClick={onShare}>
                 🔗 Share Link
               </button>
+              {!isOwner && registration.detail && !(myTeam && teamStatus !== 'rejected') && (
+                <p style={{ fontSize: 12, color: registration.open ? 'var(--text-muted)' : '#fbbf24', marginTop: 4, textAlign: 'center' }}>{registration.open ? `Registration ${registration.detail.toLowerCase()}` : registration.detail}</p>
+              )}
               {rejectedNotice && (
                 <p style={{ fontSize: 12, color: '#f87171', marginTop: 4 }}>⚠ Your previous team registration was rejected. You may join or create a new team.</p>
               )}

@@ -353,7 +353,8 @@ export default function CreateCompetition() {
       feeType: comp.feeType,
       entryFeeAmount: comp.entryFeeAmount,
       registrationOpenAt: comp.registrationDates?.open ? new Date(`${comp.registrationDates.open}T00:00:00`).toISOString() : undefined,
-      registrationCloseAt: comp.registrationDates?.close ? new Date(`${comp.registrationDates.close}T00:00:00`).toISOString() : undefined,
+      // "Registration closes on 4 Nov" means teams can still register all of 4 Nov.
+      registrationCloseAt: comp.registrationDates?.close ? new Date(`${comp.registrationDates.close}T23:59:59`).toISOString() : undefined,
     };
     let res;
     try {
@@ -374,41 +375,8 @@ export default function CreateCompetition() {
       return;
     }
     const created = res.data || {};
-    const finalComp = { ...comp, id: created.id || comp.id, joinCode: created.joinCode || null };
-
-    if (NexusData) NexusData.addCompetition(finalComp);
-
-    pendingCoOrganizers.forEach((coOrgUsername) => {
-      if (!coOrgUsername) return;
-      const notifEntry = {
-        toUsername: coOrgUsername,
-        type: 'co-organizer-invite',
-        status: 'pending',
-        title: '🏆 Co-Organizer Invitation',
-        body: `@${session.username} invited you to be a co-organizer for tournament "${finalComp.name}".`,
-        createdAt: new Date().toISOString(),
-        read: false,
-        meta: { compId: finalComp.id, compName: finalComp.name, invitedBy: session.username },
-      };
-      if (NexusTeamWorkflow && NexusTeamWorkflow.pushNotification) NexusTeamWorkflow.pushNotification(notifEntry);
-      else if (NexusData && NexusData.pushSystemNotification) NexusData.pushSystemNotification(notifEntry);
-      else {
-        try {
-          const items = JSON.parse(localStorage.getItem('nexus.notifications.items') || '[]');
-          items.unshift({ id: `notif-${Date.now()}`, ...notifEntry });
-          localStorage.setItem('nexus.notifications.items', JSON.stringify(items));
-        } catch (e) { /* ignore */ }
-      }
-    });
-
     setCheckout(null);
-    if (finalComp.visibility === 'private') {
-      // §2.4 — show the private join code to the organizer with a copy action.
-      setPublished({ comp: finalComp, joinCode: finalComp.joinCode || '' });
-    } else {
-      showToast('Tournament Created & Published! Co-organizers invited.', 'success');
-      setTimeout(() => navigate('/pages/my-activity.html'), 1200);
-    }
+    navigate(`/pages/competition-payment.html?id=${encodeURIComponent(created.id)}`);
   }
 
   const formatOptions = ['Single Elimination', 'Round Robin'].filter((f) => (f === 'Round Robin' ? platform.allowRoundRobin : platform.allowKnockout));
@@ -627,8 +595,8 @@ export default function CreateCompetition() {
               <h3>Next Steps</h3>
               <div className="steps-list">
                 <div className="step-item"><div className="step-num done">✓</div><span className="step-text">Fill in competition details</span></div>
-                <div className="step-item"><div className="step-num">2</div><span className="step-text">Publish your competition</span></div>
-                <div className="step-item"><div className="step-num">3</div><span className="step-text">Share with your community</span></div>
+                <div className="step-item"><div className="step-num">2</div><span className="step-text">Pay the platform fee to publish</span></div>
+                <div className="step-item"><div className="step-num">3</div><span className="step-text">Deposit the prize pool into escrow</span></div>
                 <div className="step-item"><div className="step-num">4</div><span className="step-text">Manage registrations &amp; schedule matches</span></div>
               </div>
             </div>
@@ -641,7 +609,7 @@ export default function CreateCompetition() {
           {/* §2.3 — theme-consistent dialog (was orange); focus lands on the confirm action */}
           <div role="dialog" aria-modal="true" aria-label="Publish competition confirmation" style={{ background: '#0f172a', border: '1px solid rgba(198,255,51,0.55)', borderRadius: 16, width: 'min(90vw,480px)', padding: 32, boxShadow: '0 20px 60px #000a', color: '#f1f5f9' }}>
             <h3 style={{ margin: '0 0 4px', fontSize: 20, color: '#f1f5f9' }}>💳 Organizer Platform Fee Checkout</h3>
-            <p style={{ margin: '0 0 20px', fontSize: 13, color: '#94a3b8' }}>Review the platform fee due for "{checkout.comp.name}". Publishing continues only after this confirmation; the fee is recorded as pending because no external payment gateway is integrated.</p>
+            <p style={{ margin: '0 0 20px', fontSize: 13, color: '#94a3b8' }}>Review the platform fee due for "{checkout.comp.name}". Saving creates a private draft. On the next screen you pay the platform fee (simulated in mock mode — no real money) to publish, and can deposit the prize pool into escrow at the same time.</p>
             <div style={{ background: '#1e293b', borderRadius: 12, padding: 16, marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#cbd5e1' }}><span>Tournament Prize Pool:</span><strong style={{ color: '#c6ff33' }}>₹{checkout.prizePool.toLocaleString('en-IN')}</strong></div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#94a3b8', borderTop: '1px solid #334155', paddingTop: 8 }}><span>Fee Calculation:</span><strong style={{ color: '#f1f5f9' }}>{(() => { const c = NexusData && NexusData.getRevenueConfig ? NexusData.getRevenueConfig() : { percentage: 7, minCost: 50 }; return `${c.percentage}% Prize Pool Fee (Min. ₹${c.minCost})`; })()}</strong></div>
@@ -657,7 +625,7 @@ export default function CreateCompetition() {
             <div style={{ display: 'flex', gap: 12 }}>
               <button onClick={() => { setCheckout(null); setPublishError(''); }} disabled={publishing} style={{ flex: 1, padding: 12, background: 'none', border: '1px solid #334155', color: '#94a3b8', borderRadius: 8, cursor: publishing ? 'not-allowed' : 'pointer', fontSize: 14 }}>Cancel</button>
               <button onClick={confirmCheckout} disabled={publishing} style={{ flex: 2, padding: 12, background: publishing ? 'rgba(198,255,51,0.35)' : '#c6ff33', border: 'none', color: '#111', borderRadius: 8, cursor: publishing ? 'wait' : 'pointer', fontSize: 14, fontWeight: 700 }}>
-                {publishing ? 'Publishing…' : '✔ Pay Platform Fee & Publish (₹' + checkout.platformFee.toLocaleString('en-IN') + ')'}
+                {publishing ? 'Publishing…' : 'Save draft & continue to payment'}
               </button>
             </div>
           </div>

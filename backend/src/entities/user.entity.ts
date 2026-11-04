@@ -30,6 +30,9 @@ export class UserEntity {
   @Column({ name: 'revokedReason', type: 'text', nullable: true, default: null })
   revokedReason: string | null;
 
+  @Column({ default: 100 }) organizerTrustScore: number;
+  @Column({ default: false }) competitionAlerts: boolean;
+
   @Column({ default: false })
   banned: boolean;
 

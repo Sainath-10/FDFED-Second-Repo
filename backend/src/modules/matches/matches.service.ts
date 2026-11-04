@@ -1,3 +1,4 @@
+import { TERMINAL_PAYMENT_STATES } from '../payments/payment.rules';
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -481,6 +482,7 @@ export class MatchesService {
 
     // §10 — draws are valid in league formats; knockout matches must have a winner.
     const competition = await this.competitionRepository.findById(match.competitionId);
+    if (competition?.paymentStatus && competition.paymentStatus !== 'LEGACY' && (!competition.prizePoolPaid || TERMINAL_PAYMENT_STATES.includes(competition.paymentStatus))) throw new BadRequestException('Prize pool must be funded and competition open before recording results.');
     const isLeague = competition ? this.resolveFormat(competition) !== 'elimination' && !isPlayoff(match) : false;
     if (isPlayoff(match) && this.resolveFormat(competition) !== 'elimination') {
       const all = await this.repo.find({ where: { competitionId: match.competitionId } });
@@ -548,7 +550,7 @@ export class MatchesService {
 
     const finishTournament = async (winnerName: string | null) => {
       if (!winnerName) return;
-      await this.competitionRepository.update(match.competitionId, { status: 'completed' } as any).catch(() => {});
+      if (!competition.paymentStatus || competition.paymentStatus === 'LEGACY') await this.competitionRepository.update(match.competitionId, { status: 'completed' } as any).catch(() => {});
       await this.auditLog.record('TOURNAMENT_WINNER', {
         actor,
         entityType: 'competition',
