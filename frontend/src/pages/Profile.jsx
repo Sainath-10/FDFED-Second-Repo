@@ -6,12 +6,16 @@
  * sidebar computed from competition data, and the edit-profile / email /
  * password modals.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import NexusData from '../services/data.js';
 import { showToast } from '../lib/toast.js';
 import { assetUrl } from '../lib/assets.js';
+import ReputationBadge from '../components/ReputationBadge.jsx';
+import { LocalReputationAPI } from '../services/local/reporting.js';
+import { LEVEL_META, formatINR, capitalise } from '../lib/reporting.js';
+import '../styles/pages/reports.css';
 import '../styles/pages/profile.css';
 
 const PTABS = [
@@ -23,8 +27,8 @@ const PTABS = [
 ];
 
 const ROLE_MAP = {
-  regular: 'User', participant: 'User', team_lead: 'Team Lead', admin: 'Comp Admin',
-  finance_moderator: 'Finance Moderator', comp_admin: 'Comp Admin', dispute_admin: 'Dispute Admin', revenue_admin: 'Revenue Admin',
+  regular: 'User', participant: 'User', team_lead: 'Team Lead', admin: 'Admin',
+  finance_moderator: 'Finance Moderator',
   'super-admin': 'Super Admin', super_admin: 'Super Admin',
 };
 
@@ -39,6 +43,135 @@ function formatDate(value) {
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+const LEVEL_ORDER = ['blue', 'green', 'orange', 'red'];
+
+/**
+ * Organiser Reputation & History.
+ *
+ * Every figure comes from a stored record: level transitions, sanctions and
+ * reports. A report against an organiser is an allegation — only a
+ * substantiated finding is counted as a violation.
+ */
+function ReputationOverview({ overview }) {
+  if (!overview) {
+    return (
+      <div className="profile-section panel-section-wrapper">
+        <p className="empty-state-text" style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>
+          Loading your organiser record…
+        </p>
+      </div>
+    );
+  }
+
+  const meta = LEVEL_META[overview.level] || LEVEL_META.blue;
+  const warnings = overview.warningSummary || { total: 0 };
+  const reports = overview.reports || { total: 0, substantiated: 0, unsubstantiated: 0, discarded: 0, underReview: 0 };
+  const levelCounts = overview.levelCounts || {};
+  const levelHistory = overview.levelHistory || [];
+  const warningTotal = Number(warnings.total) || 0;
+
+  return (
+    <div className="rep-dashboard">
+      <section className="rep-panel" id="rep-current">
+        <header className="rep-panel-head">
+          <h3>Current Reputation</h3>
+          <p>The level that applies to this organiser account right now.</p>
+        </header>
+        <div className="rep-current">
+          <ReputationBadge level={overview.level} limit={overview.limit} />
+          {overview.lifetimeBan && <span className="rep-alert">Lifetime organising ban</span>}
+          {!overview.lifetimeBan && overview.bannedUntil && (
+            <span className="rep-alert">Organising restricted until {formatDate(overview.bannedUntil)}</span>
+          )}
+        </div>
+        <p className="rep-explain">{meta.description}</p>
+        <dl className="rep-facts">
+          <div><dt>Prize-pool limit</dt><dd>{formatINR(overview.limit)}</dd></div>
+          <div><dt>Platform maximum</dt><dd>{formatINR(overview.globalMax)}</dd></div>
+          <div><dt>At this level since</dt><dd>{overview.levelEnteredAt ? formatDate(overview.levelEnteredAt) : 'No recorded transition'}</dd></div>
+        </dl>
+      </section>
+
+      <section className="rep-panel" id="rep-warnings">
+        <header className="rep-panel-head">
+          <h3>Warning Statistics</h3>
+          <p>Warnings recorded by a Community Moderator.</p>
+        </header>
+        {warningTotal > 0 ? (
+          <div className="rep-stat-row">
+            <div>
+              <span className="n">{warningTotal}</span>
+              <span className="l">{warningTotal === 1 ? 'Total warning' : 'Total warnings'}</span>
+            </div>
+          </div>
+        ) : (
+          <p className="rep-empty">No warnings have been recorded on this account.</p>
+        )}
+      </section>
+
+      <section className="rep-panel" id="rep-reports">
+        <header className="rep-panel-head">
+          <h3>Reports Filed Against You</h3>
+          <p>Calculated from stored reports and their recorded findings.</p>
+        </header>
+        <div className="rep-stat-row rep-stat-row-wrap">
+          <div><span className="n">{reports.total}</span><span className="l">Total</span></div>
+          <div><span className="n">{reports.substantiated}</span><span className="l">Substantiated</span></div>
+          <div><span className="n">{reports.unsubstantiated}</span><span className="l">Unsubstantiated</span></div>
+          <div><span className="n">{reports.discarded}</span><span className="l">Discarded</span></div>
+          <div><span className="n">{reports.underReview}</span><span className="l">Under review</span></div>
+        </div>
+        <p className="rep-footnote">A submitted report is an allegation. Only a substantiated finding counts as a violation.</p>
+      </section>
+
+      <section className="rep-panel" id="rep-levels">
+        <header className="rep-panel-head">
+          <h3>Reputation Level History</h3>
+          <p>How many times this account has entered each reputation level.</p>
+        </header>
+        <div className="rep-level-grid">
+          {LEVEL_ORDER.map((level) => {
+            const levelMeta = LEVEL_META[level];
+            return (
+              <div className="rep-level-tile" key={level}>
+                <span className="dot" style={{ background: levelMeta.color }} />
+                <span className="rep-level-name" style={{ color: levelMeta.color }}>{levelMeta.label}</span>
+                <strong>{levelCounts[level] ?? 0}</strong>
+                <small>times entered</small>
+              </div>
+            );
+          })}
+        </div>
+        <p className="rep-footnote">Counts come from recorded transitions; the initial level is not a transition.</p>
+      </section>
+
+      <section className="rep-panel" id="rep-transitions">
+        <header className="rep-panel-head">
+          <h3>Level Transition History</h3>
+          <p>Every recorded change between reputation levels.</p>
+        </header>
+        {levelHistory.length ? (
+          <ol className="rep-timeline">
+            {levelHistory.map((entry) => (
+              <li key={entry.id}>
+                <span className="rep-timeline-dot" style={{ background: (LEVEL_META[entry.toLevel] || meta).color }} />
+                <span className="rep-transition">
+                  {capitalise(entry.fromLevel || 'blue')} <span className="rep-arrow">→</span> {capitalise(entry.toLevel)}
+                </span>
+                <time>{formatDate(entry.createdAt)}</time>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="rep-empty">No reputation level changes have been recorded for this account yet.</p>
+        )}
+      </section>
+
+      <p className="rep-privacy">Report descriptions, evidence and moderator-only notes are never shown in this section.</p>
+    </div>
+  );
+}
 
 export default function Profile() {
   const { session, logout } = useAuth();
@@ -62,6 +195,39 @@ export default function Profile() {
   const [email, setEmail] = useState(session ? (session.email || session.emailAddress || '') : '');
   const [emailInput, setEmailInput] = useState(session ? (session.email || '') : '');
   const [pwd, setPwd] = useState({ current: '', next: '', confirm: '' });
+  const [organiserProfile, setOrganiserProfile] = useState(null);
+  const [reputationOverview, setReputationOverview] = useState(null);
+  const autoReputationTab = useRef(false);
+
+  useEffect(() => {
+    let alive = true;
+    if (!session) return () => { alive = false; };
+    LocalReputationAPI.me()
+      .then((res) => { if (alive && res.ok && res.data) setOrganiserProfile(res.data); })
+      .catch(() => undefined);
+    LocalReputationAPI.overview()
+      .then((res) => { if (alive && res.ok && res.data) setReputationOverview(res.data); })
+      .catch(() => undefined);
+    return () => { alive = false; };
+  }, [session?.username]);
+
+  // Every profile carries the Organiser Info tab. The record only counts as a
+  // real organiser history when a stored competition/transition/warning/report
+  // exists — a team-lead role alone is not organiser history.
+  const hasOrganiserHistory = !!reputationOverview && (
+    Number(reputationOverview.organisedCompetitions) > 0
+    || (reputationOverview.levelHistory || []).length > 0
+  );
+  const tabs = [...PTABS, { id: 'organiser', label: 'Organiser Info' }];
+
+  // Actual organisers land on their reputation record; other profiles keep Match History.
+  useEffect(() => {
+    if (hasOrganiserHistory && !autoReputationTab.current) {
+      autoReputationTab.current = true;
+      setTab('organiser');
+    }
+  }, [hasOrganiserHistory]);
+
 
   const derived = useMemo(() => {
     const myTeams = [];
@@ -178,6 +344,19 @@ export default function Profile() {
               <div className="rank-badge" id="profile-rank-badge" style={{ display: 'none' }}></div>
             </div>
             <div className="username" id="profile-username">@{username || '—'}</div>
+            {organiserProfile && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', margin: '10px 0 2px' }}>
+                <ReputationBadge level={organiserProfile.level} limit={organiserProfile.limit} />
+                {organiserProfile.lifetimeBan && (
+                  <span style={{ color: '#f87171', fontSize: 12, fontWeight: 700 }}>Lifetime organising ban</span>
+                )}
+                {!organiserProfile.lifetimeBan && organiserProfile.bannedUntil && (
+                  <span style={{ color: '#f87171', fontSize: 12, fontWeight: 700 }}>
+                    Organising restricted until {formatDate(organiserProfile.bannedUntil)}
+                  </span>
+                )}
+              </div>
+            )}
             <p className="bio" id="profile-bio">{bio}</p>
             <div className="profile-badges" id="profile-badges-container"></div>
             <div className="profile-stats-row">
@@ -197,7 +376,7 @@ export default function Profile() {
         <div className="profile-body">
           <div className="profile-main">
             <div className="profile-tabs">
-              {PTABS.map((t) => (
+              {tabs.map((t) => (
                 <button key={t.id} className={`ptab${tab === t.id ? ' active' : ''}`} data-ptab={t.id} onClick={() => setTab(t.id)}>{t.label}</button>
               ))}
             </div>
@@ -348,6 +527,20 @@ export default function Profile() {
                   </div>
                 </div>
               </div>
+            </div>
+
+            <div className={`ptab-panel${tab === 'organiser' ? ' active' : ''}`} id="ptab-organiser">
+              {reputationOverview === null ? (
+                <ReputationOverview overview={null} />
+              ) : hasOrganiserHistory ? (
+                <ReputationOverview overview={reputationOverview} />
+              ) : (
+                <div className="profile-section panel-section-wrapper">
+                  <p className="empty-state-text" style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>
+                    No organiser history available yet.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 

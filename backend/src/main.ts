@@ -17,22 +17,24 @@ async function bootstrap() {
   // Global Exception / Error Handling Filter
   app.useGlobalFilters(new GlobalExceptionFilter(fileLogger));
 
-  // Enable CORS — restrict to configured origins. Without any, development allows
-  // localhost and 127.0.0.1 on any port, because Vite moves to the next free port
-  // when 5173 is taken. Production only ever allows configured origins.
+  // Enable CORS — configured origins plus any loopback origin. Loopback is
+  // always allowed because Vite moves to the next free port when 5173 is taken
+  // and browsers may normalise localhost to [::1]; a remote page can never send
+  // a loopback Origin, so this does not weaken protection against external sites.
   const allowedOrigins = String(process.env.FRONTEND_URL || '')
     .split(',')
     .map((value) => value.trim())
     .filter(Boolean);
-  const allowLocalDevOrigins = !allowedOrigins.length && process.env.NODE_ENV !== 'production';
-  const localDevOrigin = /^http:\/\/(localhost|127\.0\.0\.1):\d+$/;
+  const loopbackOrigin = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
 
   app.enableCors({
     origin: (origin, callback) => {
       // Same-origin/non-browser requests have no Origin header.
       if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-      if (allowLocalDevOrigins && localDevOrigin.test(origin)) return callback(null, true);
-      return callback(new Error('Origin not allowed by CORS'));
+      if (loopbackOrigin.test(origin)) return callback(null, true);
+      // Reject by omitting CORS headers rather than throwing: throwing from the
+      // origin callback surfaces as a 500 and hides the real cause.
+      return callback(null, false);
     },
     credentials: true,
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -56,10 +58,8 @@ async function bootstrap() {
       '**Available Roles:**\n' +
       '- `participant`: Basic user role for participants\n' +
       '- `team_lead`: Can manage teams and competitions\n' +
-      '- `comp_admin`: Competition administrator\n' +
-      '- `dispute_admin`: Dispute administrator\n' +
-      '- `revenue_admin`: Revenue administrator\n' +
-      '- `admin`: Administrative access to most features\n' +
+      '- `community_moderator`: Reviews reports against organisers\n' +
+      '- `admin`: Competition, dispute and revenue administration\n' +
       '- `super_admin`: Full system access including user management\n\n' +
       '**Authorization:** Provide a valid JWT token in the `Authorization: Bearer <token>` header.',
     )

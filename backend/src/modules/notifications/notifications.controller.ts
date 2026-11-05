@@ -15,7 +15,7 @@ export class NotificationsController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.COMP_ADMIN, UserRole.DISPUTE_ADMIN, UserRole.REVENUE_ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.ADMIN, UserRole.ADMIN)
   @ApiOperation({ summary: 'Create a notification (Admin only)' })
   async create(
     @Body() body: { toUsername: string; type: string; status?: string; title: string; body?: string; meta?: any },

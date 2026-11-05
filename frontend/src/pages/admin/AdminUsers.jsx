@@ -13,7 +13,7 @@ import '../../styles/pages/super-admin/users.css';
 import '../../styles/pages/admin/users.css';
 
 const ACCOUNTS_KEY = 'nexus.auth.accounts';
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 
 const normalize = (v) => String(v || '').trim().toLowerCase();

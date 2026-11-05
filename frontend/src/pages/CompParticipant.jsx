@@ -2,7 +2,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
+import ReportButton from '../components/ReportButton.jsx';
+import TeamTabs from '../components/TeamTabs.jsx';
 import NexusData from '../services/data.js';
+import { LocalReportsAPI } from '../services/local/reporting.js';
 import NexusTeamWorkflow from '../services/teamWorkflow.js';
 import { CompetitionsAPI, MatchesAPI, TeamsAPI } from '../services/api.js';
 import { showToast } from '../lib/toast.js';
@@ -59,6 +62,23 @@ export default function CompParticipant() {
   const [syncError, setSyncError] = useState('');
   const [backendMatches, setBackendMatches] = useState([]);
   const [backendStandings, setBackendStandings] = useState([]);
+  const [removal, setRemoval] = useState(null);
+
+  // Removed players lose this page immediately, even from an old bookmark.
+  useEffect(() => {
+    let cancelled = false;
+    if (!compId || !session?.username) { setRemoval(null); return undefined; }
+    LocalReportsAPI.removalStatus(compId)
+      .then((res) => { if (!cancelled && res.ok && res.data) setRemoval(res.data); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [compId, session?.username]);
+
+  useEffect(() => {
+    if (!removal?.removed) return;
+    showToast('You have been removed from this competition. You can no longer access its team or competition management features.', 'error');
+    navigate(`/pages/comp-info.html?id=${encodeURIComponent(compId || '')}`, { replace: true });
+  }, [removal, compId, navigate]);
 
   function freshComp() {
     // §7 — this page must only ever show THE competition it was opened for;
@@ -276,6 +296,15 @@ export default function CompParticipant() {
           </div>
         </div>
 
+        <TeamTabs
+          active="roster"
+          context={{ compId: comp0.id || compId || '', teamId: myTeam ? myTeam.id : '' }}
+          canManage={normalize(myTeam?.createdBy) === normalize(session?.username)}
+          canChat={!!myTeam && !['completed', 'banned', 'disbanded'].includes(normalize(compStatus))}
+          isEnded={normalize(compStatus) === 'completed'}
+          rosterTo={`/pages/comp-participant.html?id=${encodeURIComponent(comp0.id || compId || '')}`}
+        />
+
         <div className="part-about-panel" id="part-about-panel">
           <div className="about-section-title">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C6FF33" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
@@ -332,6 +361,15 @@ export default function CompParticipant() {
                                   ? <span style={{ fontSize: 10, background: 'rgba(198,255,51,0.15)', color: '#C6FF33', padding: '2px 7px', borderRadius: 4, marginLeft: 8, fontWeight: 600 }}>CAPTAIN</span>
                                   : <span style={{ fontSize: 10, background: 'rgba(255,255,255,0.06)', color: '#94a3b8', padding: '2px 7px', borderRadius: 4, marginLeft: 8 }}>PLAYER</span>}
                               </div>
+                              {m.username && normalize(m.username) !== normalize(session?.username) && (
+                                <ReportButton
+                                  compId={comp.id}
+                                  against={m.username}
+                                  targetRole={isCaptain ? 'team_leader' : 'player'}
+                                  source="participant-roster"
+                                  className="btn-table-secondary"
+                                />
+                              )}
                             </div>
                           );
                         })}

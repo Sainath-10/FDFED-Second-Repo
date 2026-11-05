@@ -9,9 +9,11 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { AuditLogService } from '../../common/audit/audit.service';
 import { RefundRequestEntity } from '../../entities/refund-request.entity';
 import { RevenueTransactionEntity } from '../../entities/revenue-transaction.entity';
+import { CompetitionRemovalEntity } from '../../entities/competition-removal.entity';
 import { CreateTeamDto, UpdateTeamDto, AddTeamMemberDto } from './dto/team.dto';
 import { ITeam, UserRole } from '../../common/interfaces';
 import { isCompetitionStarted } from '../../common/validation/competition.rules';
+import { isEligiblePlayerAccount } from '../../common/validation/player-eligibility';
 import { MatchesService } from '../matches/matches.service';
 
 @Injectable()
@@ -26,6 +28,8 @@ export class TeamsService {
     private refundRepo: Repository<RefundRequestEntity>,
     @InjectRepository(RevenueTransactionEntity)
     private revenueRepo: Repository<RevenueTransactionEntity>,
+    @InjectRepository(CompetitionRemovalEntity)
+    private removals: Repository<CompetitionRemovalEntity>,
     @Optional() @Inject(forwardRef(() => MatchesService))
     private matchesService?: MatchesService,
     @Optional() private lifecycle?: LifecycleService,
@@ -40,6 +44,9 @@ export class TeamsService {
     if (role === UserRole.ADMIN || role === UserRole.SUPER_ADMIN) {
       return team;
     }
+    // A removal is checked before ownership: a removed leader must lose every
+    // team surface immediately, even while a cached page still holds the id.
+    await this.assertNotRemoved(team.competitionId, user.username || user.id);
     const currentUsername = (user.username || user.id || '').toLowerCase();
     const leaderId = (team.leaderId || '').toLowerCase();
     if (['rejected', 'banned', 'disbanded'].includes(team.status) || currentUsername !== leaderId || !(team.memberUsernames || []).some(name => name.toLowerCase() === currentUsername)) {
@@ -61,6 +68,56 @@ export class TeamsService {
     return inRevenueRecords || this.teamRepository.hasPaidJoinRequest(competitionId, username);
   }
 
+  /** Whether this account was removed from the competition. */
+  private async isRemovedFromCompetition(competitionId: string, username: string): Promise<boolean> {
+    if (!competitionId || !username) return false;
+    return !!(await this.removals
+      .createQueryBuilder('removal')
+      .where('removal.competitionId = :competitionId', { competitionId })
+      .andWhere('lower(removal.username) = :username', { username: String(username).toLowerCase() })
+      .getOne());
+  }
+
+  /** A removed player cannot read or re-enter this competition's team data. */
+  private async assertViewerCanReadCompetition(competitionId: string, user: any) {
+    if (!competitionId || !user) return;
+    const role = user.role;
+    if (role === UserRole.ADMIN || role === UserRole.SUPER_ADMIN) return;
+    await this.assertNotRemoved(competitionId, user.username || user.id);
+  }
+
+  /** Authoritative check: a removed player cannot re-enter through any route. */
+  private async assertNotRemoved(competitionId: string, username: string) {
+    if (!competitionId || !username) return;
+    const row = await this.removals
+      .createQueryBuilder('removal')
+      .where('removal.competitionId = :competitionId', { competitionId })
+      .andWhere('lower(removal.username) = :username', { username: String(username).toLowerCase() })
+      .getOne();
+    if (row) {
+      throw new ForbiddenException(
+        'You have been removed from this competition. You can no longer access its team or competition management features.',
+      );
+    }
+  }
+
+  /**
+   * Every path that puts an account on a competition roster runs this check:
+   * the target must exist, be a normal player account, and not have been
+   * removed from this competition. Frontend filtering is never trusted.
+   */
+  private async assertEligibleMember(username: string, competitionId: string) {
+    const account = await this.userRepository.findByUsername(String(username || '').trim().replace(/^@/, ''));
+    if (!account) {
+      throw new BadRequestException(`Unknown member username: ${username}. This username does not exist.`);
+    }
+    if (!this.isInvitableAccount(account)) {
+      throw new BadRequestException(`${account.username} is a staff account and cannot join a competition team.`);
+    }
+    await this.assertNotRemoved(competitionId, account.username);
+    return account;
+  }
+
   async createTeam(createTeamDto: CreateTeamDto, user: any): Promise<ITeam> {
     const { name, competitionId, members, joinCode } = createTeamDto;
     const leaderId = user?.username || user?.id || 'system';
@@ -69,6 +126,7 @@ export class TeamsService {
     if (!competition) {
       throw new NotFoundException(`Competition with ID ${competitionId} not found`);
     }
+    await this.assertNotRemoved(competitionId, leaderId);
     if (competition.paymentStatus === 'AWAITING_PLATFORM_FEE') throw new ForbiddenException('Platform fee payment is pending.');
     if (managed(competition)) {
       const team = await this.lifecycle.registerTeam(createTeamDto, user);
@@ -98,16 +156,14 @@ export class TeamsService {
       throw new BadRequestException('Team capacity is full for this competition.');
     }
 
-    // Validate member usernames actually exist (roster addition path, §5.1)
+    // Validate member usernames exist AND are eligible player accounts (§5.1).
+    // Staff accounts are rejected here, not only in the Add Players list.
     const memberList = Array.isArray(members) ? members : [];
-    if (memberList.length) {
-      const allUsers = await this.userRepository.findAll();
-      const existing = new Set(allUsers.map((u) => String(u.username || '').toLowerCase()));
-      const unknown = memberList.map((m) => String(m || '').trim().replace(/^@/, ''))
-        .filter((m) => m && !existing.has(m.toLowerCase()));
-      if (unknown.length) {
-        throw new BadRequestException(`Unknown member username(s): ${unknown.join(', ')}. This username does not exist.`);
-      }
+    for (const member of memberList) {
+      const clean = String(member || '').trim().replace(/^@/, '');
+      if (!clean) continue;
+      if (clean.toLowerCase() === String(leaderId).toLowerCase()) continue;
+      await this.assertEligibleMember(clean, competitionId);
     }
 
     if (name && name.trim().length < 3) {
@@ -151,19 +207,30 @@ export class TeamsService {
     return team;
   }
 
-  async getTeamById(id: string): Promise<ITeam> {
+  async getTeamById(id: string, viewer?: any): Promise<ITeam> {
     const team = await this.teamRepository.findById(id);
     if (!team) {
       throw new NotFoundException(`Team with ID ${id} not found`);
     }
+    // Reading a roster is a competition resource: a removed player gets 403
+    // even with a previously valid team id.
+    if (viewer) await this.assertViewerCanReadCompetition(team.competitionId, viewer);
     return team;
   }
 
-  async getAllTeams(): Promise<ITeam[]> {
-    return this.teamRepository.findAll();
+  async getAllTeams(viewer?: any): Promise<ITeam[]> {
+    const teams = await this.teamRepository.findAll();
+    if (!viewer) return teams;
+    // Global lists stay readable, but never leak a competition the viewer lost.
+    const blocked: string[] = [];
+    for (const competitionId of new Set(teams.map((team) => team.competitionId))) {
+      if (await this.isRemovedFromCompetition(competitionId, viewer.username || viewer.id)) blocked.push(competitionId);
+    }
+    return blocked.length ? teams.filter((team) => !blocked.includes(team.competitionId)) : teams;
   }
 
-  async getTeamsByCompetition(competitionId: string): Promise<ITeam[]> {
+  async getTeamsByCompetition(competitionId: string, viewer?: any): Promise<ITeam[]> {
+    if (viewer) await this.assertViewerCanReadCompetition(competitionId, viewer);
     return this.teamRepository.findByCompetition(competitionId);
   }
 
@@ -214,9 +281,8 @@ export class TeamsService {
     const member = String(addTeamMemberDto.memberId || '').trim().replace(/^@/, '');
     if (!member) throw new BadRequestException('Member username is required.');
 
-    // the username must belong to a registered account
-    const memberUser = await this.userRepository.findByUsername(member);
-    if (!memberUser) throw new BadRequestException(`@${member} does not exist. This username does not exist.`);
+    // the username must belong to a registered, eligible player account
+    const memberUser = await this.assertEligibleMember(member, team.competitionId);
 
     const rosterSize = ((team as any).memberUsernames || []).length;
     await this.assertCapacity(team.competitionId, team, rosterSize + 1);
@@ -498,10 +564,17 @@ export class TeamsService {
     // backend-derived username; the frontend value is never trusted
     const fromUsername = String(user?.username || '').trim();
     if (!fromUsername) throw new ForbiddenException('User context required');
+
     const team = await this.teamRepository.findById(teamId);
     if (!team) throw new NotFoundException(`Team with ID ${teamId} not found`);
     if (team.status === 'disbanded') {
       throw new BadRequestException('This team has been disbanded and is no longer accepting requests.');
+    }
+    await this.assertNotRemoved(team.competitionId, fromUsername);
+    // Staff/administrative accounts can never request to join a competition team.
+    const requester = await this.assertEligibleMember(fromUsername, team.competitionId);
+    if (requester.banned) {
+      throw new ForbiddenException('This account cannot join competitions.');
     }
 
     const competition = await this.competitionRepository.findById(competitionId || team.competitionId);
@@ -613,6 +686,7 @@ export class TeamsService {
 
     const competition = await this.competitionRepository.findById(team.competitionId);
     await this.assertRosterOpen(team, competition);
+    await this.assertEligibleMember(req.fromUsername, team.competitionId);
     await this.assertNotOnAnotherTeam(team, req.fromUsername, `@${req.fromUsername} is already in another team for this competition.`);
 
     if (managed(competition)) feeAlreadyPaid = false;
@@ -659,10 +733,12 @@ export class TeamsService {
     if (req.status !== 'awaiting_payment') {
       throw new BadRequestException('The team lead has to accept your request before you can pay.');
     }
+
     const team = await this.teamRepository.findById(req.teamId);
     if (!team) throw new NotFoundException(`Team with ID ${req.teamId} not found`);
     const competition = await this.competitionRepository.findById(team.competitionId);
     await this.assertRosterOpen(team, competition);
+    await this.assertEligibleMember(username, team.competitionId);
     await this.assertNotOnAnotherTeam(team, req.fromUsername, 'You are already in another team for this competition.');
 
     const amount = this.playerFeeDue(competition);
@@ -696,11 +772,17 @@ export class TeamsService {
     const target = await this.userRepository.findByUsername(String(toUsername || '').trim().replace(/^@/, ''));
     if (!target) throw new BadRequestException('User not found. Enter a registered username.');
     if (!this.isInvitableAccount(target)) {
-      throw new BadRequestException('Invitations can only be sent to regular users.');
+      throw new BadRequestException('This account is not eligible to join a team. Only regular users can be invited.');
     }
+    await this.assertNotRemoved(team.competitionId, target.username);
     const targetKey = String(target.username).toLowerCase();
     if (targetKey === String(user?.username || '').toLowerCase()) {
       throw new BadRequestException('You cannot invite yourself.');
+    }
+    const competitionOrganisers = [competition?.createdBy, ...(competition?.organizers || [])]
+      .map((name) => String(name || '').toLowerCase());
+    if (competitionOrganisers.includes(targetKey)) {
+      throw new BadRequestException(`${target.username} organises this competition and cannot be invited as a player.`);
     }
     if ((team.memberUsernames || []).some((m) => String(m).toLowerCase() === targetKey)) {
       throw new BadRequestException(`${target.username} is already in this team.`);
@@ -748,6 +830,9 @@ export class TeamsService {
     teams
       .filter((t) => String(t.id) === String(teamId) || this.isActiveTeam(t))
       .forEach((t) => (t.memberUsernames || []).forEach((m) => taken.add(String(m).toLowerCase())));
+    // Players removed from this competition are no longer eligible anywhere in it.
+    const removedRows = await this.removals.find({ where: { competitionId: team.competitionId } });
+    removedRows.forEach((row) => taken.add(String(row.username).toLowerCase()));
     const invites = await this.teamRepository.getInvitesByTeam(teamId);
     const invited = new Set<string>(
       invites.filter((i) => i.status === 'pending').map((i) => String(i.toUsername).toLowerCase()),
@@ -777,8 +862,7 @@ export class TeamsService {
   }
 
   private isInvitableAccount(account: any): boolean {
-    const role = String(account?.role || '').toLowerCase();
-    return !account?.banned && (role === UserRole.PARTICIPANT || role === UserRole.TEAM_LEAD);
+    return isEligiblePlayerAccount(account);
   }
 
   private isActiveTeam(team: any): boolean {
@@ -823,6 +907,9 @@ export class TeamsService {
       if (competition && isCompetitionStarted(competition as any)) {
         throw new ForbiddenException('The competition has started: rosters are locked.');
       }
+      // Acceptance re-checks the target's current role: an invitation issued
+      // before a role change can never add a staff account to the roster.
+      await this.assertEligibleMember(invite.toUsername, team.competitionId);
       const rosterSize = (team.memberUsernames || []).length;
       await this.assertCapacity(team.competitionId, team, rosterSize + 1);
       await this.assertNotOnAnotherTeam(team, invite.toUsername, 'You are already in another team for this competition.');

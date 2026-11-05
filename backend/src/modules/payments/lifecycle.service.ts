@@ -15,6 +15,8 @@ import { NotificationEntity as Notification } from '../../entities/notification.
 import { AdminActivityLogEntity as Audit } from '../../entities/admin-activity-log.entity';
 import { UserRole, DisputeStatus } from '../../common/interfaces';
 import { TERMINAL_PAYMENT_STATES, TRUST_PENALTY_CANCEL, TRUST_PENALTY_FRAUD, mailSubject, prizeDeadline, allocatePrizes, standingsGroups, DEFAULT_MIN_ORGANIZER_TRUST } from './payment.rules';
+import { CompetitionRemovalEntity } from '../../entities/competition-removal.entity';
+import { isEligiblePlayerAccount } from '../../common/validation/player-eligibility';
 import { computeStandings } from '../../common/tournament/tournament.utils';
 
 const PLAYOFF_ROUNDS = ['Qualifier 1', 'Eliminator', 'Qualifier 2', 'Final'];
@@ -28,7 +30,7 @@ const minor = (amount: number) => {
   return n;
 };
 const inr = (amountMinor: number) => `₹${(amountMinor / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
-export const financeRole = (u: any) => ['finance_moderator', 'revenue_admin', 'super_admin'].includes(u?.role);
+export const financeRole = (u: any) => ['finance_moderator', 'admin', 'super_admin'].includes(u?.role);
 
 /**
  * Mock escrow lifecycle (Payment_Architecture.md §2–§9). Every money movement is
@@ -109,9 +111,14 @@ export class LifecycleService implements OnModuleInit, OnModuleDestroy {
     tx.gatewayRefId = `mock_pay_${tx.id}`;
     return m.save(tx);
   }
-  private async verified(m: EntityManager, username: string) {
+  private async verified(m: EntityManager, username: string, competitionId: string) {
     const user = await m.findOneBy(User, { username });
     if (!user || user.banned) throw new ForbiddenException('An active, non-banned account is required.');
+    if (!isEligiblePlayerAccount(user)) throw new ForbiddenException('Staff accounts cannot join a competition team.');
+    const removals = await m.find(CompetitionRemovalEntity, { where: { competitionId } });
+    if (removals.some(removal => removal.username.toLowerCase() === username.toLowerCase())) {
+      throw new ForbiddenException('You have been removed from this competition.');
+    }
     return user;
   }
   private async penalize(m: EntityManager, username: string, points: number) {
@@ -159,7 +166,7 @@ export class LifecycleService implements OnModuleInit, OnModuleDestroy {
   async registerTeam(dto: any, user: any) {
     return this.locked(dto.competitionId, async (m, c) => {
       this.open(c);
-      const payer = await this.verified(m, user.username);
+      const payer = await this.verified(m, user.username, c.id);
       if ([c.createdBy, ...c.organizers].includes(user.username)) throw new BadRequestException('Organizers cannot register in their own competition.');
       if (c.visibility === 'private' && String(dto.joinCode || '').toUpperCase() !== c.joinCode?.toUpperCase()) throw new BadRequestException('Invalid join code');
       const teams = await m.find(Team, { where: { competitionId: c.id } });
@@ -171,7 +178,7 @@ export class LifecycleService implements OnModuleInit, OnModuleDestroy {
       if (c.feeType === 'per_player' && members.length > 1) throw new BadRequestException('Each player must accept an invitation or pay their own join request.');
       if (c.maxPlayersPerTeam && members.length > c.maxPlayersPerTeam) throw new BadRequestException('Team is full');
       for (const name of members) {
-        await this.verified(m, name);
+        await this.verified(m, name, c.id);
         if (current.some(t => t.memberUsernames.includes(name))) throw new BadRequestException(`${name} is already in a team.`);
       }
       if (String(dto.name || '').trim().length < 3) throw new BadRequestException('Team name must be at least 3 characters.');
@@ -188,7 +195,7 @@ export class LifecycleService implements OnModuleInit, OnModuleDestroy {
     if (!reference) throw new NotFoundException('Request not found');
     return this.locked(reference.competitionId, async (m, c) => {
       this.open(c);
-      await this.verified(m, user.username);
+      await this.verified(m, user.username, c.id);
       const request: any = invitation ? await m.findOneBy(Invite, { id: requestId }) : await m.findOneBy(JoinRequest, { id: requestId });
       if ((invitation ? request.toUsername : request.fromUsername) !== user.username) throw new ForbiddenException('This request belongs to another player.');
       const team = await m.findOneBy(Team, { id: request.teamId });

@@ -15,6 +15,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagg
 import { TeamsService } from './teams.service';
 import { CreateTeamDto, UpdateTeamDto, AddTeamMemberDto, TeamResponseDto, DisbandTeamDto, RemoveMemberDto } from './dto/team.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../../common/guards/optional-jwt-auth.guard';
 import { RolesGuard } from '../../common/decorators/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -45,7 +46,7 @@ export class TeamsController {
   })
   @ApiResponse({
     status: 403,
-    description: 'Forbidden - Authentication/verification requirements were not met',
+    description: 'Forbidden - Authentication/authorization requirements were not met',
   })
   async createTeam(
     @Body() createTeamDto: CreateTeamDto,
@@ -55,17 +56,18 @@ export class TeamsController {
   }
 
   @Get()
+  @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({
     summary: 'Get all teams',
-    description: 'Retrieve a list of all teams',
+    description: 'Retrieve a list of all teams. Teams in a competition a signed-in viewer was removed from are withheld.',
   })
   @ApiResponse({
     status: 200,
     description: 'List of teams',
     type: [TeamResponseDto],
   })
-  async getAllTeams(): Promise<TeamResponseDto[]> {
-    return this.teamsService.getAllTeams();
+  async getAllTeams(@CurrentUser() user?: any): Promise<TeamResponseDto[]> {
+    return this.teamsService.getAllTeams(user);
   }
 
   @Get('competition/:competitionId')
@@ -78,10 +80,12 @@ export class TeamsController {
     description: 'List of teams in competition',
     type: [TeamResponseDto],
   })
+  @UseGuards(OptionalJwtAuthGuard)
   async getTeamsByCompetition(
     @Param('competitionId') competitionId: string,
+    @CurrentUser() user?: any,
   ): Promise<TeamResponseDto[]> {
-    return this.teamsService.getTeamsByCompetition(competitionId);
+    return this.teamsService.getTeamsByCompetition(competitionId, user);
   }
 
   @Get(':id')
@@ -98,8 +102,9 @@ export class TeamsController {
     status: 404,
     description: 'Team not found',
   })
-  async getTeam(@Param('id') id: string): Promise<TeamResponseDto> {
-    return this.teamsService.getTeamById(id);
+  @UseGuards(OptionalJwtAuthGuard)
+  async getTeam(@Param('id') id: string, @CurrentUser() user?: any): Promise<TeamResponseDto> {
+    return this.teamsService.getTeamById(id, user);
   }
 
   @Patch(':id')
@@ -146,7 +151,7 @@ export class TeamsController {
 
   @Get('refund-requests')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.DISPUTE_ADMIN, UserRole.SUPER_ADMIN, UserRole.REVENUE_ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'List refund requests (support workflow). Filter with ?status=pending' })
   async refundRequests(@Query('status') status?: string) {
@@ -155,7 +160,7 @@ export class TeamsController {
 
   @Patch('refund-requests/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.DISPUTE_ADMIN, UserRole.SUPER_ADMIN, UserRole.REVENUE_ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Resolve a refund request (support workflow). Never auto-claims a provider refund was completed.' })
   async resolveRefundRequest(

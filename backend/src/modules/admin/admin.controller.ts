@@ -13,9 +13,9 @@ import { UserRole } from '../../common/interfaces';
 @Roles(
   UserRole.ADMIN,
   UserRole.SUPER_ADMIN,
-  UserRole.COMP_ADMIN,
-  UserRole.DISPUTE_ADMIN,
-  UserRole.REVENUE_ADMIN,
+  UserRole.ADMIN,
+  UserRole.ADMIN,
+  UserRole.ADMIN,
 )
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}

@@ -1,0 +1,628 @@
+/* ================================================================
+   NEXUS ESPORTS — report workspace
+   Organiser Disputes cards + Case Discussion Room
+   ================================================================ */
+
+/* ── Disputes report cards ────────────────────────────────────────── */
+
+.cd-dispute-report-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  /* The list grows with every report; nothing is clipped or fixed-height. */
+  height: auto;
+  max-height: none;
+  overflow: visible;
+}
+
+.cd-dispute-report-list .cd-dispute-card {
+  flex: 0 0 auto;
+}
+
+.cd-dispute-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: #0d0f13;
+  border: 1px solid #24303d;
+  border-radius: 14px;
+  padding: 18px 20px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.28);
+}
+
+.cd-dispute-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cd-dispute-code {
+  font-family: 'SFMono-Regular', ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  color: #c6ff33;
+}
+
+.cd-dispute-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid #334155;
+  background: rgba(148, 163, 184, 0.1);
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.cd-dispute-badge.is-status {
+  color: #93c5fd;
+  border-color: rgba(96, 165, 250, 0.4);
+  background: rgba(96, 165, 250, 0.1);
+}
+
+.cd-dispute-people {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.cd-dispute-arrow {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.cd-dispute-role {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.cd-dispute-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px 20px;
+  margin: 0;
+  padding: 12px 14px;
+  background: #080b10;
+  border: 1px solid #1f2937;
+  border-radius: 10px;
+}
+
+.cd-dispute-facts div {
+  min-width: 0;
+}
+
+.cd-dispute-facts dt {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #7d8b9a;
+  margin-bottom: 3px;
+}
+
+.cd-dispute-facts dd {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #e2e8f0;
+  overflow-wrap: anywhere;
+}
+
+.cd-dispute-desc {
+  margin: 0;
+  padding: 0 2px;
+  font-size: 13px;
+  line-height: 1.65;
+  color: #cbd5e1;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* One horizontal action row: Discuss / Act / Discard grouped left, the
+   Open details link pinned right. Wraps cleanly on narrow screens. */
+.cd-dispute-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  align-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-top: 12px;
+  border-top: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.cd-dispute-actions .report-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 104px;
+  min-height: 38px;
+  padding: 0 16px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.cd-dispute-actions .cd-dispute-open {
+  margin-left: auto;
+  min-width: 128px;
+  justify-content: center;
+  color: #e2e8f0;
+  border: 1px solid rgba(148, 163, 184, 0.55);
+  background: rgba(148, 163, 184, 0.06);
+}
+
+.cd-dispute-actions .cd-dispute-open:hover,
+.cd-dispute-actions .cd-dispute-open:focus-visible {
+  color: #c6ff33;
+  border-color: rgba(198, 255, 51, 0.75);
+  outline: none;
+}
+
+.cd-dispute-closed {
+  font-size: 12px;
+  color: #7d8b9a;
+  font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  .cd-dispute-card { padding: 14px 15px; }
+  .cd-dispute-actions .report-btn,
+  .cd-dispute-actions .cd-dispute-open { flex: 1 1 130px; margin-left: 0; }
+}
+
+/* ── Case Discussion Room ─────────────────────────────────────────── */
+
+.discussion-room {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 1560px;
+}
+
+.discussion-room-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  background: #0d0f13;
+  border: 1px solid #24303d;
+  border-radius: 14px;
+  padding: 18px 20px;
+}
+
+.discussion-room-head .reports-title {
+  margin: 0 0 8px;
+}
+
+.discussion-room-head-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.discussion-room-code {
+  font-family: 'SFMono-Regular', ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  color: #c6ff33;
+}
+
+.discussion-room-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid #334155;
+  background: rgba(148, 163, 184, 0.1);
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.discussion-room-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 16px;
+  align-items: stretch;
+}
+
+.discussion-room-chat {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 600px;
+  background: #0d0f13;
+  border: 1px solid #24303d;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.discussion-room-chat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 13px 18px;
+  border-bottom: 1px solid #1f2937;
+  background: #0b0d11;
+}
+
+.discussion-room-chat-head h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #e2e8f0;
+}
+
+.discussion-room-chat-head span {
+  font-size: 11.5px;
+  color: #7d8b9a;
+  font-weight: 600;
+}
+
+.discussion-room-thread {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  min-height: 300px;
+  max-height: min(62vh, 760px);
+  overflow-y: auto;
+  background: #080a0d;
+}
+
+.discussion-room-msg {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 100%;
+}
+
+.discussion-room-msg.is-mine {
+  flex-direction: row-reverse;
+}
+
+.discussion-room-avatar {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(198, 255, 51, 0.12);
+  border: 1px solid rgba(198, 255, 51, 0.35);
+  color: #c6ff33;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.discussion-room-bubble {
+  min-width: 0;
+  max-width: min(680px, 84%);
+  background: #0b1420;
+  border: 1px solid #24303d;
+  border-radius: 12px;
+  padding: 10px 14px;
+}
+
+.discussion-room-msg.is-mine .discussion-room-bubble {
+  border-color: rgba(198, 255, 51, 0.4);
+  background: rgba(198, 255, 51, 0.06);
+}
+
+.discussion-room-msg-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.discussion-room-author {
+  font-size: 12px;
+  font-weight: 800;
+  color: #c6ff33;
+}
+
+.discussion-room-role {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #94a3b8;
+  border: 1px solid #334155;
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+.discussion-room-time {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.discussion-room-msg-body {
+  margin: 6px 0 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #e2e8f0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.discussion-room-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px 16px;
+  border-top: 1px solid #1f2937;
+  background: #0b0d11;
+}
+
+.discussion-room-composer > label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #94a3b8;
+}
+
+.discussion-room-composer textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 78px;
+  background: #0b1420;
+  border: 1px solid #24303d;
+  border-radius: 10px;
+  color: #f1f5f9;
+  padding: 10px 12px;
+  font-size: 13.5px;
+  font-family: inherit;
+  line-height: 1.55;
+}
+
+.discussion-room-composer textarea:focus {
+  outline: none;
+  border-color: rgba(198, 255, 51, 0.6);
+}
+
+.discussion-room-composer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.discussion-room-attach {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.discussion-room-attach input[type='file'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.discussion-room-attach .report-btn {
+  cursor: pointer;
+}
+
+.discussion-room-attach span {
+  font-size: 11.5px;
+  color: #7d8b9a;
+  font-weight: 600;
+}
+
+.discussion-room-composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.discussion-room-locked {
+  padding: 14px 16px;
+  border-top: 1px solid #1f2937;
+  background: #0b0d11;
+  color: #7d8b9a;
+  font-size: 12.5px;
+}
+
+/* ── Case information sidebar ─────────────────────────────────────── */
+
+.discussion-room-side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.case-panel {
+  background: #0d0f13;
+  border: 1px solid #24303d;
+  border-radius: 14px;
+  padding: 15px 16px;
+}
+
+.case-panel h3 {
+  margin: 0 0 11px;
+  font-size: 11.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #7d8b9a;
+}
+
+.case-facts {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.case-facts div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.case-facts dt {
+  font-size: 11.5px;
+  color: #7d8b9a;
+  font-weight: 600;
+}
+
+.case-facts dd {
+  margin: 0;
+  font-size: 12.5px;
+  color: #e2e8f0;
+  font-weight: 700;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.case-people {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.case-people li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.case-avatar {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(198, 255, 51, 0.1);
+  border: 1px solid rgba(198, 255, 51, 0.3);
+  color: #c6ff33;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.case-person-name {
+  font-size: 12.5px;
+  color: #e2e8f0;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.case-role {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #c6ff33;
+  white-space: nowrap;
+}
+
+.case-add {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 13px;
+  padding-top: 12px;
+  border-top: 1px solid #1f2937;
+}
+
+.case-add input {
+  width: 100%;
+  background: #0b1420;
+  border: 1px solid #24303d;
+  border-radius: 9px;
+  color: #f1f5f9;
+  padding: 9px 11px;
+  font-size: 12.5px;
+  font-family: inherit;
+}
+
+.case-add input:focus {
+  outline: none;
+  border-color: rgba(198, 255, 51, 0.6);
+}
+
+.case-add button {
+  justify-content: center;
+}
+
+.case-add-hint {
+  margin: 0;
+  font-size: 10.5px;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.case-add-error,
+.case-add-ok {
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.45;
+  border-radius: 8px;
+  padding: 7px 9px;
+}
+
+.case-add-error {
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.case-add-ok {
+  color: #86efac;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+}
+
+@media (max-width: 1180px) {
+  .discussion-room-grid { grid-template-columns: minmax(0, 1fr); }
+  .discussion-room-chat { min-height: 460px; }
+  .discussion-room-thread { max-height: 56vh; }
+}
+
+@media (max-width: 720px) {
+  .discussion-room-head { padding: 15px; }
+  .discussion-room-thread { padding: 13px; }
+  .discussion-room-bubble { max-width: 100%; }
+  .discussion-room-msg { gap: 8px; }
+  .discussion-room-composer-actions { width: 100%; }
+  .discussion-room-composer-actions .report-btn { flex: 1 1 140px; }
+}

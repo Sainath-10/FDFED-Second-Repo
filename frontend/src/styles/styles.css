@@ -2228,16 +2228,35 @@ body:has(#sidebar-mount) #footer-mount {
    NEW PAGES — Additional Styles
    ============================================= */
 
-/* ── Team tabs nav (Roster / Add Players / etc.) ── */
+/* ── Team tabs nav (Roster / Team chat / Brackets / Standings …) ── */
 .team-tabs-nav {
   display: flex;
+  align-items: stretch;
   gap: 4px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   margin-bottom: 28px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(198, 255, 51, 0.35) transparent;
+  -webkit-overflow-scrolling: touch;
 }
 
+.team-tabs-nav::-webkit-scrollbar { height: 5px; }
+.team-tabs-nav::-webkit-scrollbar-thumb {
+  background: rgba(198, 255, 51, 0.35);
+  border-radius: 999px;
+}
+.team-tabs-nav::-webkit-scrollbar-track { background: transparent; }
+
 .team-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-height: 40px;
   font-size: 13px;
   font-weight: 700;
   color: var(--text-muted);

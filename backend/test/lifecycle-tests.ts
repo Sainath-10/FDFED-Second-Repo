@@ -1,7 +1,10 @@
 import 'reflect-metadata';
 import { strict as assert } from 'assert';
 import { randomUUID } from 'crypto';
-import { LifecycleService } from '../src/modules/payments/lifecycle.service';
+import { CompetitionRemovalEntity as Removal } from '../src/entities/competition-removal.entity';
+import { TeamInviteEntity as Invite } from '../src/entities/team-invite.entity';
+import { TeamJoinRequestEntity as JoinRequest } from '../src/entities/team-join-request.entity';
+import { financeRole, LifecycleService } from '../src/modules/payments/lifecycle.service';
 import { prizeDeadline, organizerTrusted, mailSubject, allocatePrizes, standingsGroups } from '../src/modules/payments/payment.rules';
 import { CompetitionEntity as Competition } from '../src/entities/competition.entity';
 import { PaymentTransactionEntity as Transaction } from '../src/entities/payment-transaction.entity';
@@ -97,6 +100,25 @@ async function run() {
     organizerPaid: true, prizePoolPaid: false, prize: 1000, feeType: 'per_team', entryFeeAmount: 100, visibility: 'public',
     maxTeams: 0, maxPlayersPerTeam: 0, prizeDistributionMinor: [60000, 40000], startDate: new Date(Date.now() + 3 * day), endDate: new Date(Date.now() + 6 * day), financeHold: false,
   });
+
+  // Incoming reporting restrictions must also hold inside the payment lifecycle.
+  assert(financeRole({ role: 'admin' }));
+  assert(financeRole({ role: 'finance_moderator' }));
+  assert(!financeRole({ role: 'community_moderator' }));
+  await insert(User, { username: 'removed', role: 'participant', banned: false });
+  await insert(User, { username: 'reviewer', role: 'community_moderator', banned: false });
+  await insert(Removal, { competitionId: comp.id, username: 'REMOVED' });
+  const beforeTeams = table(Team).length;
+  const beforeTransactions = table(Transaction).length;
+  await rejects(() => service.registerTeam({ competitionId: comp.id, name: 'Blocked' }, { username: 'removed' }), /removed/);
+  await rejects(() => service.registerTeam({ competitionId: comp.id, name: 'Blocked', members: ['removed'] }, p1), /removed/);
+  await rejects(() => service.registerTeam({ competitionId: comp.id, name: 'Blocked' }, { username: 'reviewer' }), /Staff accounts/);
+  const invite = await insert(Invite, { competitionId: comp.id, toUsername: 'removed', status: 'pending' });
+  const request = await insert(JoinRequest, { competitionId: comp.id, fromUsername: 'removed', status: 'awaiting_payment' });
+  await rejects(() => service.join(invite.id, { username: 'removed' }, true), /removed/);
+  await rejects(() => service.join(request.id, { username: 'removed' }), /removed/);
+  assert.equal(table(Team).length, beforeTeams);
+  assert.equal(table(Transaction).length, beforeTransactions);
 
   // Registration fees are escrowed exactly once per team, even on retry.
   const alpha: any = await service.registerTeam({ competitionId: comp.id, name: 'Alpha', members: ['p4'] }, p1);

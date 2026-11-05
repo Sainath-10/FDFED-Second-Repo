@@ -78,7 +78,7 @@ async function run() {
   await assert.rejects(() => production.simulate('comp1', 'owner', 'success'), /disabled in production/);
   const context: any = { getHandler: () => null, getClass: () => null, switchToHttp: () => ({ getRequest: () => ({ user: { role: UserRole.FINANCE_MODERATOR } }) }) };
   assert(new RolesGuard({ getAllAndOverride: () => [UserRole.FINANCE_MODERATOR] } as any).canActivate(context));
-  assert.throws(() => new RolesGuard({ getAllAndOverride: () => [UserRole.COMP_ADMIN] } as any).canActivate(context));
+  assert.throws(() => new RolesGuard({ getAllAndOverride: () => [UserRole.ADMIN] } as any).canActivate(context));
   console.log('Payment tests passed: fees, signatures, capture matching, ownership, retries, publication, duplicate delivery, role isolation.');
 }
 run().catch(error => { console.error(error); process.exitCode = 1; });

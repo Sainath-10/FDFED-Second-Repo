@@ -1,4 +1,4 @@
-﻿/**
+/**
  * NEXUS ESPORTS — Super Admin Dashboard
  *
  * system
@@ -16,7 +16,7 @@ import { assetUrl } from '../../lib/assets.js';
 import '../../styles/pages/super-admin/super-dashboard.css';
 
 const DASHBOARD_STATE_KEY = 'nexus.superadmin.dashboard.state';
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 const DEFAULTS = {
   platformName: 'Nexus Esports Platform',
@@ -89,7 +89,7 @@ export default function SuperDashboard() {
       <header className="sa-header-v2">
         <div className="sa-header-left">
           <h1 className="sa-title">Super Admin - <span className="accent-text">Dashboard</span></h1>
-          <p className="sa-desc">Manage global platform settings, policies and security controls for the Nexus Esports ecosystem.</p>
+          <p className="sa-desc">Manage global platform settings and security controls for the Nexus Esports ecosystem.</p>
         </div>
         <div className="sa-header-actions">
           <button className="sa-btn-rect" onClick={resetChanges}>Reset Changes</button>

@@ -122,7 +122,7 @@ export class PaymentsService {
   async status(id: string, user: any) {
     const comp = await this.db.getRepository(CompetitionEntity).findOneBy({ id });
     if (!comp) throw new NotFoundException('Competition not found');
-    if (!['finance_moderator', 'revenue_admin', 'super_admin'].includes(user.role)) this.assertOwner(comp, user.username);
+    if (!['finance_moderator', 'admin', 'super_admin'].includes(user.role)) this.assertOwner(comp, user.username);
     const transactions = await this.db.getRepository(PaymentTransactionEntity).find({ where: { competitionId: id }, order: { createdAt: 'DESC' } });
     return { provider: this.provider, competitionId: id, paymentStatus: comp.paymentStatus, platformFeePaid: comp.organizerPaid, platformFeeAmount: comp.platformFee, transactions };
   }

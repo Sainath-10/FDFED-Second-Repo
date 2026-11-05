@@ -8,9 +8,11 @@ import { CompetitionAuditMiddleware } from '../../common/middleware';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { RevenueModule } from '../revenue/revenue.module';
 import { TeamEntity } from '../../entities/team.entity';
+import { CompetitionRemovalEntity } from '../../entities/competition-removal.entity';
+import { ReputationModule } from '../reputation/reputation.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([CompetitionEntity, TeamEntity]), NotificationsModule, RevenueModule],
+  imports: [TypeOrmModule.forFeature([CompetitionEntity, TeamEntity, CompetitionRemovalEntity]), NotificationsModule, RevenueModule, ReputationModule],
   controllers: [CompetitionsController],
   providers: [CompetitionsService, CompetitionRepository],
   exports: [CompetitionsService, CompetitionRepository],

@@ -43,7 +43,7 @@ export class MatchesService {
     if (!competition) throw new NotFoundException('Competition not found');
     const username = String(actor || '').toLowerCase();
     const organizer = [competition.createdBy, ...(competition.organizers || [])].some((name) => String(name || '').toLowerCase() === username);
-    if (!organizer && !['admin', 'super_admin', 'comp_admin'].includes(role)) {
+    if (!organizer && !['admin', 'super_admin', 'admin'].includes(role)) {
       throw new ForbiddenException('Only an organizer of this competition (or a competition admin) can edit fixtures.');
     }
     if (competition.status === 'completed') throw new BadRequestException('This competition has already ended.');
@@ -311,7 +311,7 @@ export class MatchesService {
     const normalizedActor = String(actor || '').toLowerCase();
     const isOrganizer = String(competition.createdBy || '').toLowerCase() === normalizedActor
       || (competition.organizers || []).some((name) => String(name).toLowerCase() === normalizedActor);
-    const isAdmin = ['admin', 'super_admin', 'comp_admin'].includes(String(actorRole || '').toLowerCase());
+    const isAdmin = ['admin', 'super_admin', 'admin'].includes(String(actorRole || '').toLowerCase());
     if (!isOrganizer && !isAdmin) {
       throw new ForbiddenException('Only an organizer of this competition (or a competition admin) can generate fixtures.');
     }

@@ -125,7 +125,7 @@ export class AuthService {
 
   async addAdmin(dto: { username: string; email?: string; password?: string; adminType: string }) {
     const { username, adminType } = dto;
-    const roleValue = (Object.values(UserRole).includes(adminType as any) ? adminType : UserRole.COMP_ADMIN) as UserRole;
+    const roleValue = (Object.values(UserRole).includes(adminType as any) ? adminType : UserRole.ADMIN) as UserRole;
 
     const existing = await this.userRepository.findByEmailOrUsername(username);
 

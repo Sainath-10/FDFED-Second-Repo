@@ -1,4 +1,4 @@
-﻿/**
+/**
  * NEXUS ESPORTS — Super Admin · Users Roster
  *
  * merges the demo seed accounts with
@@ -6,12 +6,13 @@
  * with super-admin role pills, and supports search.
  */
 import { useEffect, useState } from 'react';
+import { getToken } from '../../services/api.js';
 import '../../vendor/auth-accounts.js';
 import '../../styles/pages/super-admin/super-dashboard.css';
 import '../../styles/pages/super-admin/users.css';
 
 const ACCOUNTS_KEY = 'nexus.auth.accounts';
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 const normalize = (v) => String(v || '').trim().toLowerCase();
 

@@ -31,20 +31,20 @@ export const ROLE_ROUTES = {
   team_lead: '/pages/profile.html',
   teamlead: '/pages/profile.html',
   admin: '/pages/admin/dashboard.html',
-  comp_admin: '/pages/admin/dashboard.html',
-  dispute_admin: '/pages/admin/disputes.html',
-  revenue_admin: '/pages/admin/revenue-transactions.html',
   'super-admin': '/pages/super-admin/super-dashboard.html',
   super_admin: '/pages/super-admin/super-dashboard.html',
+  community_moderator: '/pages/moderator/reports.html',
 };
 
 /**
  * Roles allowed into the admin area. Per the current admin/dispute model the
  * Super Admin has its own area and no admin-route access, so it is excluded.
  */
-export const ADMIN_ROLES = ['admin', 'comp_admin', 'dispute_admin', 'revenue_admin'];
+export const ADMIN_ROLES = ['admin'];
 export const SUPER_ADMIN_ROLES = ['super-admin'];
 export const TEAM_LEAD_ROLES = ['team_lead'];
+/** Handles reports against organisers only. */
+export const MODERATOR_ROLES = ['community_moderator'];
 
 const route = (path, label, group, roles = null) => ({ path, label, group, roles });
 
@@ -97,13 +97,13 @@ export const PROTECTED_ROUTES = [
   route('/pages/dispute-escalation.html', 'Escalate dispute', 'disputes'),
 
  // Admin
-  route('/pages/admin/finance.html', 'Finance moderation', 'admin', ['finance_moderator', 'revenue_admin', 'super-admin']),
+  route('/pages/admin/finance.html', 'Finance moderation', 'admin', ['finance_moderator', 'admin', 'super-admin']),
   route('/pages/admin/dashboard.html', 'Admin dashboard', 'admin', ADMIN_ROLES),
   route('/pages/admin/users.html', 'Users', 'admin', ADMIN_ROLES),
   route('/pages/admin/disputes.html', 'Disputes', 'admin', ADMIN_ROLES),
   route('/pages/admin/dispute-review.html', 'Dispute review', 'admin', ADMIN_ROLES),
   route('/pages/admin/competition-detail.html', 'Competition detail', 'admin', ADMIN_ROLES),
-  route('/pages/admin/admin-activity.html', 'Admin activity', 'admin', [...ADMIN_ROLES, ...SUPER_ADMIN_ROLES]),
+  route('/pages/admin/admin-activity.html', 'Admin activity', 'admin', [...ADMIN_ROLES, ...SUPER_ADMIN_ROLES, 'finance_moderator']),
   route('/pages/admin/admin-profile.html', 'Admin profile', 'admin', ADMIN_ROLES),
   route('/pages/admin/revenue-config.html', 'Revenue config', 'admin', ADMIN_ROLES),
   route('/pages/admin/revenue-transactions.html', 'Revenue transactions', 'admin', ADMIN_ROLES),
@@ -114,11 +114,21 @@ export const PROTECTED_ROUTES = [
   route('/pages/super-admin/admins.html', 'Admins', 'super-admin', SUPER_ADMIN_ROLES),
   route('/pages/super-admin/add-admin.html', 'Add admin', 'super-admin', SUPER_ADMIN_ROLES),
   route('/pages/super-admin/revoke-admin.html', 'Revoke admin', 'super-admin', SUPER_ADMIN_ROLES),
-  route('/pages/super-admin/policy-management.html', 'Policy management', 'super-admin', SUPER_ADMIN_ROLES),
-  route('/pages/super-admin/create-policy.html', 'Create policy', 'super-admin', SUPER_ADMIN_ROLES),
-  route('/pages/super-admin/edit-policy.html', 'Edit policy', 'super-admin', SUPER_ADMIN_ROLES),
-  route('/pages/super-admin/view-policy.html', 'View policy', 'super-admin', SUPER_ADMIN_ROLES),
   route('/pages/super-admin/profile.html', 'Profile', 'super-admin', SUPER_ADMIN_ROLES),
+
+ // Reporting & case management
+  route('/pages/report.html', 'Report', 'participant'),
+  route('/pages/my-reports.html', 'Reports', 'participant'),
+  route('/pages/case-discussion.html', 'Case discussion', 'participant'),
+  route('/pages/organizer-reports.html', 'Reports', 'organizer'),
+  route('/pages/organizer-report-detail.html', 'Report details', 'organizer'),
+
+  // Community Moderator (reports against organisers only)
+ route('/pages/moderator/reports.html', 'Reports', 'moderator', MODERATOR_ROLES),
+  // Super Admins may open a specific moderator's activity from the directory.
+  route('/pages/moderator/activity.html', 'Activity', 'moderator', [...MODERATOR_ROLES, ...SUPER_ADMIN_ROLES]),
+  route('/pages/moderator/report-detail.html', 'Report investigation', 'moderator', MODERATOR_ROLES),
+  route('/pages/moderator/profile.html', 'Profile', 'moderator', MODERATOR_ROLES),
 ];
 
 export const ROUTES = [...PUBLIC_ROUTES, ...PROTECTED_ROUTES];

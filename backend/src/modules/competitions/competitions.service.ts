@@ -7,8 +7,10 @@ import { Repository } from 'typeorm';
 import { CompetitionRepository } from './repositories/competition.repository';
 import { UserRepository } from '../auth/repositories/user.repository';
 import { TeamEntity } from '../../entities/team.entity';
+import { CompetitionRemovalEntity } from '../../entities/competition-removal.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditLogService } from '../../common/audit/audit.service';
+import { ReputationService } from '../reputation/reputation.service';
 import { CreateCompetitionDto, UpdateCompetitionDto } from './dto/competition.dto';
 import { ICompetition } from '../../common/interfaces';
 import {
@@ -34,9 +36,12 @@ export class CompetitionsService {
     private userRepository: UserRepository,
     @InjectRepository(TeamEntity)
     private teamRepository: Repository<TeamEntity>,
+    @InjectRepository(CompetitionRemovalEntity)
+    private removalRepository: Repository<CompetitionRemovalEntity>,
     private notificationsService: NotificationsService,
     private auditLog: AuditLogService,
     private revenueService: RevenueService,
+    private reputation: ReputationService,
     @Optional() private lifecycle?: LifecycleService,
   ) {}
 
@@ -108,6 +113,11 @@ export class CompetitionsService {
     const totalPrizeError = validatePrizePool(resolvedPrize);
     if (totalPrizeError) throw new BadRequestException(totalPrizeError);
 
+    // Organiser reputation + platform ceiling. Both are enforced here so a
+    // direct API request can never bypass the limits shown in the UI.
+    await this.reputation.assertCanOrganise(createdBy);
+    const prizeGate = await this.reputation.authorizePrizePool(resolvedPrize, createdBy);
+
     const { prizes: _prizeDistribution, ...competitionExtras } = extras as any;
 
     // §2.2 — minimum entry fee ₹10 where a fee applies
@@ -167,6 +177,11 @@ export class CompetitionsService {
       },
     );
 
+    // Bind a single-use approved prize-pool exception to this competition.
+    if (prizeGate.exceptionId) {
+      await this.reputation.consumeException(prizeGate.exceptionId, competition.id, resolvedPrize);
+    }
+
     // §2.1 preserve the co-organizer invitation notification flow
     validCoOrganizers.forEach((co) => {
       this.notificationsService.create({
@@ -189,10 +204,25 @@ export class CompetitionsService {
     return competition as any;
   }
 
-  async getCompetitionById(id: string): Promise<ICompetition> {
+  async getCompetitionById(id: string, viewerUsername?: string): Promise<ICompetition> {
     const comp = await this.competitionRepository.findById(id);
     if (!comp) return comp;
     if (comp.paymentStatus === 'AWAITING_PLATFORM_FEE') throw new NotFoundException('Competition is not published yet.');
+    // A removed player is not a participant of this competition any more. The
+    // check runs against the database on every read, so a cached page or an old
+    // URL cannot restore access. Public/ANONYMOUS reads are unaffected.
+    if (viewerUsername) {
+      const removal = await this.removalRepository
+        .createQueryBuilder('removal')
+        .where('removal.competitionId = :id', { id })
+        .andWhere('lower(removal.username) = :username', { username: String(viewerUsername).toLowerCase() })
+        .getOne();
+      if (removal) {
+        throw new ForbiddenException(
+          'You have been removed from this competition. You can no longer access its team or competition management features.',
+        );
+      }
+    }
     // §2.4 — never expose a private competition's join code on the public
     // detail endpoint. The organizer-only /competitions/:id/join-code route
     // is the single authorized reveal path.
@@ -220,7 +250,7 @@ export class CompetitionsService {
     const comp = await this.competitionRepository.findById(competitionId);
     if (!comp) throw new NotFoundException(`Competition with ID ${competitionId} not found`);
     const isOrganizer = comp.createdBy === requesterUsername || (comp.organizers || []).includes(requesterUsername);
-    const isAdmin = ['admin', 'super_admin', 'comp_admin'].includes(requesterRole);
+    const isAdmin = ['admin', 'super_admin', 'admin'].includes(requesterRole);
     if (!isOrganizer && !isAdmin) {
       throw new ForbiddenException('Only organizers of this competition can view its join code.');
     }
@@ -321,10 +351,12 @@ export class CompetitionsService {
     if (!comp) throw new NotFoundException(`Competition with ID ${id} not found`);
 
     const isOrganizer = comp.createdBy === requesterUsername || (comp.organizers || []).includes(requesterUsername);
-    const isAdmin = ['admin', 'super_admin', 'comp_admin'].includes(requesterRole);
+    const isAdmin = ['admin', 'super_admin', 'admin'].includes(requesterRole);
     if (!isOrganizer && !isAdmin) {
       throw new ForbiddenException('Only an organizer of this competition (or an admin) can update it.');
     }
+    // Reputation sanctions (creation restriction / bans) are backend-enforced.
+    if (isOrganizer) await this.reputation.assertCanOrganise(requesterUsername);
 
     // §3.5 — obsolete edit fields must not be smuggled through the API
     const obsoleteTouched = ['format', 'season', 'prizePool', 'prize'].filter(
@@ -473,7 +505,7 @@ export class CompetitionsService {
     const comp = await this.competitionRepository.findById(id);
     if (!comp) throw new NotFoundException(`Competition with ID ${id} not found`);
     const isOrganizer = comp.createdBy === requesterUsername || (comp.organizers || []).includes(requesterUsername);
-    const isAdmin = ['admin', 'super_admin', 'comp_admin'].includes(requesterRole);
+    const isAdmin = ['admin', 'super_admin', 'admin'].includes(requesterRole);
     if (!isOrganizer && !isAdmin) {
       throw new ForbiddenException('Only organizers of this competition (or admins) can view participant contact details.');
     }
@@ -506,7 +538,7 @@ export class CompetitionsService {
     if (!comp) throw new NotFoundException(`Competition with ID ${id} not found`);
 
     const isOrganizer = comp.createdBy === requesterUsername || (comp.organizers || []).includes(requesterUsername);
-    const isAdmin = ['admin', 'super_admin', 'comp_admin'].includes(requesterRole);
+    const isAdmin = ['admin', 'super_admin', 'admin'].includes(requesterRole);
     if (!isOrganizer && !isAdmin) {
       throw new ForbiddenException('Only an organizer of this competition (or an admin) can end it.');
     }

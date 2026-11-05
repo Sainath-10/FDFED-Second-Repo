@@ -1,21 +1,20 @@
 ﻿/**
  * NEXUS ESPORTS — Super Admin · Revoke Administrator
  *
- * demotes an admin via
- * POST /auth/revoke-admin and syncs the local accounts cache.
+ * demotes an administrator through the local account directory
+ * (`nexus.auth.accounts`).
  */
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext.jsx';
+import { revokeAdministrator } from '../../services/auth.js';
 import { showToast } from '../../lib/toast.js';
 import '../../styles/pages/super-admin/super-dashboard.css';
 import '../../styles/pages/super-admin/users.css';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const ACCOUNTS_KEY = 'nexus.auth.accounts';
-const normalize = (v) => String(v || '').trim().toLowerCase();
-
 export default function RevokeAdmin() {
   const navigate = useNavigate();
+  const { session } = useAuth();
   const [username, setUsername] = useState('');
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
@@ -33,42 +32,15 @@ export default function RevokeAdmin() {
     }
 
     setSubmitting(true);
-    try {
-      const token = getToken();
-      const res = await fetch(`${API_URL}/auth/revoke-admin`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ username: uname, reason: why }),
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const msg = data.message || 'Failed to revoke admin in database';
-        setError(msg);
-        showToast(msg, 'error');
-        setSubmitting(false);
-        return;
-      }
-
-      try {
-        const stored = JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '[]');
-        const item = stored.find((a) => normalize(a.username) === normalize(uname));
-        if (item) {
-          item.role = 'participant';
-          item.adminType = null;
-          localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(stored));
-        }
-      } catch (err) { /* ignore */ }
-
-      showToast(`Revoked admin privileges for ${uname}. Reason recorded in DB.`, 'success');
-      setTimeout(() => navigate('/pages/super-admin/admins.html'), 600);
-    } catch (err) {
-      showToast(err.message || 'Error revoking admin', 'error');
-      setSubmitting(false);
+    const result = revokeAdministrator(uname, { actor: session?.username, reason: why });
+    setSubmitting(false);
+    if (!result.ok) {
+      setError(result.error);
+      showToast(result.error, 'error');
+      return;
     }
+    showToast(`Revoked admin privileges for ${result.account.username}.`, 'success');
+    setTimeout(() => navigate('/pages/super-admin/admins.html'), 600);
   }
 
   return (
@@ -79,7 +51,7 @@ export default function RevokeAdmin() {
             <Link to="/pages/super-admin/admins.html" style={{ color: '#ef4444', textDecoration: 'none', fontSize: 13, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>← Back to Admins Roster</Link>
           </div>
           <h1 className="sa-title">Revoke <span className="accent-text" style={{ color: '#ef4444' }}>Admin Privileges</span></h1>
-          <p className="sa-desc">Demote an administrator to participant status in PostgreSQL and specify the revocation reason.</p>
+          <p className="sa-desc">Demote an administrator to participant status and record the revocation reason. Your own account cannot be revoked.</p>
         </div>
       </header>
 
@@ -91,7 +63,7 @@ export default function RevokeAdmin() {
 
           <div>
             <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#cbd5e1', marginBottom: 8 }}>Admin Username or Email *</label>
-            <input type="text" id="page-revoke-username" className="form-input" placeholder="e.g. compadmin@nexus.gg" required value={username} onChange={(e) => setUsername(e.target.value)} style={{ width: '100%', padding: '12px 16px', background: '#0f172a', border: '1px solid #334155', borderRadius: 10, color: '#fff', fontSize: 14 }} />
+            <input type="text" id="page-revoke-username" className="form-input" placeholder="e.g. communitylead@nexus.gg" required value={username} onChange={(e) => setUsername(e.target.value)} style={{ width: '100%', padding: '12px 16px', background: '#0f172a', border: '1px solid #334155', borderRadius: 10, color: '#fff', fontSize: 14 }} />
           </div>
 
           <div>

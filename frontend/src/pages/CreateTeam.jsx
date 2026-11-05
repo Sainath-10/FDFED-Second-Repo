@@ -82,7 +82,6 @@ export default function CreateTeam() {
     ? NexusData.registrationState(serverComp ? NexusData.mapApiCompetition(serverComp) : localComp)
     : { open: true };
   const registrationBlocked = accessChecked && (serverComp || localComp) && !registration.open;
-  const gate = useVerificationGate('create a team for a competition');
   const joinCodeGate = useJoinCodeGate(gateComp);
 
   const backendCompId = localComp?.dbId || gateCompId;

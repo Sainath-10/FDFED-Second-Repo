@@ -1,12 +1,12 @@
 export enum UserRole {
-  COMP_ADMIN = 'comp_admin',
-  DISPUTE_ADMIN = 'dispute_admin',
-  REVENUE_ADMIN = 'revenue_admin',
   FINANCE_MODERATOR = 'finance_moderator',
+  /** Platform administrator: competition, dispute and revenue operations. */
   SUPER_ADMIN = 'super_admin',
   TEAM_LEAD = 'team_lead',
   PARTICIPANT = 'participant',
   ADMIN = 'admin',
+  /** Handles reports against organisers only (separate dashboard). */
+  COMMUNITY_MODERATOR = 'community_moderator',
 }
 
 export enum DisputeStatus {

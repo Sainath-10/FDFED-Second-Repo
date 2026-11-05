@@ -120,7 +120,7 @@ export default function CompetitionDetail() {
   const isLeague = /league|robin/i.test(`${comp?.type} ${comp?.format}`);
   const creator = comp?.createdBy || comp?.organizerId;
   const organizers = [...new Set([creator, ...(comp?.organizers || [])].filter(Boolean))];
-  const canManage = organizers.includes(session?.username) || ['admin', 'comp_admin', 'super-admin', 'super_admin'].includes(session?.role);
+  const canManage = organizers.includes(session?.username) || ['admin', 'admin', 'super-admin', 'super_admin'].includes(session?.role);
   const eligibleTeams = teams.filter((team) => team.status === 'approved');
   const availableTabs = canManage ? ['fixtures', 'teams', 'overview', 'standings', 'organizers', 'disputes'] : ['fixtures', 'teams', 'overview', 'standings'];
   const activeTab = availableTabs.includes(params.get('tab')) ? params.get('tab') : 'fixtures';
@@ -206,7 +206,7 @@ export default function CompetitionDetail() {
                     ? <FixtureBracket matches={stageMatches} selectedId={selectedId} onSelect={selectMatch} zoom={zoom} renderMatch={(match) => <MatchCard match={match} number={numbers.get(match.id)} selected={match.id === selectedId} onSelect={selectMatch} />} />
                     : <div className={`cd-board ${isLeague ? 'is-league' : 'is-knockout'}`} style={{ zoom }}>
                     {rounds.map((round, index) => <section className="cd-round" key={round.name} aria-label={round.name}><header><span className="cd-round-number">{String(index + 1).padStart(2, '0')}</span><div><h3>{round.name}</h3><small>{round.matches.length} {round.matches.length === 1 ? 'match' : 'matches'}</small></div>{!isLeague && index < rounds.length - 1 && <Icon name="arrow" size={16} />}</header><div className="cd-round-cards">{round.matches.map((match) => <MatchCard key={match.id} match={match} number={numbers.get(match.id)} selected={match.id === selectedId} onSelect={selectMatch} />)}</div></section>)}
-                    {!isLeague && <div className="cd-title-stage"><div className="cd-trophy"><Icon name="trophy" size={34} /></div><span className="cd-eyebrow">CHAMPION</span><h3>{final?.winnerName || 'Who takes the title?'}</h3><p>{final ? 'Final result confirmed' : 'Winners advance along the bracket. Byes go straight to the next round.'}</p></div>}
+                    {!isLeague && <div className="cd-title-stage"><div className="cd-trophy"><Icon name="trophy" size={34} /></div><span className="cd-eyebrow">CHAMPION</span><h3>{outcome?.winner || 'Who takes the title?'}</h3><p>{outcome ? 'Final result confirmed' : 'Winners advance along the bracket. Byes go straight to the next round.'}</p></div>}
                   </div>}
 
                 </div><div className="cd-board-caption"><span><i className="cd-legend-line" />Rounds shown in competition order</span><span>Scroll to explore · Click a match for details</span></div>

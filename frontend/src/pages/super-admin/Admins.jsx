@@ -1,88 +1,113 @@
 ﻿/**
  * NEXUS ESPORTS — Super Admin · Admins Roster
  *
- * lists administrators from the
- * backend (falling back to the local accounts cache) with role pills, search, and a
- * deep link to each admin's activity log.
+ * Original roster layout (header actions, sa-users-card / sa-users-table,
+ * search, role/status filters). Each administrator has exactly one action:
+ * View Activity. Community Moderators open the moderator Activity page; other
+ * administrator roles keep using the existing Admin Activity page.
  */
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { listAdministrativeAccounts } from '../../services/auth.js';
 import '../../styles/pages/super-admin/super-dashboard.css';
 import '../../styles/pages/super-admin/users.css';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const ACCOUNTS_KEY = 'nexus.auth.accounts';
-const ADMIN_TYPES = ['finance_moderator', 'comp_admin', 'dispute_admin', 'revenue_admin', 'super_admin', 'super-admin', 'admin'];
 const normalize = (v) => String(v || '').trim().toLowerCase();
+
+const ROLE_OPTIONS = [
+  { value: 'super_admin', label: 'Super Admin' },
+  { value: 'admin', label: 'Admin' },
+  { value: 'finance_moderator', label: 'Finance Moderator' },
+  { value: 'community_moderator', label: 'Community Moderator' },
+];
 
 function formatAdminType(role, adminType) {
   const r = normalize(role);
   const t = normalize(adminType);
-  if (r === 'comp_admin' || t === 'comp_admin') return { label: 'Comp Admin', icon: '🏆', color: '#38bdf8', bg: 'rgba(56, 189, 248, 0.15)', border: 'rgba(56, 189, 248, 0.3)' };
-  if (r === 'dispute_admin' || t === 'dispute_admin') return { label: 'Dispute Admin', icon: '🛡️', color: '#fb923c', bg: 'rgba(251, 146, 60, 0.15)', border: 'rgba(251, 146, 60, 0.3)' };
-  if (r === 'finance_moderator' || t === 'finance_moderator') return { label: 'Finance Moderator', icon: '💰', color: '#c084fc', bg: 'rgba(192,132,252,0.15)', border: 'rgba(192,132,252,0.3)' };
-  if (r === 'revenue_admin' || t === 'revenue_admin') return { label: 'Revenue Admin', icon: '💳', color: '#c084fc', bg: 'rgba(192, 132, 252, 0.15)', border: 'rgba(192, 132, 252, 0.3)' };
-  if (r === 'super_admin' || r === 'super-admin' || t === 'super_admin') return { label: 'Super Admin', icon: '⚡', color: '#c6ff33', bg: 'rgba(198, 255, 51, 0.15)', border: 'rgba(198, 255, 51, 0.3)' };
-  return { label: 'Comp Admin', icon: '🏆', color: '#38bdf8', bg: 'rgba(56, 189, 248, 0.15)', border: 'rgba(56, 189, 248, 0.3)' };
+  if (r === 'finance_moderator' || t === 'finance_moderator') return { key: 'finance_moderator', label: 'Finance Moderator', icon: '\uD83D\uDCB0', color: '#c084fc', bg: 'rgba(192,132,252,0.15)', border: 'rgba(192,132,252,0.3)' };
+  if (r === 'community_moderator' || t === 'community_moderator') return { key: 'community_moderator', label: 'Community Moderator', icon: '🚩', color: '#f472b6', bg: 'rgba(244, 114, 182, 0.15)', border: 'rgba(244, 114, 182, 0.3)' };
+  if (r === 'super_admin' || r === 'super-admin' || t === 'super_admin') return { key: 'super_admin', label: 'Super Admin', icon: '⚡', color: '#c6ff33', bg: 'rgba(198, 255, 51, 0.15)', border: 'rgba(198, 255, 51, 0.3)' };
+  if (r === 'admin' || t === 'admin') return { key: 'admin', label: 'Admin', icon: '🔧', color: '#94a3b8', bg: 'rgba(148, 163, 184, 0.15)', border: 'rgba(148, 163, 184, 0.3)' };
+  return { key: 'admin', label: 'Admin', icon: '🔧', color: '#94a3b8', bg: 'rgba(148, 163, 184, 0.15)', border: 'rgba(148, 163, 184, 0.3)' };
+}
+
+const statusOf = (account) => (String(account.status || '').toLowerCase() === 'inactive' || account.banned ? 'inactive' : 'active');
+const displayNameOf = (account) => account.displayName || account.name || account.username || 'Administrator';
+const emailOf = (account) => account.email || (String(account.username || '').includes('@') ? account.username : `${account.username}@nexus.gg`);
+
+const selectStyle = {
+  padding: '10px 12px',
+  background: 'var(--bg-input)',
+  border: '1px solid rgba(255,255,255,0.1)',
+  borderRadius: 8,
+  color: 'var(--text-white)',
+  fontSize: 13,
+  fontFamily: 'var(--font-body)',
+  cursor: 'pointer',
+};
+
+const activityButtonStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+  padding: '6px 14px',
+  background: 'rgba(198,255,51,0.12)',
+  color: '#c6ff33',
+  border: '1px solid rgba(198,255,51,0.3)',
+  borderRadius: 8,
+  fontSize: 12,
+  fontWeight: 700,
+  textDecoration: 'none',
+};
+
+function activityHrefFor(account, typeInfo) {
+  const encoded = encodeURIComponent(account.username || '');
+  if (typeInfo.key === 'community_moderator') {
+    return `/pages/moderator/activity.html?admin=${encoded}`;
+  }
+  return `/pages/admin/admin-activity.html?admin=${encoded}`;
 }
 
 export default function Admins() {
   const navigate = useNavigate();
   const [roster, setRoster] = useState([]);
   const [query, setQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
 
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const token = getToken();
-        const res = await fetch(`${API_URL}/auth/users`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-
-        if (res.ok) {
-          const dbUsers = await res.json();
-          if (Array.isArray(dbUsers)) {
-            const list = dbUsers.filter((u) => {
-              if (!u) return false;
-              const r = normalize(u.role);
-              const t = normalize(u.adminType);
-              if (r === 'participant' || r === 'regular' || r === 'user') return false;
-              return ADMIN_TYPES.includes(r) || ADMIN_TYPES.includes(t);
-            }).map((u) => ({
-              username: u.username || u.email,
-              email: u.email || `${u.username}@nexus.gg`,
-              role: u.role,
-              adminType: u.adminType || u.role,
-              banned: !!u.banned,
-            }));
-            if (alive) setRoster(list);
-            return;
-          }
-        }
-      } catch (e) {
-        console.warn('Could not fetch DB users for Admins roster:', e);
-      }
-      try {
-        const stored = JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '[]');
-        const list = stored.filter((a) => {
-          const r = normalize(a.role);
-          if (r === 'participant' || r === 'regular') return false;
-          return ADMIN_TYPES.includes(r);
-        });
-        if (alive) setRoster(list);
-      } catch (err) { /* ignore */ }
-    })();
-    return () => { alive = false; };
+  const load = useCallback(() => {
+    const rows = listAdministrativeAccounts().slice();
+    rows.sort((a, b) => {
+      const roleA = formatAdminType(a.role, a.adminType).label;
+      const roleB = formatAdminType(b.role, b.adminType).label;
+      if (roleA !== roleB) return roleA.localeCompare(roleB);
+      return displayNameOf(a).localeCompare(displayNameOf(b));
+    });
+    setRoster(rows);
   }, []);
 
-  const q = normalize(query);
-  const list = q
-    ? roster.filter((account) => {
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const onStorage = (event) => {
+      if (!event.key || event.key === 'nexus.auth.accounts') load();
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [load]);
+
+  const list = useMemo(() => {
+    const q = normalize(query);
+    return roster.filter((account) => {
       const typeInfo = formatAdminType(account.role, account.adminType);
-      return [account.username, account.email, account.role, account.adminType, typeInfo.label].map(normalize).join(' ').includes(q);
-    })
-    : roster;
+      if (roleFilter !== 'all' && typeInfo.key !== roleFilter) return false;
+      if (statusFilter !== 'all' && statusOf(account) !== statusFilter) return false;
+      if (!q) return true;
+      return [account.username, emailOf(account), displayNameOf(account), account.role, account.adminType, typeInfo.label]
+        .map(normalize)
+        .join(' ')
+        .includes(q);
+    });
+  }, [roster, query, roleFilter, statusFilter]);
 
   return (
     <main className="sa-main-v2">
@@ -106,42 +131,57 @@ export default function Admins() {
       <section className="sa-users-card">
         <div className="sa-users-header">
           <h2 className="sa-section-title">Administrator Directory</h2>
-          <div className="search-bar table-search-wrap">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="7" cy="7" r="5" /><line x1="10.5" y1="10.5" x2="14" y2="14" /></svg>
-            <input type="text" placeholder="Search by username, admin type, or email..." id="admins-search" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} aria-label="Filter by admin type" style={selectStyle}>
+              <option value="all">All admin types</option>
+              {ROLE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Filter by account status" style={selectStyle}>
+              <option value="all">All statuses</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+            <div className="search-bar table-search-wrap">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="7" cy="7" r="5" /><line x1="10.5" y1="10.5" x2="14" y2="14" /></svg>
+              <input type="text" placeholder="Search by username, admin type, or email..." id="admins-search" value={query} onChange={(e) => setQuery(e.target.value)} />
+            </div>
           </div>
         </div>
         <div className="sa-users-table-wrap">
           <table className="sa-users-table">
-            <thead><tr><th>Username</th><th>Admin Type</th><th>Email</th><th style={{ textAlign: 'right' }}>Action</th></tr></thead>
+            <thead><tr><th>Administrator / Username</th><th>Admin Type</th><th>Email</th><th style={{ textAlign: 'right' }}>Action</th></tr></thead>
             <tbody id="admins-table-body">
               {list.map((account) => {
                 const username = account.username || 'unknown';
                 const typeInfo = formatAdminType(account.role, account.adminType);
-                const email = account.email || (username.includes('@') ? username : `${username}@nexus.gg`);
-                const isBanned = !!account.banned;
-                const activityHref = `/pages/admin/admin-activity.html?admin=${encodeURIComponent(username)}`;
+                const email = emailOf(account);
+                const inactive = statusOf(account) === 'inactive';
+                const activityHref = activityHrefFor(account, typeInfo);
                 return (
-                  <tr key={username} style={{ cursor: 'pointer' }} onClick={() => { navigate(activityHref); }}>
+                  <tr key={username} style={{ cursor: 'pointer' }} onClick={() => navigate(activityHref)}>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: typeInfo.bg, border: `1px solid ${typeInfo.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: typeInfo.color, fontSize: 13 }}>{String(username).charAt(0).toUpperCase()}</div>
-                        <span style={{ fontWeight: 600, color: '#f5f5f5' }}>{username}</span>
+                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: typeInfo.bg, border: `1px solid ${typeInfo.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: typeInfo.color, fontSize: 13 }}>
+                          {String(displayNameOf(account)).charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 600, color: '#f5f5f5' }}>{displayNameOf(account)}</div>
+                          <div style={{ fontSize: 11.5, color: '#64748b' }}>@{username}</div>
+                        </div>
                       </div>
                     </td>
                     <td>
-                      {isBanned
-                        ? <span className="sa-role-pill" style={{ background: 'rgba(231,0,11,0.15)', color: '#e7000b', border: '1px solid rgba(231,0,11,0.3)' }}>BANNED</span>
-                        : <span className="sa-role-pill" style={{ background: typeInfo.bg, color: typeInfo.color, border: `1px solid ${typeInfo.border}`, fontWeight: 700 }}>{typeInfo.icon} {typeInfo.label}</span>}
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <span className="sa-role-pill" style={{ background: typeInfo.bg, color: typeInfo.color, border: `1px solid ${typeInfo.border}`, fontWeight: 700 }}>{typeInfo.icon} {typeInfo.label}</span>
+                        {inactive && <span className="sa-role-pill" style={{ background: 'rgba(231,0,11,0.15)', color: '#e7000b', border: '1px solid rgba(231,0,11,0.3)' }}>Inactive</span>}
+                      </div>
                     </td>
                     <td className="sa-email">{email}</td>
                     <td style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
-                      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                        <Link to={activityHref} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 14px', background: 'rgba(198,255,51,0.12)', color: '#c6ff33', border: '1px solid rgba(198,255,51,0.3)', borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
-                          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="8" cy="8" r="6" /><path d="M8 5v3.5l2.5 1.5" /></svg>
-                          Activity
-                        </Link>
-                      </div>
+                      <Link to={activityHref} style={activityButtonStyle}>
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="8" cy="8" r="6" /><path d="M8 5v3.5l2.5 1.5" /></svg>
+                        View Activity
+                      </Link>
                     </td>
                   </tr>
                 );
@@ -154,5 +194,3 @@ export default function Admins() {
     </main>
   );
 }
-
-

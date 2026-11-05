@@ -5,7 +5,7 @@
  *
  * These are service-level unit tests with in-memory fakes for the TypeORM
  * repositories, so they exercise the real business rules without requiring a
- * PostgreSQL instance. No identity document or OTP values are logged.
+ * PostgreSQL instance.
  */
 import 'reflect-metadata';
 import assert = require('node:assert/strict');
@@ -112,10 +112,10 @@ async function middlewareTests() {
 async function competitionRuleTests() {
   console.log('\nCompetition rules');
 
-  await test('prize pool cap is ₹10,00,000', () => {
-    assert.equal(MAX_PRIZE_POOL, 1_000_000);
-    assert.equal(validatePrizePool(1_000_000), null);
-    assert.match(String(validatePrizePool(1_000_001)), /cannot exceed/i);
+  await test('platform prize pool ceiling is ₹3,00,000', () => {
+    assert.equal(MAX_PRIZE_POOL, 300_000);
+    assert.equal(validatePrizePool(300_000), null);
+    assert.match(String(validatePrizePool(300_001)), /cannot exceed/i);
     assert.match(String(validatePrizePool(-1)), /negative/i);
     assert.match(String(validatePrizePool('abc')), /valid number/i);
   });
@@ -126,8 +126,8 @@ async function competitionRuleTests() {
     assert.equal(parsePrizeAmount('No Prize Pool'), 0);
     assert.equal(Number.isNaN(parsePrizeAmount('abc')), true);
 
-    const distribution = [{ amount: '₹5,00,000' }, { amount: '₹3,00,000' }, { amount: '₹2,00,000' }];
-    assert.equal(prizeDistributionTotal(distribution), 1_000_000);
+    const distribution = [{ amount: '₹1,50,000' }, { amount: '₹1,00,000' }, { amount: '₹50,000' }];
+    assert.equal(prizeDistributionTotal(distribution), 300_000);
     assert.equal(validatePrizeDistribution(distribution), null);
 
     const tooLarge = [...distribution, { amount: 1 }];
@@ -298,9 +298,9 @@ async function competitionServiceTests() {
   console.log('\nCompetitionsService');
 
   const users = [
-    { id: 'u1', username: 'alice', email: 'alice@nexus.gg', verificationStatus: 'verified' },
-    { id: 'u2', username: 'bob', email: 'bob@nexus.gg', verificationStatus: 'unverified' },
-    { id: 'u3', username: 'carol', email: 'carol@nexus.gg', verificationStatus: 'verified', organizerTrustScore: 40 },
+    { id: 'u1', username: 'alice', email: 'alice@nexus.gg' },
+    { id: 'u2', username: 'bob', email: 'bob@nexus.gg' },
+    { id: 'u3', username: 'carol', email: 'carol@nexus.gg', organizerTrustScore: 40 },
   ];
 
   function makeService(comp: any, teams: any[] = [], spy: { updateCalls?: number } = null) {
@@ -326,13 +326,32 @@ async function competitionServiceTests() {
       },
     };
     const teamRepository = { find: async () => teams };
+    const reputation = {
+      assertCanOrganise: async () => ({ level: 'blue', username: 'alice' }),
+      authorizePrizePool: async (amount: number) => (
+        amount > 300_000
+          ? (() => { throw new BadRequestException(`Prize pool cannot exceed ₹300,000`); })()
+          : { level: 'blue', levelLimit: 300000, globalMax: 300000, limit: 300000, exceptionId: null }
+      ),
+      consumeException: async () => undefined,
+    };
+    // Participation revocations live in their own table; no removals here.
+    const removalRepository = {
+      createQueryBuilder: () => {
+        const qb: any = { where: () => qb, andWhere: () => qb, getOne: async () => null };
+        return qb;
+      },
+      find: async () => [],
+    };
     return new CompetitionsService(
       competitionRepository as any,
       userRepository as any,
       teamRepository as any,
+      removalRepository as any,
       notifications as any,
       noopAudit as any,
       { getConfig: async () => ({ percentage: 7, minCost: 50 }) } as any,
+      reputation as any,
     );
   }
 
@@ -396,7 +415,7 @@ async function competitionServiceTests() {
 
   await test('prize pool above ₹10 lakh and negative values are rejected', async () => {
     const service = makeService(null);
-    await expectThrow(() => service.createCompetition({ ...validDto, prize: 1_000_001 }, 'alice', 'u1'), BadRequestException, 'cannot exceed');
+    await expectThrow(() => service.createCompetition({ ...validDto, prize: 300_001 }, 'alice', 'u1'), BadRequestException, 'cannot exceed');
     await expectThrow(() => service.createCompetition({ ...validDto, prize: -50 }, 'alice', 'u1'), BadRequestException, 'negative');
   });
 
@@ -413,13 +432,13 @@ async function competitionServiceTests() {
     );
   });
 
-  await test('backend accepts a distribution totalling exactly ₹10,00,000', async () => {
+  await test('backend accepts a distribution totalling exactly ₹3,00,000', async () => {
     const service = makeService(null);
     const comp: any = await service.createCompetition({
       ...validDto,
-      prizes: [{ place: '1st Place', amount: '₹5,00,000' }, { place: '2nd Place', amount: '₹5,00,000' }],
+      prizes: [{ place: '1st Place', amount: '₹2,00,000' }, { place: '2nd Place', amount: '₹1,00,000' }],
     }, 'alice', 'u1');
-    assert.equal(comp.prize, 1_000_000);
+    assert.equal(comp.prize, 300_000);
   });
 
   await test('backend rejects malformed prize distribution entries', async () => {
@@ -468,10 +487,12 @@ async function competitionServiceTests() {
     });
   });
 
-  await test('joining enforces private join codes without any identity verification', async () => {
+  await test('joining enforces private join codes without identity verification', async () => {
     const service = makeService({ id: 'c1', name: 'Private Cup', visibility: 'private', joinCode: 'SECRET42' });
     await expectThrow(() => service.participate('c1', 'WRONG', { id: 'u1', username: 'alice' }), BadRequestException, 'Invalid join code');
-    const ok = await service.participate('c1', 'SECRET42', { id: 'u2', username: 'bob' });
+    const bob = await service.participate('c1', 'SECRET42', { id: 'u2', username: 'bob' });
+    assert.equal(bob.ok, true);
+    const ok = await service.participate('c1', 'SECRET42', { id: 'u1', username: 'alice' });
     assert.equal(ok.ok, true);
   });
 
@@ -819,6 +840,14 @@ async function teamServiceTests() {
     };
     const paid = new Set(opts.paidMembers || []);
     const revenueRepo = { exists: async ({ where }: any) => paid.has(where.organizerName) };
+    // No player has been removed from the competition in these fixtures.
+    const removals = {
+      createQueryBuilder: () => {
+        const qb: any = { where: () => qb, andWhere: () => qb, getOne: async () => null };
+        return qb;
+      },
+      find: async () => [],
+    };
     const service = new TeamsService(
       teamRepository as any,
       competitionRepository as any,
@@ -827,6 +856,7 @@ async function teamServiceTests() {
       noopAudit as any,
       refundRepo as any,
       revenueRepo as any,
+      removals as any,
       opts.matchesService as any,
     );
     return { service, team, competition, saved, mutations, invites, joinRequest };
@@ -1517,7 +1547,7 @@ async function matchServiceTests() {
       ForbiddenException,
       'Only an organizer',
     );
-    const adminResult = await service.generateSchedule('c1', 'competition-admin', {}, UserRole.COMP_ADMIN);
+    const adminResult = await service.generateSchedule('c1', 'competition-admin', {}, UserRole.ADMIN);
     assert.ok(adminResult.created > 0);
   });
 

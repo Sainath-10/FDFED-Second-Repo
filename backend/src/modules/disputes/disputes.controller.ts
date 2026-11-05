@@ -51,7 +51,7 @@ export class DisputesController {
   // ─── Organizer: Review Dispute (resolve or escalate to admin) ─────────────────
   @Post(':id/organizer-review')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN, UserRole.DISPUTE_ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({
     summary: 'Organizer reviews a dispute',
     description:
@@ -72,7 +72,7 @@ export class DisputesController {
   // ─── Admin: Resolve Dispute (optionally ban player) ───────────────────────────
   @Post(':id/admin-resolve')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.DISPUTE_ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({
     summary: 'Admin resolves a dispute',
     description:
@@ -93,7 +93,7 @@ export class DisputesController {
   // ─── Organizer Queue ──────────────────────────────────────────────────────────
   @Get('organizer-queue')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN, UserRole.DISPUTE_ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({
     summary: 'Get organizer dispute queue',
     description: 'Returns all disputes in the open_organizer and under_review states.',
@@ -106,7 +106,7 @@ export class DisputesController {
   // ─── Admin Queue ──────────────────────────────────────────────────────────────
   @Get('admin-queue')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.DISPUTE_ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({
     summary: 'Get admin dispute queue',
     description: 'Returns all disputes in open_admin and escalated_to_admin states.',
@@ -119,7 +119,7 @@ export class DisputesController {
   // ─── All Disputes (admin view) ────────────────────────────────────────────────
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.DISPUTE_ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Get all disputes', description: 'Filter by status via query param' })
   @ApiResponse({ status: 200, type: [DisputeResponseDto] })
   async getAllDisputes(
@@ -151,7 +151,7 @@ export class DisputesController {
   // ─── Delete (admin only) ──────────────────────────────────────────────────────
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.DISPUTE_ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @HttpCode(204)
   @ApiOperation({ summary: 'Delete a dispute (Admin only)' })
   @ApiResponse({ status: 204, description: 'Dispute deleted' })

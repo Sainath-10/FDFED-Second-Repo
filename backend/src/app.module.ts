@@ -22,6 +22,8 @@ import { ChatModule } from './modules/chat/chat.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { PaymentTransactionEntity } from './entities/payment-transaction.entity';
 import { PaymentFoundation1793750400000 } from './database/migrations/1793750400000-payment-foundation';
+import { ReportsModule } from './modules/reports/reports.module';
+import { ReputationModule } from './modules/reputation/reputation.module';
 import { SeederService } from './database/seeder.service';
 
 import { SecurityMiddleware, RateLimiterMiddleware, LoggingMiddleware } from './common/middleware';
@@ -41,11 +43,27 @@ import { AdminActivityLogEntity } from './entities/admin-activity-log.entity';
 import { AuditLogEntity } from './entities/audit-log.entity';
 import { RefundRequestEntity } from './entities/refund-request.entity';
 import { ChatMessageEntity } from './entities/chat-message.entity';
+import { PlatformSettingEntity } from './entities/platform-setting.entity';
+import { OrganiserReputationEntity } from './entities/organiser-reputation.entity';
+import { OrganiserReputationHistoryEntity } from './entities/organiser-reputation-history.entity';
+import { OrganiserSanctionEntity } from './entities/organiser-sanction.entity';
+import { PrizePoolExceptionEntity } from './entities/prize-pool-exception.entity';
+import { ReportEntity } from './entities/report.entity';
+import { ReportEvidenceEntity } from './entities/report-evidence.entity';
+import { ReportDiscussionEntity } from './entities/report-discussion.entity';
+import { ReportDiscussionParticipantEntity } from './entities/report-discussion-participant.entity';
+import { ReportDiscussionMessageEntity } from './entities/report-discussion-message.entity';
+import { ReportStatusHistoryEntity } from './entities/report-status-history.entity';
+import { ReportAuditLogEntity } from './entities/report-audit-log.entity';
+import { ReportingRestrictionEntity } from './entities/reporting-restriction.entity';
+import { CompetitionRemovalEntity } from './entities/competition-removal.entity';
 import { WorkflowEnhancements1710000000000 } from './database/migrations/1710000000000-workflow-enhancements';
 import { MatchBrackets1793577600000 } from './database/migrations/1793577600000-match-brackets';
 import { MatchResultRules1793577601000 } from './database/migrations/1793577601000-match-result-rules';
 import { ChatMessages1793664000000 } from './database/migrations/1793664000000-chat-messages';
+import { ReportsReputation1793750000000 } from './database/migrations/1793750000000-reports-reputation';
 import { RemoveAadhaarVerification1793846400000 } from './database/migrations/1793846400000-remove-aadhaar-verification';
+import { ParticipationAndRoleCleanup1793900000000 } from './database/migrations/1793900000000-participation-and-role-cleanup';
 
 @Module({
   imports: [
@@ -88,12 +106,26 @@ import { RemoveAadhaarVerification1793846400000 } from './database/migrations/17
             RefundRequestEntity,
             ChatMessageEntity,
             PaymentTransactionEntity, EscrowAccountEntity, PaymentMailEntity,
+            PlatformSettingEntity,
+            OrganiserReputationEntity,
+            OrganiserReputationHistoryEntity,
+            OrganiserSanctionEntity,
+            PrizePoolExceptionEntity,
+            ReportEntity,
+            ReportEvidenceEntity,
+            ReportDiscussionEntity,
+            ReportDiscussionParticipantEntity,
+            ReportDiscussionMessageEntity,
+            ReportStatusHistoryEntity,
+            ReportAuditLogEntity,
+            ReportingRestrictionEntity,
+            CompetitionRemovalEntity,
           ],
           // §1.5 — schema changes are applied through migrations, never by
           // automatic synchronization. Set DB_SYNCHRONIZE=true only for a
           // throwaway local database.
           synchronize: config.get<string>('DB_SYNCHRONIZE') === 'true',
-          migrations: [WorkflowEnhancements1710000000000, MatchBrackets1793577600000, MatchResultRules1793577601000, ChatMessages1793664000000, PaymentFoundation1793750400000, MockPaymentLifecycle1793750401000, PaymentReversals1793750402000],
+          migrations: [WorkflowEnhancements1710000000000, MatchBrackets1793577600000, MatchResultRules1793577601000, ChatMessages1793664000000, ReportsReputation1793750000000, PaymentFoundation1793750400000, MockPaymentLifecycle1793750401000, PaymentReversals1793750402000, RemoveAadhaarVerification1793846400000, ParticipationAndRoleCleanup1793900000000],
           migrationsRun: config.get<string>('DB_MIGRATIONS_RUN') !== 'false',
           logging: config.get<string>('NODE_ENV') === 'development' ? ['error', 'warn'] : false,
         };
@@ -126,6 +158,8 @@ import { RemoveAadhaarVerification1793846400000 } from './database/migrations/17
     AdminModule,
     ChatModule,
     PaymentsModule,
+    ReputationModule,
+    ReportsModule,
   ],
   providers: [SeederService],
 })

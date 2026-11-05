@@ -12,7 +12,9 @@
  *
  * Routes without a registry entry render RoutePlaceholder.
  */
+import { useEffect } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { sweepDeadlines } from './services/local/reporting.js';
 import { AuthProvider } from './context/AuthContext.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import RoleGuard from './components/RoleGuard.jsx';
@@ -34,13 +36,14 @@ const BARE_PATHS = new Set([
   '/pages/super-admin/admins.html',
   '/pages/super-admin/add-admin.html',
   '/pages/super-admin/revoke-admin.html',
-  '/pages/super-admin/policy-management.html',
-  '/pages/super-admin/create-policy.html',
-  '/pages/super-admin/edit-policy.html',
-  '/pages/super-admin/view-policy.html',
   '/pages/super-admin/profile.html',
 ]);
 const AUTH_PATHS = new Set(['/pages/login.html', '/pages/signup.html']);
+/** Pages that deliberately render without the site footer (Community Moderator workspace). */
+const NO_FOOTER_PATHS = new Set([
+  '/pages/moderator/reports.html',
+  '/pages/moderator/activity.html',
+]);
 
 function renderRoute(route) {
   const Component = PAGE_COMPONENTS[route.path];
@@ -52,7 +55,7 @@ function renderRoute(route) {
   let shell;
   if (AUTH_PATHS.has(route.path)) shell = <AuthLayout>{page}</AuthLayout>;
   else shell = (
-    <AppLayout offset={!isFull} footerClassName={isBare ? '' : undefined}>
+    <AppLayout offset={!isFull} footerClassName={isBare ? '' : undefined} hideFooter={NO_FOOTER_PATHS.has(route.path)}>
       {page}
     </AppLayout>
   );
@@ -69,6 +72,10 @@ function renderRoute(route) {
 }
 
 export default function App() {
+  // Deadline reminders/escalation run from persisted data on load — never from
+  // a browser timer, and never duplicated thanks to the deadlines key.
+  useEffect(() => { sweepDeadlines(); }, []);
+
   return (
     <BrowserRouter>
       <AuthProvider>

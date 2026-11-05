@@ -1,4 +1,4 @@
-﻿/**
+/**
  * NEXUS ESPORTS — Admin Revenue Transactions
  *
  * derives platform-fee
@@ -13,7 +13,7 @@ import { TeamsAPI } from '../../services/api.js';
 import { showToast } from '../../lib/toast.js';
 import '../../styles/pages/admin/dashboard.css';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const PAGE_SIZE = 10;
 
 const money = (value) => `Rs.${(Number(value) || 0).toLocaleString('en-IN')}`;
@@ -50,7 +50,7 @@ function isWithinDateRange(dateObj, rangeKey) {
   return true;
 }
 
-const ALLOWED_CONFIG_ROLES = ['admin', 'revenue_admin', 'super_admin', 'super-admin', 'comp_admin', 'dispute_admin'];
+const ALLOWED_CONFIG_ROLES = ['admin', 'admin', 'super_admin', 'super-admin', 'admin', 'admin'];
 
 export default function AdminRevenueTransactions() {
   const { session } = useAuth();

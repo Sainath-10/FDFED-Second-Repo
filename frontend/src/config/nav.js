@@ -22,7 +22,7 @@ import {
 } from '../components/icons.jsx';
 
 /** Roles that use an admin-area sidebar. */
-export const ADMIN_ROLES = ['finance_moderator', 'admin', 'comp_admin', 'dispute_admin', 'revenue_admin'];
+export const ADMIN_ROLES = ['finance_moderator', 'admin'];
 
 const MAIN_NAV = [
   { id: 'home', label: 'Home', to: '/', icon: HomeIcon, end: true },
@@ -30,8 +30,16 @@ const MAIN_NAV = [
   { id: 'activity', label: 'Activity', to: '/pages/my-activity.html', icon: ActivityIcon, protected: true },
   { id: 'notifications', label: 'Notifications', to: '/pages/notifications.html', icon: BellIcon, protected: true },
   { id: 'payments', label: 'Payments', to: '/pages/my-payments.html', icon: MoneyIcon, protected: true },
+  { id: 'reports', label: 'Reports', to: '/pages/my-reports.html', icon: ShieldIcon, protected: true },
   { id: 'profile', label: 'Profile', to: '/pages/profile.html', icon: ProfileIcon, protected: true },
   { id: 'about', label: 'About', to: '/pages/about.html', icon: InfoIcon },
+];
+
+/** Community Moderator sidebar: Reports, Activity, and Profile (Profile at the bottom). */
+const MODERATOR_NAV = [
+  { id: 'reports', label: 'Reports', to: '/pages/moderator/reports.html', icon: ShieldIcon, end: true },
+  { id: 'activity', label: 'Activity', to: '/pages/moderator/activity.html', icon: ActivityIcon },
+  { id: 'profile', label: 'Profile', to: '/pages/moderator/profile.html', icon: ProfileIcon },
 ];
 
 const ADMIN_NAV = {
@@ -39,26 +47,8 @@ const ADMIN_NAV = {
     { id: 'finance', label: 'Finance moderation', to: '/pages/admin/finance.html', icon: MoneyIcon, end: true },
     { id: 'profile', label: 'Profile', to: '/pages/profile.html', icon: ProfileIcon },
   ],
-  comp_admin: [
-    { id: 'home', label: 'Comp Dashboard', to: '/pages/admin/dashboard.html', icon: HomeIcon, end: true },
-    { id: 'users', label: 'Users', to: '/pages/admin/users.html', icon: UsersIcon },
-    { id: 'activity', label: 'Activity', to: '/pages/admin/admin-activity.html', icon: CheckCircleIcon },
-    { id: 'profile', label: 'Profile', to: '/pages/admin/admin-profile.html', icon: ProfileIcon },
-  ],
-  dispute_admin: [
-    { id: 'disputes', label: 'Dispute Dashboard', to: '/pages/admin/disputes.html', icon: ShieldIcon, end: true },
-    { id: 'users', label: 'Users', to: '/pages/admin/users.html', icon: UsersIcon },
-    { id: 'activity', label: 'Activity', to: '/pages/admin/admin-activity.html', icon: CheckCircleIcon },
-    { id: 'profile', label: 'Profile', to: '/pages/admin/admin-profile.html', icon: ProfileIcon },
-  ],
-  revenue_admin: [
+  admin: [
     { id: 'finance', label: 'Finance moderation', to: '/pages/admin/finance.html', icon: MoneyIcon },
-    { id: 'revenue', label: 'Revenue Dashboard', to: '/pages/admin/revenue-transactions.html', icon: MoneyIcon, end: true },
-    { id: 'users', label: 'Users', to: '/pages/admin/users.html', icon: UsersIcon },
-    { id: 'activity', label: 'Activity', to: '/pages/admin/admin-activity.html', icon: CheckCircleIcon },
-    { id: 'profile', label: 'Profile', to: '/pages/admin/admin-profile.html', icon: ProfileIcon },
-  ],
-  general: [
     { id: 'home', label: 'Comp Dashboard', to: '/pages/admin/dashboard.html', icon: HomeIcon, end: true },
     { id: 'disputes', label: 'Disputes', to: '/pages/admin/disputes.html', icon: ShieldIcon },
     { id: 'revenue', label: 'Revenue', to: '/pages/admin/revenue-transactions.html', icon: MoneyIcon },
@@ -72,7 +62,6 @@ const ADMIN_NAV = {
 const SUPER_ADMIN_NAV = [
   { id: 'finance', label: 'Finance moderation', to: '/pages/admin/finance.html', icon: MoneyIcon },
   { id: 'dashboard', label: 'Dashboard', to: '/pages/super-admin/super-dashboard.html', icon: HomeIcon, end: true },
-  { id: 'policy', label: 'Policy', to: '/pages/super-admin/policy-management.html', icon: CheckCircleIcon },
   { id: 'users', label: 'Users', to: '/pages/super-admin/users.html', icon: UsersIcon },
   { id: 'admins', label: 'Admins', to: '/pages/super-admin/admins.html', icon: ShieldIcon },
   { id: 'profile', label: 'Profile', to: '/pages/super-admin/profile.html', icon: ProfileIcon },
@@ -101,24 +90,37 @@ export function getSidebarNav(session) {
 
   const role = session.role;
 
+  if (role === 'community_moderator') {
+    return {
+      variant: 'admin',
+      top: MODERATOR_NAV.slice(0, 2),
+      bottom: MODERATOR_NAV.slice(2),
+      showLogin: false,
+    };
+  }
+
   if (role === 'super-admin') {
+    // Keep Profile visually separated at the bottom of the sidebar, as in the
+    // original layout, even after the Policy item was removed.
     return {
       variant: 'super-admin',
-      top: SUPER_ADMIN_NAV.slice(0, 4),
-      bottom: SUPER_ADMIN_NAV.slice(4),
+      top: SUPER_ADMIN_NAV.slice(0, -1),
+      bottom: SUPER_ADMIN_NAV.slice(-1),
       showLogin: false,
     };
   }
 
   if (ADMIN_ROLES.includes(role)) {
     let key = String(session.adminType || role || '').trim().toLowerCase();
-    if (key === 'admin') key = 'comp_admin';
-    const items = ADMIN_NAV[key] || ADMIN_NAV.general;
+    if (key === 'admin') key = 'admin';
+    const items = ADMIN_NAV[key] || ADMIN_NAV.admin;
     const cut = items.length > 4 ? 4 : 2;
     return { variant: 'admin', top: items.slice(0, cut), bottom: items.slice(cut), showLogin: false };
   }
 
- // participant / team_lead / regular share the main sidebar (logged in).
+  // Team leads share the main sidebar: exactly one Reports entry, pointing at
+  // the single player Reports page (the organiser queue is linked from My Activity).
+ // participant / regular share the main sidebar (logged in).
   return {
     variant: 'main',
     top: MAIN_NAV.slice(0, 4),

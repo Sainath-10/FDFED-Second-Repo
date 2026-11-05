@@ -6,17 +6,18 @@
  * and the ended-competition view-only lock.
  */
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useTeamContext, hasCompetitionStarted } from '../../hooks/useTeamContext.js';
 import NexusTeamWorkflow from '../../services/teamWorkflow.js';
 import { TeamsAPI } from '../../services/api.js';
 import TeamTabs from '../../components/TeamTabs.jsx';
+import ReportButton from '../../components/ReportButton.jsx';
 import { showToast } from '../../lib/toast.js';
 import { assetUrl } from '../../lib/assets.js';
 import '../../styles/pages/team/team-roster.css';
 
 export default function TeamRoster() {
-  const { ctx, refresh, canManage, canChat } = useTeamContext();
+  const { ctx, refresh, canManage, canChat, isTeamPlayer, isRemoved } = useTeamContext();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -89,6 +90,25 @@ export default function TeamRoster() {
     refresh();
   }
 
+  // This page is the team leader's roster management screen. An ordinary team
+  // player always belongs on their own competition roster instead, so returning
+  // from Team Chat (or a refresh) can never swap in the leader's interface.
+  if (isRemoved) {
+    return (
+      <main className="main-content">
+        <h1 className="page-title">Access restricted</h1>
+        <p className="page-subtitle">
+          You have been removed from this competition. You can no longer access its team or competition management features.
+        </p>
+        <Link to="/pages/my-reports.html" className="btn-primary">View your reports</Link>
+      </main>
+    );
+  }
+
+  if (isTeamPlayer) {
+    return <Navigate to={`/pages/comp-participant.html?id=${encodeURIComponent(comp.id)}`} replace />;
+  }
+
   const showAdd = canManage && hasRoom && !rosterLocked;
 
   return (
@@ -104,11 +124,6 @@ export default function TeamRoster() {
         </div>
       )}
 
-      {isStarted && !isEnded && (
-        <div style={{ background: 'rgba(251,146,60,0.12)', border: '1px solid rgba(251,146,60,0.4)', color: '#fb923c', padding: '10px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700, textAlign: 'center', margin: '12px 0 16px', letterSpacing: '0.5px' }}>
-          🎮 Competition has started — roster changes are locked. Report issues through the dispute workflow instead: <Link to={reportHref} style={{ color: '#fb923c', textDecoration: 'underline' }}>File a report</Link>.
-        </div>
-      )}
 
       <div className="layout-wrapper">
         <div>
@@ -132,8 +147,10 @@ export default function TeamRoster() {
                     <div className="p-role">Captain</div>
                     <div className="p-stats">Username: {username}</div>
                     <div className="captain-pill-wrapper"><span className="captain-pill">Captain</span></div>
-                    {canReportNow && !isMe(username) && (
-                      <div className="captain-pill-wrapper"><Link to={reportPlayerHref(username)} className="btn-table-secondary">Report</Link></div>
+                    {!isMe(username) && (
+                      <div className="captain-pill-wrapper">
+                        <ReportButton compId={comp.id} against={username} targetRole="team_leader" source="team-roster" />
+                      </div>
                     )}
                   </div>
                 );
@@ -150,8 +167,11 @@ export default function TeamRoster() {
                       <button className="btn-table-danger btn-remove-alt" onClick={() => askRemovePlayer(username)}>Remove</button>
                     )}
                     {!isEnded && paidEntryFee && <span className="status-pill approved status-pill-sm">Paid</span>}
-                    {((canManage && !rosterLocked && paidEntryFee) || canReportNow) && !isMe(username) && (
-                      <Link to={reportPlayerHref(username)} className="btn-table-secondary">Report</Link>
+                    {!isMe(username) && (
+                      <Link to={reportPlayerHref(username)} className="btn-table-secondary">Report issue</Link>
+                    )}
+                    {!isMe(username) && (
+                      <ReportButton compId={comp.id} against={username} targetRole="player" source="team-roster" />
                     )}
                   </div>
                 </div>

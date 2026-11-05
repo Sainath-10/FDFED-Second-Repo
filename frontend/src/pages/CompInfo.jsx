@@ -10,16 +10,20 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import NexusData from '../services/data.js';
+import { LocalReportsAPI } from '../services/local/reporting.js';
 import NexusTeamWorkflow from '../services/teamWorkflow.js';
 import useJoinCodeGate from '../hooks/useJoinCodeGate.jsx';
-import { DisputesAPI, MatchesAPI, TeamsAPI } from '../services/api.js';
+import { MatchesAPI, TeamsAPI } from '../services/api.js';
 import ChatRoom from '../components/ChatRoom.jsx';
+import OrganisersInfo from '../components/OrganisersInfo.jsx';
+import ReportButton from '../components/ReportButton.jsx';
 import { showToast } from '../lib/toast.js';
 import { assetUrl } from '../lib/assets.js';
 import '../styles/pages/comp-info.css';
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
+  { id: 'organisers', label: 'Organisers Info' },
   { id: 'teams', label: 'Teams' },
   { id: 'bracket', label: 'Bracket' },
   { id: 'standings', label: 'Standings' },
@@ -111,13 +115,19 @@ export default function CompInfo() {
     const requestedTab = params.get('tab');
     return TABS.some((item) => item.id === requestedTab) ? requestedTab : 'overview';
   });
-  const [disputeOpen, setDisputeOpen] = useState(false);
-  const [dTargetType, setDTargetType] = useState('');
-  const [dTargetUser, setDTargetUser] = useState('');
-  const [dReason, setDReason] = useState('');
-  const [dEvidence, setDEvidence] = useState('');
-  const [disputeSubmitting, setDisputeSubmitting] = useState(false);
   const [serverTeams, setServerTeams] = useState(null);
+  const [removal, setRemoval] = useState(null);
+
+  // Participation revocation is read from the stored decision record. The API
+  // enforces the same rule server-side; this only explains the block in the UI.
+  useEffect(() => {
+    let cancelled = false;
+    if (!compId || !session?.username) { setRemoval(null); return undefined; }
+    LocalReportsAPI.removalStatus(compId)
+      .then((res) => { if (!cancelled && res.ok && res.data) setRemoval(res.data); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [compId, session?.username]);
 
   // Rosters change on other devices, so the Teams tab reads them from the backend.
   const backendCompId = comp ? (comp.dbId || comp.id) : null;
@@ -152,6 +162,15 @@ export default function CompInfo() {
   const approvalStatus = comp ? getApprovalStatus(comp) : 'approved';
   const isCoOrg = !!(comp && Array.isArray(comp.organizers) && comp.organizers.map(normalize).includes(userKey));
   const isOwner = !!(comp && userKey && (isCoOrg || normalize(comp.organizerId) === userKey || normalize(comp.createdBy) === userKey));
+  const isRemoved = !!removal?.removed && !isOwner;
+  // A removed player keeps the public competition page and the organiser tab
+  // (so a complaint can still be filed) but loses every team-scoped surface.
+  const RESTRICTED_TABS = ['teams', 'announcements', 'general-chat'];
+  const visibleTabs = isRemoved ? TABS.filter((item) => !RESTRICTED_TABS.includes(item.id)) : TABS;
+
+  useEffect(() => {
+    if (isRemoved && RESTRICTED_TABS.includes(tab)) setTab('overview');
+  }, [isRemoved, tab]);
 
   if (!compId || !comp || (approvalStatus !== 'approved' && !isOwner)) {
     return (
@@ -206,6 +225,7 @@ export default function CompInfo() {
   const isCompetitionParticipant = !!userKey && teamRosters.some((t) => t.members.some((m) => normalize(m.username) === userKey));
   const teamStatus = myTeam && myTeam.team ? String(myTeam.team.status || '').toLowerCase() : '';
 
+
   function onShare() {
     const url = window.location.href;
     if (navigator.clipboard) {
@@ -258,14 +278,13 @@ export default function CompInfo() {
 
  // Button state
   let showManage = isOwner;
-  let showRegister = !isOwner;
-  let showCreate = !isOwner;
+  let showRegister = !isOwner && !isRemoved;
+  let showCreate = !isOwner && !isRemoved;
   let registerLabel = 'Join Teams';
   let registerDisabled = false;
   let registerStyle = undefined;
   let createLabel = 'Create a New Team';
   let createDisabled = false;
-  let showDispute = isOwner;
   let rejectedNotice = false;
 
   const cancelledComp = !!NexusData?.isCancelledCompetition?.(comp);
@@ -276,7 +295,6 @@ export default function CompInfo() {
     registerDisabled = true;
     registerStyle = { background: '#1a1a1a', color: 'var(--text-muted)', border: '1px solid rgba(255,255,255,0.15)', cursor: 'not-allowed' };
     showCreate = false;
-    showDispute = false;
   } else if (!isOwner) {
     if (myTeam && teamStatus !== 'rejected') {
       if (teamStatus === 'banned') {
@@ -284,7 +302,6 @@ export default function CompInfo() {
         registerDisabled = true;
         registerStyle = { background: '#1a1015', color: '#ef4444', border: '1px solid #ef4444', cursor: 'not-allowed' };
         showCreate = false;
-        showDispute = false;
       } else if (teamStatus === 'pending') {
         registerLabel = 'Pending Approval';
         registerDisabled = true;
@@ -293,156 +310,33 @@ export default function CompInfo() {
       } else {
         registerLabel = 'View My Team';
         if (isTeamLeader) { createLabel = 'Manage My Team'; } else { showCreate = false; }
-        showDispute = true;
       }
     } else {
       registerLabel = 'Join a Team';
       createLabel = 'Create a New Team';
-      showDispute = false;
       rejectedNotice = teamStatus === 'rejected';
     }
   }
 
- // ── Dispute modal data ──
-  const participants = (NexusData && typeof NexusData.getCompetitionParticipants === 'function')
-    ? NexusData.getCompetitionParticipants(compId)
-    : { teams: [], players: [], organizer: 'organizer' };
-  const currentTeamName = (() => {
-    const teams = comp.teams || [];
-    const matchesUser = (value) => normalize(typeof value === 'string' ? value : (value && (value.username || value.name || value.id))) === userKey;
-    const found = teams.find((t) => matchesUser(t.createdBy) || matchesUser(t.leaderId) || matchesUser(t.leaderUsername) || matchesUser(t.captain)
-      || (Array.isArray(t.members) && t.members.some(matchesUser)) || (Array.isArray(t.players) && t.players.some(matchesUser)));
-    return found ? normalize(found.name) : '';
-  })();
-
-  let targetOptions = [{ value: '', label: '— Select Category First —' }];
-  let targetLabel = 'Choose Target *';
-  let routingHint = null;
-  if (dTargetType === 'team') {
-    targetLabel = 'Choose Tournament Team *';
-    routingHint = '📋 Dispute sent to Tournament Organizer for review.';
-    const teams = (participants.teams || []).filter((t) => normalize(t.name) !== currentTeamName);
-    targetOptions = teams.length
-      ? [{ value: '', label: '— Select a Team —' }, ...teams.map((t) => ({ value: t.name, label: `${t.name} (${t.status || 'registered'})` }))]
-      : [{ value: '', label: '— No other teams available —' }];
-  } else if (dTargetType === 'player') {
-    targetLabel = 'Choose Tournament Player *';
-    routingHint = '📋 Dispute sent to Tournament Organizer for review.';
-    const players = (participants.players || []).filter((u) => normalize(u) !== userKey);
-    targetOptions = players.length
-      ? [{ value: '', label: '— Select a Player —' }, ...players.map((u) => ({ value: u, label: `@${u}` }))]
-      : [{ value: '', label: '— No other players available —' }];
-  } else if (dTargetType === 'prize') {
-    // §13.3 — prize not received; routed to the platform review queue.
-    targetLabel = 'Prize Not Reported Against';
-    routingHint = '💰 This report is routed directly to the platform prize review queue (not to the organizer).';
-    const prizeOrg = participants.organizer || (comp && (comp.createdBy || comp.organizerId)) || 'organizer';
-    targetOptions = [{ value: prizeOrg, label: `Organizer: ${prizeOrg}` }];
-  } else if (dTargetType === 'organizer') {
-    targetLabel = 'Tournament Organizer *';
-    routingHint = '📢 Dispute against Organizer is routed directly to Platform Admin.';
-    const rawOrgs = (Array.isArray(participants.organizers) && participants.organizers.length > 0)
-      ? participants.organizers
-      : (NexusData && typeof NexusData.getCompetitionOrganizers === 'function' && comp
-        ? NexusData.getCompetitionOrganizers(comp)
-        : [participants.organizer || (comp && (comp.createdBy || comp.organizerId)) || 'organizer'].filter(Boolean));
-
-    const cleanOrgs = Array.from(new Set(rawOrgs.map((o) => {
-      if (!o) return '';
-      if (typeof o === 'string') return o.trim().replace(/^@/, '');
-      return String(o.username || o.email || o.name || o.id || '').trim().replace(/^@/, '');
-    }).filter(Boolean)));
-
-    const creatorKey = normalize((comp && (comp.createdBy || comp.organizerId)) || (Array.isArray(comp && comp.organizers) && comp.organizers[0]) || cleanOrgs[0] || '');
-    const availableOrgs = cleanOrgs.filter((org) => normalize(org) !== userKey);
-
-    if (availableOrgs.length === 0) {
-      targetOptions = [{ value: '', label: 'You cannot dispute yourself as organizer' }];
-    } else {
-      targetOptions = [
-        { value: '', label: '— Select an Organizer —' },
-        ...availableOrgs.map((org) => {
-          const isMain = normalize(org) === creatorKey || normalize(org) === normalize(comp && comp.createdBy) || normalize(org) === normalize(comp && comp.organizerId);
-          const roleTag = isMain ? 'Organizer' : 'Co-Organizer';
-          return { value: org, label: `${org} (${roleTag})` };
-        }),
-      ];
-    }
-  }
-
-  function openDispute() {
-    setDTargetType('');
-    setDTargetUser('');
-    setDReason('');
-    setDEvidence('');
-    setDisputeOpen(true);
-  }
-
-  async function submitDispute(event) {
-    event.preventDefault();
-    if (disputeSubmitting) return;
-    const isPrize = dTargetType === 'prize';
-    const targetUserOrTeam = dTargetUser.trim();
-    const reason = dReason.trim();
-    if (!dTargetType || (!isPrize && !targetUserOrTeam) || reason.length < 10) {
-      showToast('Please fill in all required fields (target and min. 10 chars reason).', 'error');
-      return;
-    }
-    if (userKey && normalize(targetUserOrTeam) === userKey) {
-      showToast('You cannot raise a dispute against yourself.', 'error');
-      return;
-    }
-    const evidenceUrls = dEvidence.trim() ? dEvidence.split(',').map((s) => s.trim()).filter(Boolean) : [];
-    const backendTargetType = isPrize ? 'organizer' : dTargetType;
-
-    setDisputeSubmitting(true);
-    // §13.3 — prize reports must reach the persisted dispute workflow so
-    // support/admin can review them (not just localStorage).
-    let backendRejected = '';
-    try {
-      const res = await DisputesAPI.create({
-        competitionId: compId,
-        targetType: backendTargetType,
-        targetUserOrTeam: isPrize ? (participants.organizer || (comp && (comp.createdBy || comp.organizerId)) || 'organizer') : targetUserOrTeam,
-        reason,
-        evidenceUrls,
-        category: isPrize ? 'prize_not_received' : undefined,
+  // All organisers stored on this competition (creator + co-organisers),
+  // de-duplicated case-insensitively so nobody is listed twice.
+  const organisers = useMemo(() => {
+    const rows = [comp.createdBy, comp.organizerId, ...(Array.isArray(comp.organizers) ? comp.organizers : [])];
+    const seen = new Set();
+    return rows
+      .map((value) => {
+        if (!value) return '';
+        if (typeof value === 'object') return String(value.username || value.email || value.name || '').trim().replace(/^@/, '');
+        return String(value).trim().replace(/^@/, '');
+      })
+      .filter((name) => {
+        if (!name) return false;
+        const key = name.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
       });
-      if (res && res.ok === false && !/backend|network|Failed to fetch|is the backend/i.test(String(res.error || ''))) {
-        backendRejected = res.error || 'The dispute could not be submitted.';
-      }
-    } catch (err) { /* offline — local workflow below preserves existing behaviour */ }
-
-    if (backendRejected) {
-      setDisputeSubmitting(false);
-      showToast(backendRejected, 'error');
-      return;
-    }
-
-    if (NexusData && typeof NexusData.addDispute === 'function') {
-      const result = NexusData.addDispute({
-        competitionId: compId,
-        reportedBy: (session && session.username) || 'anonymous',
-        targetType: backendTargetType,
-        category: isPrize ? 'prize_not_received' : undefined,
-        targetUserOrTeam,
-        reason,
-        evidenceUrls,
-        status: backendTargetType === 'organizer' ? 'open_admin' : 'open_organizer',
-        organizerWarnings: 0,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-      if (result && result.ok === false) {
-        setDisputeSubmitting(false);
-        showToast(result.error || 'Dispute blocked.', 'error');
-        return;
-      }
-    }
-    setDisputeSubmitting(false);
-    setDisputeOpen(false);
-    showToast(isPrize ? 'Prize report submitted — the platform review team will review it.' : 'Dispute submitted');
-  }
+  }, [comp]);
 
   return (
     <>
@@ -453,6 +347,12 @@ export default function CompInfo() {
           </svg>
           Back to Competitions
         </Link>
+
+        {isRemoved && (
+          <div className="comp-removed-banner" role="alert">
+            You have been removed from this competition. You can no longer access its team or competition management features.
+          </div>
+        )}
 
         {approvalStatus === 'pending' && (
           <div style={{ background: 'rgba(251,146,60,0.15)', border: '1px solid #fb923c', borderRadius: 12, padding: '16px 24px', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -488,7 +388,7 @@ export default function CompInfo() {
         <div className="comp-info-body">
           <div className="comp-info-details">
             <div className="tabs-nav">
-              {TABS.map((t) => (
+              {visibleTabs.map((t) => (
                 <button key={t.id} className={`tab-btn${tab === t.id ? ' active' : ''}`} data-tab={t.id} onClick={() => setTab(t.id)}>
                   {t.label}
                 </button>
@@ -519,7 +419,29 @@ export default function CompInfo() {
               </div>
             </div>
 
+            <div className={'tab-panel' + (tab === 'organisers' ? ' active' : '')} id="tab-organisers">
+              <div className="comp-info-block">
+                <h2>Organisers Info</h2>
+                <p className="organisers-intro">
+                  Everyone who can organise this competition. Select an organiser to open their reputation
+                  history, or report a specific organiser to the Community Moderator.
+                </p>
+                <OrganisersInfo
+                  competitionId={comp.id}
+                  organisers={organisers}
+                  currentUsername={session ? session.username : ''}
+                />
+              </div>
+            </div>
+
             <div className={`tab-panel${tab === 'teams' ? ' active' : ''}`} id="tab-teams">
+              {isRemoved ? (
+                <div className="comp-info-block">
+                  <div className="comp-removed-banner" role="alert">
+                    You have been removed from this competition. You can no longer access its team or competition management features.
+                  </div>
+                </div>
+              ) : (
               <div className="comp-info-block">
                 <h2 id="teams-heading">Registered Teams ({approvedTeams.length} / {comp.maxTeams || '—'})</h2>
                 <div className="teams-grid" id="comp-teams-grid" style={isCompetitionParticipant ? { gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' } : undefined}>
@@ -538,7 +460,7 @@ export default function CompInfo() {
                                 {m.isLead && <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>(Lead)</span>}
                               </span>
                               {normalize(m.username) !== userKey && (
-                                <Link to={`/pages/submit-report.html?compId=${encodeURIComponent(comp.id)}&against=${encodeURIComponent(m.username)}`} className="btn-table-secondary">Report</Link>
+                                <ReportButton compId={comp.id} against={m.username} targetRole="player" source="comp-info-roster" className="btn-table-secondary" />
                               )}
                             </div>
                           ))}
@@ -555,6 +477,7 @@ export default function CompInfo() {
                   )}
                 </div>
               </div>
+              )}
             </div>
 
             <div className={`tab-panel${tab === 'bracket' ? ' active' : ''}`} id="tab-bracket">
@@ -732,11 +655,6 @@ export default function CompInfo() {
                   {createLabel}
                 </button>
               )}
-              {showDispute && (
-                <button id="btn-dispute" className="btn-outline" style={{ width: '100%', textAlign: 'center', padding: 13, fontSize: 14, cursor: 'pointer', background: 'none', borderColor: '#f87171', color: '#f87171', fontWeight: 600 }} onClick={openDispute}>
-                  ⚠ Raise Dispute
-                </button>
-              )}
               <button id="btn-share-comp" className="btn-outline" style={{ width: '100%', textAlign: 'center', padding: 11, fontSize: 13, cursor: 'pointer', background: 'none', opacity: 0.8 }} onClick={onShare}>
                 🔗 Share Link
               </button>
@@ -750,53 +668,6 @@ export default function CompInfo() {
           </aside>
         </div>
       </main>
-
-      {disputeOpen && (
-        <div id="modal-raise-dispute" style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={(e) => { if (e.target === e.currentTarget) setDisputeOpen(false); }}>
-          <div style={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: 16, width: 'min(96vw,520px)', padding: 32, position: 'relative', boxShadow: '0 20px 60px #000a' }}>
-            <button onClick={() => setDisputeOpen(false)} style={{ position: 'absolute', top: 16, right: 18, background: 'none', border: 'none', color: '#9aa4b2', fontSize: 20, cursor: 'pointer' }}>✕</button>
-            <h2 style={{ margin: '0 0 6px', color: '#f1f5f9', fontSize: 20 }}>⚠ Raise a Dispute</h2>
-            <p style={{ margin: '0 0 24px', color: '#64748b', fontSize: 13 }}>Select whether the dispute is against a Team, a Player, or the Organizer.</p>
-
-            <form onSubmit={submitDispute}>
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, marginBottom: 6 }}>Dispute Against *</label>
-                <select id="dispute-target-type" required value={dTargetType} onChange={(e) => { setDTargetType(e.target.value); setDTargetUser(''); }} style={{ width: '100%', background: '#1e293b', border: '1px solid #334155', color: '#f1f5f9', padding: '10px 12px', borderRadius: 8, fontSize: 14 }}>
-                  <option value="">— Select Target Entity —</option>
-                  <option value="team">Team (Opponent)</option>
-                  <option value="player">Player (Participant)</option>
-                  <option value="organizer">Tournament Organizer</option>
-                  <option value="prize">Prize Not Received</option>
-                </select>
-                {routingHint && <p style={{ margin: '6px 0 0', fontSize: 12, color: dTargetType === 'organizer' ? '#fb923c' : '#94a3b8' }}>{routingHint}</p>}
-              </div>
-
-              <div style={{ marginBottom: 16 }} id="target-select-container">
-                <label id="target-select-label" style={{ display: 'block', color: '#94a3b8', fontSize: 13, marginBottom: 6 }}>{targetLabel}</label>
-                <select id="dispute-target-user" required value={dTargetUser} onChange={(e) => setDTargetUser(e.target.value)} style={{ width: '100%', background: '#1e293b', border: '1px solid #334155', color: '#f1f5f9', padding: '10px 12px', borderRadius: 8, fontSize: 14 }}>
-                  {targetOptions.map((o) => <option key={o.value || o.label} value={o.value}>{o.label}</option>)}
-                </select>
-              </div>
-
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, marginBottom: 6 }}>Reason / Description *</label>
-                <textarea id="dispute-reason" required rows="4" placeholder="Describe the issue in detail (min. 10 characters)..." value={dReason} onChange={(e) => setDReason(e.target.value)} style={{ width: '100%', background: '#1e293b', border: '1px solid #334155', color: '#f1f5f9', padding: '10px 12px', borderRadius: 8, fontSize: 14, resize: 'vertical', boxSizing: 'border-box' }} />
-              </div>
-
-              <div style={{ marginBottom: 24 }}>
-                <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, marginBottom: 6 }}>Evidence Links (optional)</label>
-                <input id="dispute-evidence" type="text" placeholder="e.g. https://imgur.com/screenshot, https://youtube.com/clip" value={dEvidence} onChange={(e) => setDEvidence(e.target.value)} style={{ width: '100%', background: '#1e293b', border: '1px solid #334155', color: '#f1f5f9', padding: '10px 12px', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }} />
-                <p style={{ margin: '5px 0 0', fontSize: 11, color: '#64748b' }}>Separate multiple links with a comma</p>
-              </div>
-
-              <div style={{ display: 'flex', gap: 12 }}>
-                <button type="button" onClick={() => setDisputeOpen(false)} style={{ flex: 1, padding: 12, background: 'none', border: '1px solid #334155', color: '#94a3b8', borderRadius: 8, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
-                <button type="submit" disabled={disputeSubmitting} style={{ flex: 1, padding: 12, background: '#f87171', border: 'none', color: '#fff', borderRadius: 8, cursor: disputeSubmitting ? 'wait' : 'pointer', fontSize: 14, fontWeight: 600 }}>{disputeSubmitting ? 'Submitting…' : 'Submit Dispute'}</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {joinCodeGate.modal}
     </>

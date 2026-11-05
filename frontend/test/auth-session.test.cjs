@@ -35,15 +35,17 @@ test('a matching demo account cannot bypass a rejected or offline backend login'
   }
 });
 
-test('forced verification checks never treat cached verification as a valid expired session', async () => {
-  let response = { ok: true, data: { verificationStatus: 'verified' } };
-  const { VerificationAPI } = await loadService('verificationApi.js', { getUser: () => ({ username: 'alice' }), setUser: () => {}, makeRequest: async () => response });
-  await VerificationAPI.status(true);
-  response = { ok: false, status: 401 };
-  assert.equal((await VerificationAPI.status(true)).status, 401);
-  assert.equal((await VerificationAPI.status()).status, 401);
-  response = { ok: true, data: { verificationStatus: 'verified' } };
-  await VerificationAPI.status(true);
-  response = { ok: false, status: 0 };
-  assert.equal((await VerificationAPI.status(true)).ok, false);
+test('retired verification fields are removed without losing the account session', async () => {
+  const values = new Map();
+  global.localStorage = { getItem: key => values.get(key) || null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
+  global.window = { localStorage: global.localStorage };
+  const auth = await loadService('auth.js', { AuthAPI: { getCurrentUser: () => null }, getUser: () => null, getToken: () => null });
+  values.set('nexus.auth.session', JSON.stringify({ username: 'alice', role: 'participant', verificationStatus: 'verified', organizerVerificationStatus: 'verified', verifiedAt: '2026-01-01', aadhaarMasked: 'obsolete' }));
+  const session = auth.getSession();
+  assert.equal(session.username, 'alice');
+  assert.equal(session.role, 'participant');
+  for (const field of ['verificationStatus', 'organizerVerificationStatus', 'verifiedAt', 'aadhaarMasked']) {
+    assert.equal(Object.hasOwn(session, field), false);
+    assert.equal(Object.hasOwn(JSON.parse(values.get('nexus.auth.session')), field), false);
+  }
 });
