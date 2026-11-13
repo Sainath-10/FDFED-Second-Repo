@@ -12,15 +12,6 @@ import { getSidebarNav } from '../config/nav.js';
 import { LogoutIcon, ProfileIcon } from './icons.jsx';
 import '../styles/components/user-menu.css';
 
-const ROLE_LABEL = {
-  'super-admin': 'Super Admin',
-  admin: 'Admin',
-  finance_moderator: 'Finance moderator',
-  community_moderator: 'Community moderator',
-  team_lead: 'Team lead',
-  participant: 'Player',
-};
-
 export default function UserMenu({ floating = false }) {
   const { session, logout } = useAuth();
   const navigate = useNavigate();
@@ -74,7 +65,6 @@ export default function UserMenu({ floating = false }) {
         <div className="user-menu-dropdown" role="menu">
           <div className="user-menu-identity">
             <strong>@{username}</strong>
-            <small>{ROLE_LABEL[session.role] || session.role}</small>
           </div>
           {profileTo && (
             <Link className="user-menu-item" role="menuitem" to={profileTo}>
