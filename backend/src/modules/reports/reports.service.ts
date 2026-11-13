@@ -793,7 +793,7 @@ export class ReportsService implements OnModuleInit {
         discussionId,
         authorUsername: user.username,
         body,
-        evidenceUrls: evidenceRows.map((e) => e.url),
+        evidence: evidenceRows.map((e) => ({ url: e.url, filename: e.filename, mimetype: e.mimetype, size: e.sizeBytes })),
       }),
     );
 

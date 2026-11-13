@@ -14,8 +14,14 @@ export class ReportDiscussionMessageEntity {
   @Column({ type: 'text' })
   body: string;
 
-  @Column({ type: 'simple-array', default: '' })
-  evidenceUrls: string[];
+  /**
+   * Attachments with their file details. jsonb, not simple-array: evidence is
+   * usually a data URL ("data:image/jpeg;base64,…"), and simple-array splits on
+   * commas, which cut every image in two. The legacy "evidenceUrls" column is
+   * no longer mapped.
+   */
+  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
+  evidence: { url: string; filename: string; mimetype: string; size: number }[];
 
   @CreateDateColumn()
   createdAt: Date;
