@@ -1,193 +1,153 @@
 /**
- * §6 — a single, shared competition-started check used by every team page so
- * roster rules cannot diverge between screens.
- */
-export function hasCompetitionStarted(comp, now = new Date()) {
-  if (!comp) return false;
-  if (comp.started === true || comp.startedAt) return true;
-  if (String(comp.status || '').toLowerCase() === 'ongoing') return true;
-  const startRaw = comp.startDate || comp.startAt || comp.startedAt || null;
-  if (!startRaw) return false;
-  // date-only values count as start-of-day in local time → matches organizer intent
-  if (/^\d{4}-\d{2}-\d{2}$/.test(String(startRaw))) {
-    const [y, m, d] = String(startRaw).split('-').map(Number);
-    const d0 = new Date(y, m - 1, d, 0, 0, 0, 0);
-    return now.getTime() >= d0.getTime();
-  }
-  const d = new Date(startRaw);
-  return !isNaN(d.getTime()) && now.getTime() >= d.getTime();
-}
-
-/**
  * NEXUS ESPORTS — useTeamContext
  *
- * Resolves the active team context (via the team workflow service) for the team
- * pages, and exposes a `refresh()` to re-resolve after mutations.
- *
- * The team in the page URL wins over whatever team was last stored in this
- * browser, so a team player who opens Team Chat and returns to the roster keeps
- * the same team. The viewer's role is then read from the backend roster of that
- * team — never from the open tab or from cached display state.
+ * Resolves the team a team page is about, entirely from the backend, so the
+ * pages work in any browser and on any device:
+ *   1. the team in the URL (?teamId=…), else
+ *   2. the viewer's own active team in the competition in the URL (?compId=…), else
+ *   3. the viewer's most recent active team (captains first).
+ * The viewer's role (captain / player) is read from the server roster.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { TeamsAPI } from '../services/api.js';
-import { LocalReportsAPI } from '../services/local/reporting.js';
-import NexusTeamWorkflow from '../services/teamWorkflow.js';
+import { useAuth } from '../context/AuthContext.jsx';
+import { CompetitionsAPI, ReportsAPI, TeamsAPI } from '../services/api.js';
 
 const normalize = (value) => String(value || '').trim().toLowerCase();
+const INACTIVE = ['rejected', 'banned', 'disbanded'];
+
+/** One shared competition-started check, so roster rules agree on every screen. */
+export function hasCompetitionStarted(comp, now = new Date()) {
+  if (!comp) return false;
+  if (String(comp.status || '').toLowerCase() === 'ongoing') return true;
+  const start = comp.startDate ? new Date(comp.startDate) : null;
+  return !!start && !Number.isNaN(start.getTime()) && now.getTime() >= start.getTime();
+}
+
+export function isCompetitionEnded(comp) {
+  if (!comp) return false;
+  const status = String(comp.status || '').toLowerCase();
+  const payment = String(comp.paymentStatus || '').toUpperCase();
+  return status === 'completed' || status === 'cancelled' || ['COMPLETED', 'PRIZE_RELEASED', 'REVERSED', 'REFUND_ISSUED', 'CANCELLED', 'EXPIRED'].includes(payment);
+}
+
+/** Server team → the shape the team pages render. */
+function toTeam(row) {
+  if (!row) return null;
+  const leader = row.leaderId || row.leaderUsername || row.createdBy || '';
+  const members = (row.memberUsernames || []).map((username) => ({
+    username,
+    displayName: username,
+    role: normalize(username) === normalize(leader) ? 'captain' : 'player',
+  }));
+  return { ...row, dbId: row.id, leader, createdBy: leader, members };
+}
 
 export function useTeamContext() {
-  const [version, setVersion] = useState(0);
-  const [serverTeam, setServerTeam] = useState(null);
-  const [checkingPermission, setCheckingPermission] = useState(true);
-  const [removal, setRemoval] = useState(null);
+  const { session } = useAuth();
+  const query = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+  const queryTeamId = query.get('teamId');
+  const queryCompId = query.get('compId') || query.get('id');
 
-  const workflowCtx = useMemo(() => {
-    if (!NexusTeamWorkflow || typeof NexusTeamWorkflow.resolveTeamContext !== 'function') return null;
-    return NexusTeamWorkflow.resolveTeamContext();
-  }, [version]);
+  const [version, setVersion] = useState(0);
+  const [team, setTeam] = useState(null);
+  const [comp, setComp] = useState(null);
+  const [removal, setRemoval] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   const refresh = useCallback(() => setVersion((v) => v + 1), []);
-
-  // Roster and invites change on other devices, so refresh them from the backend.
-  // A player can also open a team page straight from a link, where the local
-  // copy of the team may not exist yet — the query string is the fallback.
-  const query = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-  const queryCompId = query ? query.get('compId') : null;
-  const queryTeamId = query ? query.get('teamId') : null;
-  const compId = queryCompId || (workflowCtx && workflowCtx.comp ? workflowCtx.comp.id : null) || null;
-  const teamId = queryTeamId || (workflowCtx && workflowCtx.team ? workflowCtx.team.id : null) || null;
-
-  // A removed player keeps their account and reports, but loses every team and
-  // competition surface. The server enforces this too; this keeps the UI honest.
-  const viewerUsername = String((workflowCtx && workflowCtx.session && workflowCtx.session.username) || '');
-  useEffect(() => {
-    let cancelled = false;
-    if (!compId || !viewerUsername) { setRemoval(null); return undefined; }
-    LocalReportsAPI.removalStatus(compId)
-      .then((res) => { if (!cancelled && res.ok && res.data) setRemoval(res.data); })
-      .catch(() => undefined);
-    return () => { cancelled = true; };
-  }, [compId, viewerUsername]);
+  const username = String(session?.username || '');
 
   useEffect(() => {
-    if (!compId || !teamId || !NexusTeamWorkflow || typeof NexusTeamWorkflow.syncTeamFromBackend !== 'function') { setCheckingPermission(false); return undefined; }
     let cancelled = false;
-    setCheckingPermission(true);
-    // A player who joined from another device may only know the local team id,
-    // so membership is resolved from the competition roster as a fallback.
-    // Chat access must never depend on the viewer being the team leader.
-    async function resolveServerTeam() {
-      const teamRef = teamId || (workflowCtx.team && workflowCtx.team.dbId) || null;
-      if (!teamRef) return null;
-      const response = await TeamsAPI.getById(teamRef);
-      if (response.ok && response.data) return response.data;
-      const roster = await TeamsAPI.getByCompetition((workflowCtx.comp && workflowCtx.comp.dbId) || compId);
-      if (!roster.ok || !Array.isArray(roster.data)) return null;
-      const wantedName = String((workflowCtx.team && workflowCtx.team.name) || '').toLowerCase();
-      return roster.data.find((row) => String(row.id) === String(teamRef)
-        || (wantedName && String(row.name || '').toLowerCase() === wantedName)) || null;
+    async function resolveTeam() {
+      if (queryTeamId) {
+        const res = await TeamsAPI.getById(queryTeamId);
+        if (res.ok && res.data) return res.data;
+        if (res.status === 403) throw new Error(res.error || 'You cannot open this team.');
+      }
+      const res = queryCompId ? await TeamsAPI.getByCompetition(queryCompId) : await TeamsAPI.getAll();
+      if (!res.ok || !Array.isArray(res.data)) throw new Error(res.error || 'Unable to load your teams.');
+      const me = normalize(username);
+      const mine = res.data
+        .filter((t) => !INACTIVE.includes(normalize(t.status)))
+        .filter((t) => (t.memberUsernames || []).some((m) => normalize(m) === me))
+        .sort((a, b) => {
+          const lead = Number(normalize(b.leaderId) === me) - Number(normalize(a.leaderId) === me);
+          return lead || new Date(b.createdAt) - new Date(a.createdAt);
+        });
+      return mine[0] || null;
     }
-    async function sync() {
-      const resolved = await resolveServerTeam();
-      if (cancelled) return;
-      setServerTeam(resolved);
-      setCheckingPermission(false);
-      if (resolved) {
-        const changed = await NexusTeamWorkflow.syncTeamFromBackend(compId, teamId);
-        if (changed && !cancelled) refresh();
+    async function load() {
+      try {
+        const row = await resolveTeam();
+        if (cancelled) return;
+        setTeam(row);
+        const compId = row?.competitionId || queryCompId;
+        if (compId) {
+          const [compRes, removalRes] = await Promise.all([
+            CompetitionsAPI.getById(compId),
+            username ? ReportsAPI.removalStatus(compId) : Promise.resolve(null),
+          ]);
+          if (cancelled) return;
+          setComp(compRes.ok ? compRes.data : null);
+          setRemoval(removalRes && removalRes.ok ? removalRes.data : null);
+          if (!compRes.ok && compRes.status === 403) setError(compRes.error || '');
+        } else {
+          setComp(null);
+        }
+        setError((prev) => (row ? prev : ''));
+      } catch (err) {
+        if (!cancelled) { setTeam(null); setError(err.message || 'Unable to load this team.'); }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     }
-    sync().catch(() => { if (!cancelled) { setServerTeam(null); setCheckingPermission(false); } });
-    const timer = setInterval(() => sync().catch(() => { if (!cancelled) { setServerTeam(null); setCheckingPermission(false); } }), 10000);
-    const onFocus = () => sync().catch(() => { if (!cancelled) { setServerTeam(null); setCheckingPermission(false); } });
-    window.addEventListener('focus', onFocus);
-    return () => { cancelled = true; clearInterval(timer); window.removeEventListener('focus', onFocus); };
-  }, [compId, teamId, refresh]);
+    load();
+    // Rosters change on other devices: keep this page current.
+    const timer = window.setInterval(load, 15000);
+    window.addEventListener('focus', load);
+    return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener('focus', load); };
+  }, [queryTeamId, queryCompId, username, version]);
 
-  // Keep the local team in step with the team named in the URL. Without this a
-  // player returning from Team Chat could inherit a different team's context.
-  const ctx = useMemo(() => {
-    if (!workflowCtx) return workflowCtx;
-    if (!queryTeamId) return workflowCtx;
-    const comp = workflowCtx.comp || null;
-    const teams = comp && Array.isArray(comp.teams) ? comp.teams : [];
-    const localMatch = teams.find((team) => String(team.id) === String(queryTeamId)
-      || (team.dbId && String(team.dbId) === String(queryTeamId))) || null;
-    if (!localMatch || localMatch === workflowCtx.team) return workflowCtx;
-    return { ...workflowCtx, team: localMatch, context: { compId: comp.id, teamId: localMatch.id } };
-  }, [workflowCtx, queryTeamId]);
+  const mapped = useMemo(() => toTeam(team), [team]);
+  const me = normalize(username);
+  const sessionRole = normalize(session?.role);
+  const isStaff = ['admin', 'super_admin', 'super-admin'].includes(sessionRole);
+  const active = !!mapped && !INACTIVE.includes(normalize(mapped.status));
+  const isMember = !!mapped && mapped.members.some((m) => normalize(m.username) === me);
+  const isLeader = active && isMember && normalize(mapped.leader) === me;
+  const isEnded = isCompetitionEnded(comp);
+  const isStarted = hasCompetitionStarted(comp);
+  const context = mapped ? { compId: mapped.competitionId, teamId: mapped.id } : (queryCompId ? { compId: queryCompId } : null);
 
-  // Team role is decided by the authenticated account against the server roster,
-  // never by the tab that happens to be open or by cached display state.
-  const sessionRole = normalize(ctx && ctx.session && ctx.session.role);
-  const username = String((ctx && ctx.session && ctx.session.username) || '');
-  const sessionUsername = normalize(username);
-  const serverStatus = normalize(serverTeam && serverTeam.status);
-  const serverMemberUsernames = Array.isArray(serverTeam && serverTeam.memberUsernames)
-    ? serverTeam.memberUsernames
-    : [];
-  const localTeam = (ctx && ctx.team) || null;
-  const localMembers = Array.isArray(localTeam && localTeam.members) ? localTeam.members : [];
-  const memberOfServer = !!serverTeam && !!sessionUsername
-    && serverMemberUsernames.some((name) => normalize(name) === sessionUsername);
-  const memberOfLocal = !!sessionUsername
-    && localMembers.some((member) => normalize(member && member.username) === sessionUsername);
-  const isMember = memberOfServer || memberOfLocal;
-  const isLocalLeader = !!sessionUsername && !!localTeam
-    && !['rejected', 'banned', 'disbanded'].includes(normalize(localTeam.status))
-    && sessionUsername === normalize(localTeam.createdBy || localTeam.leaderUsername);
-  const isLeader = serverTeam
-    ? (memberOfServer
-      && !['rejected', 'banned', 'disbanded'].includes(serverStatus)
-      && sessionUsername === normalize(serverTeam.leaderId))
-    // Offline/local workflow fallback: a player promoted after a removal must
-    // see the leader interface immediately, not the ordinary player one.
-    : isLocalLeader;
-  // A confirmed member who is not this team's leader.
-  const isTeamPlayer = serverTeam
-    ? (memberOfServer && !isLeader)
-    : (memberOfLocal && !isLocalLeader);
-
-  const canManage = useMemo(() => {
-    if (!ctx || !ctx.session) return false;
-    if (['admin', 'super_admin'].includes(sessionRole)) return true;
-    return serverTeam ? isLeader : isLocalLeader;
-  }, [ctx, serverTeam, sessionRole, isLeader, isLocalLeader]);
-
-  // Every active member — leader or ordinary player — can use the team chat.
-  // The local roster is a safe fallback while the server roster is still
-  // loading, so an ordinary player never loses the tab because of timing.
-  const teamStatus = normalize((serverTeam || localTeam) && (serverTeam || localTeam).status);
-  const activeTeam = !!username && !['rejected', 'banned', 'disbanded'].includes(teamStatus);
-  const canChat = activeTeam && isMember;
-  const chatTeamId = (serverTeam && serverTeam.id) || (localTeam && localTeam.dbId) || (localTeam && localTeam.id) || null;
-
-  const isEnded = useMemo(() => {
-    if (!ctx || !ctx.comp) return false;
-    return !!(ctx.comp.ended || ctx.comp.status === 'completed');
-  }, [ctx]);
-
-  const isStarted = useMemo(() => hasCompetitionStarted(ctx && ctx.comp), ctx ? [ctx.comp] : [ctx]);
-
-  const teamName = (serverTeam && serverTeam.name) || (localTeam && localTeam.name) || '';
+  const ctx = mapped && comp ? { session, comp, team: mapped, context } : null;
 
   return {
     ctx,
     refresh,
-    canManage,
+    loading,
+    error,
+    session,
+    comp,
+    team: mapped,
+    members: mapped ? mapped.members : [],
+    canManage: isStaff || isLeader,
     isLeader,
     isMember,
-    isTeamPlayer,
-    canChat,
-    chatTeamId,
-    checkingPermission,
+    isTeamPlayer: active && isMember && !isLeader,
+    canChat: active && isMember,
+    chatTeamId: mapped ? mapped.id : null,
+    checkingPermission: loading,
     isRemoved: !!removal?.removed,
+    removalReason: removal?.reason || '',
     isEnded,
     isStarted,
-    compId,
-    teamId,
-    teamName,
+    rosterLocked: isEnded || isStarted,
+    compId: mapped?.competitionId || queryCompId || null,
+    teamId: mapped?.id || queryTeamId || null,
+    teamName: mapped?.name || '',
+    context,
   };
 }
 

@@ -25,6 +25,7 @@ import { PaymentFoundation1793750400000 } from './database/migrations/1793750400
 import { ReportsModule } from './modules/reports/reports.module';
 import { ReputationModule } from './modules/reputation/reputation.module';
 import { SeederService } from './database/seeder.service';
+import { requireJwtSecret } from './common/config/jwt-secret';
 
 import { SecurityMiddleware, RateLimiterMiddleware, LoggingMiddleware } from './common/middleware';
 
@@ -57,6 +58,11 @@ import { ReportStatusHistoryEntity } from './entities/report-status-history.enti
 import { ReportAuditLogEntity } from './entities/report-audit-log.entity';
 import { ReportingRestrictionEntity } from './entities/reporting-restriction.entity';
 import { CompetitionRemovalEntity } from './entities/competition-removal.entity';
+import { CoOrganizerInvitations1794000000000 } from './database/migrations/1794000000000-co-organizer-invitations';
+import { ReportAppeals1794000001000 } from './database/migrations/1794000001000-report-appeals';
+import { InitialSchema1700000000000 } from './database/migrations/1700000000000-initial-schema';
+import { FinanceRequests1794100000000 } from './database/migrations/1794100000000-finance-requests';
+import { AuditLogEntityType1794200000000 } from './database/migrations/1794200000000-audit-log-entity-type';
 import { WorkflowEnhancements1710000000000 } from './database/migrations/1710000000000-workflow-enhancements';
 import { MatchBrackets1793577600000 } from './database/migrations/1793577600000-match-brackets';
 import { MatchResultRules1793577601000 } from './database/migrations/1793577601000-match-result-rules';
@@ -125,7 +131,7 @@ import { ParticipationAndRoleCleanup1793900000000 } from './database/migrations/
           // automatic synchronization. Set DB_SYNCHRONIZE=true only for a
           // throwaway local database.
           synchronize: config.get<string>('DB_SYNCHRONIZE') === 'true',
-          migrations: [WorkflowEnhancements1710000000000, MatchBrackets1793577600000, MatchResultRules1793577601000, ChatMessages1793664000000, ReportsReputation1793750000000, PaymentFoundation1793750400000, MockPaymentLifecycle1793750401000, PaymentReversals1793750402000, RemoveAadhaarVerification1793846400000, ParticipationAndRoleCleanup1793900000000],
+          migrations: [InitialSchema1700000000000, WorkflowEnhancements1710000000000, MatchBrackets1793577600000, MatchResultRules1793577601000, ChatMessages1793664000000, ReportsReputation1793750000000, PaymentFoundation1793750400000, MockPaymentLifecycle1793750401000, PaymentReversals1793750402000, RemoveAadhaarVerification1793846400000, ParticipationAndRoleCleanup1793900000000, CoOrganizerInvitations1794000000000, ReportAppeals1794000001000, FinanceRequests1794100000000, AuditLogEntityType1794200000000],
           migrationsRun: config.get<string>('DB_MIGRATIONS_RUN') !== 'false',
           logging: config.get<string>('NODE_ENV') === 'development' ? ['error', 'warn'] : false,
         };
@@ -138,7 +144,7 @@ import { ParticipationAndRoleCleanup1793900000000 } from './database/migrations/
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('JWT_SECRET', 'nexus_fallback_secret'),
+        secret: requireJwtSecret(config),
         signOptions: {
           expiresIn: (config.get<string>('JWT_EXPIRES_IN') || config.get<string>('JWT_EXPIRATION') || '7d') as any,
         },

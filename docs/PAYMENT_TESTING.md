@@ -19,7 +19,7 @@ cd frontend && npm run dev -- --host     # --host makes the app answer on both l
 node backend/scripts/setup-payment-test-users.mjs
 ```
 
-This creates, verifies (simulated Aadhaar) and assigns roles for everyone below. Running it again is safe. Every password is **`test1234`**; the super admin is `superadmin1` / `nexus`.
+This creates the accounts below and assigns their roles. Running it again is safe. Every password is **`test1234`**; the super admin is `superadmin1` / `nexus`.
 
 | Account | Plays the part of |
 |---|---|

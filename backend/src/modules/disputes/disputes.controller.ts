@@ -1,22 +1,7 @@
-import {
-  Controller,
-  Post,
-  Get,
-  Delete,
-  Param,
-  Body,
-  UseGuards,
-  HttpCode,
-  Query,
-} from '@nestjs/common';
+import { Controller, Post, Get, Delete, Param, Body, UseGuards, HttpCode, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { DisputesService } from './disputes.service';
-import {
-  CreateDisputeDto,
-  OrganizerReviewDisputeDto,
-  AdminResolveDisputeDto,
-  DisputeResponseDto,
-} from './dto/dispute.dto';
+import { CreateDisputeDto, OrganizerReviewDisputeDto, AdminResolveDisputeDto, DisputeResponseDto, EscalateDisputeDto } from './dto/dispute.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/decorators/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -26,137 +11,92 @@ import { UserRole, DisputeStatus } from '../../common/interfaces';
 @Controller('disputes')
 @ApiTags('Disputes')
 @ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 export class DisputesController {
   constructor(private disputesService: DisputesService) {}
 
-  // ─── Player: Create a Dispute ─────────────────────────────────────────────────
   @Post()
-  @UseGuards(JwtAuthGuard)
   @HttpCode(201)
   @ApiOperation({
     summary: 'Raise a dispute',
     description:
-      'Player raises a dispute. If targetType is "organizer", it routes directly to the Platform Admin queue. Otherwise, it routes to the Tournament Organizer queue.',
+      'A registered player raises a dispute. Disputes against the organizer go to platform staff; others go to the competition organizer.',
   })
-  @ApiResponse({ status: 201, description: 'Dispute created and routed', type: DisputeResponseDto })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async createDispute(
-    @Body() dto: CreateDisputeDto,
-    @CurrentUser() user?: any,
-  ): Promise<DisputeResponseDto> {
-    const reporter = user?.username || user?.id || 'anonymous';
-    return this.disputesService.createDispute(dto, reporter);
+  @ApiResponse({ status: 201, type: DisputeResponseDto })
+  async createDispute(@Body() dto: CreateDisputeDto, @CurrentUser() user: any) {
+    return this.disputesService.createDispute(dto, user);
   }
 
-  // ─── Organizer: Review Dispute (resolve or escalate to admin) ─────────────────
   @Post(':id/organizer-review')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
-  @ApiOperation({
-    summary: 'Organizer reviews a dispute',
-    description:
-      'Tournament organizer can resolve the dispute or escalate it to the Platform Admin (with an optional ban request).',
-  })
-  @ApiResponse({ status: 200, description: 'Dispute reviewed', type: DisputeResponseDto })
-  @ApiResponse({ status: 403, description: 'Forbidden — organizer or admin role required' })
-  @ApiResponse({ status: 404, description: 'Dispute not found' })
-  async organizerReview(
-    @Param('id') id: string,
-    @Body() dto: OrganizerReviewDisputeDto,
-    @CurrentUser() user?: any,
-  ): Promise<DisputeResponseDto> {
-    const organizer = user?.username || user?.id || 'organizer';
-    return this.disputesService.organizerReviewDispute(id, dto, organizer);
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Organizer resolves a dispute or escalates it to platform staff' })
+  async organizerReview(@Param('id') id: string, @Body() dto: OrganizerReviewDisputeDto, @CurrentUser() user: any) {
+    return this.disputesService.organizerReviewDispute(id, dto, user);
   }
 
-  // ─── Admin: Resolve Dispute (optionally ban player) ───────────────────────────
+  @Post(':id/escalate')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'The player who raised a dispute escalates it to platform staff' })
+  async escalate(@Param('id') id: string, @Body() dto: EscalateDisputeDto, @CurrentUser() user: any) {
+    return this.disputesService.escalateByReporter(id, dto.reason, user);
+  }
+
   @Post(':id/admin-resolve')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
-  @ApiOperation({
-    summary: 'Admin resolves a dispute',
-    description:
-      'Platform Admin resolves a dispute and can optionally issue a platform-wide ban on the offending player.',
-  })
-  @ApiResponse({ status: 200, description: 'Dispute resolved', type: DisputeResponseDto })
-  @ApiResponse({ status: 403, description: 'Forbidden — admin role required' })
-  @ApiResponse({ status: 404, description: 'Dispute not found' })
-  async adminResolve(
-    @Param('id') id: string,
-    @Body() dto: AdminResolveDisputeDto,
-    @CurrentUser() user?: any,
-  ): Promise<DisputeResponseDto> {
-    const admin = user?.username || user?.id || 'admin';
-    return this.disputesService.adminResolveDispute(id, dto, admin);
+  @HttpCode(200)
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.FINANCE_MODERATOR)
+  @ApiOperation({ summary: 'Platform staff resolve any open dispute, optionally banning an account' })
+  async adminResolve(@Param('id') id: string, @Body() dto: AdminResolveDisputeDto, @CurrentUser() user: any) {
+    return this.disputesService.adminResolveDispute(id, dto, user);
   }
 
-  // ─── Organizer Queue ──────────────────────────────────────────────────────────
+  @Get('mine')
+  @ApiOperation({ summary: 'Disputes the signed-in player raised or that involve their teams' })
+  async getMine(@CurrentUser() user: any) {
+    return this.disputesService.getMyDisputes(user);
+  }
+
   @Get('organizer-queue')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
-  @ApiOperation({
-    summary: 'Get organizer dispute queue',
-    description: 'Returns all disputes in the open_organizer and under_review states.',
-  })
-  @ApiResponse({ status: 200, type: [DisputeResponseDto] })
-  async getOrganizerQueue(): Promise<DisputeResponseDto[]> {
-    return this.disputesService.getOrganizerQueue();
+  @ApiOperation({ summary: 'Disputes waiting for the organizer, limited to competitions the caller organizes' })
+  async getOrganizerQueue(@CurrentUser() user: any) {
+    return this.disputesService.getOrganizerQueue(user);
   }
 
-  // ─── Admin Queue ──────────────────────────────────────────────────────────────
   @Get('admin-queue')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
-  @ApiOperation({
-    summary: 'Get admin dispute queue',
-    description: 'Returns all disputes in open_admin and escalated_to_admin states.',
-  })
-  @ApiResponse({ status: 200, type: [DisputeResponseDto] })
-  async getAdminQueue(): Promise<DisputeResponseDto[]> {
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.FINANCE_MODERATOR)
+  @ApiOperation({ summary: 'Disputes against organizers and escalated disputes' })
+  async getAdminQueue() {
     return this.disputesService.getAdminQueue();
   }
 
-  // ─── All Disputes (admin view) ────────────────────────────────────────────────
   @Get()
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
-  @ApiOperation({ summary: 'Get all disputes', description: 'Filter by status via query param' })
-  @ApiResponse({ status: 200, type: [DisputeResponseDto] })
-  async getAllDisputes(
-    @Query('status') status?: DisputeStatus,
-  ): Promise<DisputeResponseDto[]> {
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.FINANCE_MODERATOR)
+  @ApiOperation({ summary: 'All disputes (staff only); filter with ?status=' })
+  async getAllDisputes(@Query('status') status?: DisputeStatus) {
     if (status) return this.disputesService.getDisputesByStatus(status);
     return this.disputesService.getAllDisputes();
   }
 
-  // ─── By Competition ───────────────────────────────────────────────────────────
   @Get('competition/:competitionId')
-  @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Get disputes by competition' })
-  @ApiResponse({ status: 200, type: [DisputeResponseDto] })
-  async getByCompetition(@Param('competitionId') cid: string): Promise<DisputeResponseDto[]> {
-    return this.disputesService.getDisputesByCompetition(cid);
+  @ApiOperation({ summary: 'Disputes in a competition the caller can see' })
+  async getByCompetition(@Param('competitionId') cid: string, @CurrentUser() user: any) {
+    return this.disputesService.getDisputesByCompetition(cid, user);
   }
 
-  // ─── Single Dispute ───────────────────────────────────────────────────────────
   @Get(':id')
-  @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Get dispute by ID' })
-  @ApiResponse({ status: 200, type: DisputeResponseDto })
-  @ApiResponse({ status: 404, description: 'Dispute not found' })
-  async getDispute(@Param('id') id: string): Promise<DisputeResponseDto> {
-    return this.disputesService.getDisputeById(id);
+  @ApiOperation({ summary: 'One dispute (reporter, involved players, organizers and staff only)' })
+  async getDispute(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.disputesService.getDisputeById(id, user);
   }
 
-  // ─── Delete (admin only) ──────────────────────────────────────────────────────
   @Delete(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
   @HttpCode(204)
-  @ApiOperation({ summary: 'Delete a dispute (Admin only)' })
-  @ApiResponse({ status: 204, description: 'Dispute deleted' })
+  @ApiOperation({ summary: 'Delete a dispute (Super Admin only)' })
   async deleteDispute(@Param('id') id: string): Promise<void> {
     await this.disputesService.deleteDispute(id);
   }
 }
-

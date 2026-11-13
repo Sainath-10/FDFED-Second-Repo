@@ -1,822 +1,373 @@
 /**
  * NEXUS ESPORTS — Create Competition
  *
- * the full form with
- * live summary, co-organizer rows (validated against registered accounts),
- * banner upload/preview, the strict QA validation rules, prize-pool cap
- * (₹3,00,000) and min entry fee ₹10, public/private visibility with a private
- * join code, and the theme-coloured platform-fee checkout modal.
+ * Validates with the same rules as the backend (lib/competitionForm.js), shows
+ * the platform fee from the live revenue configuration, respects the Super
+ * Admin's platform settings and the organizer's reputation limit, then saves a
+ * draft and moves to payment. The backend re-checks everything.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import NexusData from '../services/data.js';
-import NexusTeamWorkflow from '../services/teamWorkflow.js';
-import NexusAPI, { CompetitionsAPI } from '../services/api.js';
-import { LocalReputationAPI as ReputationAPI } from '../services/local/reporting.js';
+import { CompetitionsAPI, PlatformAPI, ReputationAPI } from '../services/api.js';
+import { calculatePlatformFee, useRevenueConfig } from '../services/competitions.js';
 import {
-  availableExceptionFor,
-  bindExceptionToCompetition,
-  checkPrizePool,
-  isCreationBlocked,
-} from '../services/local/reputation.js';
+  FORMATS, GAMES, LARGE_PRIZE_POOL, MAX_ENTRY_FEE, MAX_PLAYERS, MAX_PRIZE_POOL, MIN_ENTRY_FEE,
+  defaultSchedule, parseRupees, readBanner, scheduleToIso, todayInput, validateContact, validateDescription, validateName, validatePrizes, validateSchedule,
+} from '../lib/competitionForm.js';
+import { UsernameChips } from '../components/UsernameSearch.jsx';
+import { competitionBanner } from '../lib/assets.js';
+import { ConfirmDialog, Notice, formatINR } from '../components/ui.jsx';
 import { showToast } from '../lib/toast.js';
-import { assetUrl } from '../lib/assets.js';
 import '../styles/pages/create-competition.css';
 
-/** §2.2 — backend mirrors these limits (competition.rules.ts). */
-const MAX_PRIZE_POOL = 300_000; // ₹3,00,000 platform-wide ceiling
-const MIN_ENTRY_FEE = 10; // ₹10 where a fee applies
+const BLOCKING_SANCTIONS = ['creation_restriction', 'one_month_ban', 'lifetime_ban', 'competition_suspension'];
 
-const GAMES = ['Counter-Strike 2', 'League of Legends', 'Dota 2', 'Fortnite', 'Valorant', 'Rocket League'];
-const DEFAULT_BANNERS = [
-  [['valorant'], '8764f3a5ce7a0eb0275743600c60fb0c727893c8.png'],
-  [['counter-strike', 'cs2', 'cs:go', 'csgo'], 'c4f97eccde97e10ac89b61ec5fb36fdce0ab2477.png'],
-  [['league of legends', 'lol'], '95bc0921c86340a2cee9e0a2d7ecd20b15a26143.png'],
-  [['apex'], 'f03e2b11537e425d8544ee3ca732bf73af5137c0.png'],
-];
-function getDefaultBanner(gameName) {
-  const g = String(gameName || '').toLowerCase();
-  for (const [keys, file] of DEFAULT_BANNERS) if (keys.some((k) => g.includes(k))) return assetUrl(file);
-  return assetUrl('b890c61489a080992ad7e99adabb1145e6d59606.png');
+function creationBlock(profile) {
+  if (!profile) return '';
+  if (profile.lifetimeBan) return 'Your account is permanently banned from organizing competitions.';
+  if (profile.bannedUntil && new Date(profile.bannedUntil) > new Date()) return `You cannot organize competitions until ${new Date(profile.bannedUntil).toLocaleDateString('en-IN')}.`;
+  const active = (profile.activeSanctions || []).find((s) => BLOCKING_SANCTIONS.includes(s.type));
+  return active ? `An active restriction blocks new competitions: ${active.reason}` : '';
 }
 
-function validateDates(regOpen, regClose, startDate, endDate) {
-  const errors = {};
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const toDate = (s) => (s ? new Date(`${s}T00:00:00`) : null);
-  const rOpen = toDate(regOpen);
-  const rClose = toDate(regClose);
-  const sDate = toDate(startDate);
-  const eDate = toDate(endDate);
-
-  if (!regOpen) errors['reg-open'] = 'Registration Open date is required.';
-  else if (rOpen < today) errors['reg-open'] = 'Registration Open date cannot be in the past.';
-
-  if (!regClose) errors['reg-close'] = 'Registration Close date is required.';
-  else if (rOpen && rClose && rClose <= rOpen) errors['reg-close'] = 'Registration Close date must be strictly after Registration Open date.';
-  else if (rClose < today) errors['reg-close'] = 'Registration Close date cannot be in the past.';
-
-  if (!startDate) errors['start-date'] = 'Tournament Start Date is required.';
-  else if (sDate < today) errors['start-date'] = 'Tournament Start Date cannot be in the past.';
-  // §3.4 — registration closure, competition start and competition end are
-  // validated as separate concepts: a registration deadline that occurs before
-  // the competition starts is legitimate, so no reg-close→start restriction.
-
-  if (!endDate) errors['end-date'] = 'Tournament End Date is required.';
-  else if (sDate && eDate && eDate <= sDate) errors['end-date'] = 'Tournament End Date must be strictly after Tournament Start Date.';
-  else if (eDate < today) errors['end-date'] = 'Tournament End Date cannot be in the past.';
-
-  return Object.keys(errors).length > 0 ? errors : null;
+/** Declared at module scope so inputs keep focus between renders. */
+function Field({ id, label, children, error, help }) {
+  return (
+    <div className="form-group">
+      <label className="form-label" htmlFor={id}>{label}</label>
+      {children}
+      {help && !error && <p className="ui-field-help" style={{ marginTop: 5 }}>{help}</p>}
+      {error && <p className="ui-field-error" style={{ marginTop: 5 }}>⚠ {error}</p>}
+    </div>
+  );
 }
+
+const initialForm = () => ({
+  name: '', game: '', format: '', description: '', visibility: 'public',
+  ...defaultSchedule(),
+  maxTeams: '16', maxPlayers: '5', feeType: 'free', entryFee: '',
+  p1: '', p2: '', p3: '', coOrganizers: [],
+  contact: { fullName: '', phone: '', email: '', organisation: '', purpose: '' },
+});
 
 export default function CreateCompetition() {
   const { session } = useAuth();
   const navigate = useNavigate();
-
-  const [name, setName] = useState('');
-  const [game, setGame] = useState('');
-  const [format, setFormat] = useState('');
-  const [description, setDescription] = useState('');
-  const [regOpen, setRegOpen] = useState('');
-  const [regClose, setRegClose] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [maxTeams, setMaxTeams] = useState('16');
-  const [maxPlayers, setMaxPlayers] = useState('5');
-  const [feeType, setFeeType] = useState('free');
-  const [entryFee, setEntryFee] = useState('');
-  const [p1, setP1] = useState('');
-  const [p2, setP2] = useState('');
-  const [p3, setP3] = useState('');
-  const [coOrgs, setCoOrgs] = useState([]);
-  const [bannerSrc, setBannerSrc] = useState('');
-  const [userUploadedBanner, setUserUploadedBanner] = useState(false);
+  const revenue = useRevenueConfig();
+  const [form, setForm] = useState(initialForm);
+  const [banner, setBanner] = useState('');
   const [errors, setErrors] = useState({});
+  const [platform, setPlatform] = useState({ allowKnockout: true, allowRoundRobin: true, maxTeams: 256 });
+  const [reputation, setReputation] = useState(null);
+  const [exceptions, setExceptions] = useState([]);
+  const [exceptionReason, setExceptionReason] = useState('');
+  const [requesting, setRequesting] = useState(false);
   const [checkout, setCheckout] = useState(null);
   const [publishing, setPublishing] = useState(false);
-  const [publishError, setPublishError] = useState('');
-  const publishingRef = useRef(false);
-  const confirmingRef = useRef(false);
-  const [visibility, setVisibility] = useState('public'); // §2.4 public | private
-  const [published, setPublished] = useState(null); // { comp, joinCode }
 
- // Super-Admin platform settings (format availability + max-teams limit).
-  const platform = useMemo(() => {
-    try {
-      const raw = localStorage.getItem('nexus.superadmin.dashboard.state');
-      if (!raw) return { allowKnockout: true, allowRoundRobin: true, maxTeams: 256 };
-      const s = JSON.parse(raw);
-      return {
-        allowKnockout: s['cfg-format-knockouts'] !== false,
-        allowRoundRobin: s['cfg-format-roundrobin'] !== false,
-        maxTeams: parseInt(s['cfg-max-teams'], 10) || 256,
-      };
-    } catch (e) {
-      return { allowKnockout: true, allowRoundRobin: true, maxTeams: 256 };
-    }
+  useEffect(() => {
+    PlatformAPI.settings().then((res) => { if (res.ok && res.data) setPlatform(res.data); });
+    ReputationAPI.me().then((res) => { if (res.ok) setReputation(res.data); });
+    loadExceptions();
   }, []);
 
-  const n1 = parseInt(p1, 10) || 0;
-  const n2 = parseInt(p2, 10) || 0;
-  const n3 = parseInt(p3, 10) || 0;
-  const totalPrize = n1 + n2 + n3;
-  const platformFee = (NexusData && NexusData.calculatePlatformFee) ? NexusData.calculatePlatformFee(totalPrize)
-    : (totalPrize <= 0 ? 0 : (totalPrize <= 700 ? 50 : Math.round(totalPrize * 0.07)));
+  function loadExceptions() {
+    ReputationAPI.myExceptions().then((res) => { if (res.ok && Array.isArray(res.data)) setExceptions(res.data); });
+  }
 
-  // §2.2 — prize validation is live: messages update as the organizer types.
-  useEffect(() => {
-    setErrors((prev) => {
-      const next = { ...prev };
-      const setOrClear = (key, message) => {
-        if (message) next[key] = message;
-        else delete next[key];
-      };
-      setOrClear('prize-1', n1 < 0 ? 'Prize cannot be negative.' : '');
-      setOrClear('prize-2', n2 < 0 ? 'Prize cannot be negative.' : (n2 > 0 && n2 > n1 ? '1st place prize must be ≥ 2nd place prize.' : ''));
-      setOrClear('prize-3', n3 < 0 ? 'Prize cannot be negative.' : (n3 > 0 && n3 > n2 && n2 > 0 ? '2nd place prize must be ≥ 3rd place prize.' : ''));
-      setOrClear(
-        'prize-total',
-        totalPrize > MAX_PRIZE_POOL
-          ? `Total prize pool cannot exceed ₹${MAX_PRIZE_POOL.toLocaleString('en-IN')} (₹3 lakh platform maximum).`
-          : '',
-      );
-      return next;
+  const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
+  const setContact = (key) => (e) => setForm((f) => ({ ...f, contact: { ...f.contact, [key]: e.target.value } }));
+  const prizeValues = [form.p1, form.p2, form.p3].map((v) => parseRupees(v).value || 0);
+  const totalPrize = prizeValues.reduce((a, b) => a + b, 0);
+  const platformFee = calculatePlatformFee(totalPrize, revenue);
+  const ceiling = reputation?.globalMax ?? MAX_PRIZE_POOL;
+  const limit = reputation ? Math.min(reputation.limit ?? LARGE_PRIZE_POOL, ceiling) : LARGE_PRIZE_POOL;
+  // Above ₹10,00,000 a finance moderator reviews this competition instead of the reputation limit.
+  const largePrize = totalPrize > LARGE_PRIZE_POOL && totalPrize <= ceiling;
+  const approvedException = exceptions.find((x) => x.status === 'approved' && !x.competitionId && Number(x.requestedAmount) >= totalPrize) || null;
+  const overLimit = !largePrize && totalPrize > limit && totalPrize <= ceiling;
+  const canRequestException = ['blue', 'green'].includes(reputation?.level || 'blue');
+  const blocked = creationBlock(reputation);
+  const formats = FORMATS.filter((f) => (f === 'Round Robin' ? platform.allowRoundRobin : platform.allowKnockout));
+
+  // Live prize feedback while typing.
+  const prizeErrors = useMemo(() => {
+    const next = {};
+    ['p1', 'p2', 'p3'].forEach((key, i) => {
+      const { error } = parseRupees(form[key], { label: `Place ${i + 1} prize` });
+      if (error) next[key] = error;
     });
-  }, [n1, n2, n3, totalPrize]);
+    const order = validatePrizes(prizeValues);
+    Object.entries(order).forEach(([i, msg]) => { next[`p${Number(i) + 1}`] = next[`p${Number(i) + 1}`] || msg; });
+    if (totalPrize > ceiling) next.prizeTotal = `The total cannot exceed ${formatINR(ceiling)}.`;
+    else if (overLimit && !approvedException) next.prizeTotal = `Your reputation level allows up to ${formatINR(limit)}. Request an exception below to go higher.`;
+    return next;
+  }, [form.p1, form.p2, form.p3, limit, ceiling, approvedException, overLimit]);
 
-  // Organiser reputation limit (backend-enforced). Blue/Green share the platform
-  // ceiling; Orange and Red are stricter.
-  const [reputation, setReputation] = useState(null);
-  useEffect(() => {
-    let alive = true;
-    ReputationAPI.me()
-      .then((res) => { if (alive && res.ok && res.data) setReputation(res.data); })
-      .catch(() => undefined);
-    return () => { alive = false; };
-  }, []);
-  const prizeLimit = reputation
-    ? Math.min(reputation.levelLimit ?? MAX_PRIZE_POOL, reputation.globalMax ?? MAX_PRIZE_POOL)
-    : MAX_PRIZE_POOL;
-
-  // Prize-pool exceptions belong to competition creation (never to Reports or
-  // Disputes). Only Blue and Green organisers may request one; Support approves
-  // it in the administrative queue, the approval is single-use and only that
-  // competition may use it.
-  const [exceptionRequests, setExceptionRequests] = useState([]);
-  const [exceptionReason, setExceptionReason] = useState('');
-  const [requestingException, setRequestingException] = useState(false);
-
-  const loadExceptions = () => ReputationAPI.myExceptions()
-    .then((res) => { if (res.ok && Array.isArray(res.data)) setExceptionRequests(res.data); })
-    .catch(() => undefined);
-
-  useEffect(() => { loadExceptions(); }, []);
-
-  const reputationLevel = reputation?.level || 'blue';
-  const canRequestException = ['blue', 'green'].includes(reputationLevel);
-  const overPrizeLimit = totalPrize > prizeLimit;
-  const approvedException = exceptionRequests.find((row) => (
-    row.status === 'approved' && !row.competitionId && Number(row.requestedAmount) >= totalPrize
-  )) || null;
-
-  async function requestPrizeException() {
-    if (!canRequestException) {
-      showToast('Only Blue and Green organisers can request a prize-pool exception.', 'error');
-      return;
+  function validate() {
+    const next = { ...prizeErrors };
+    const n = validateName(form.name); if (n) next.name = n;
+    const d = validateDescription(form.description); if (d) next.description = d;
+    if (!form.game) next.game = 'Choose a game.';
+    if (!form.format) next.format = 'Choose a format.';
+    Object.assign(next, validateSchedule(form));
+    const mt = Number(form.maxTeams);
+    if (!Number.isInteger(mt) || mt < 2 || mt > platform.maxTeams) next.maxTeams = `Whole number from 2 to ${platform.maxTeams}.`;
+    const mp = Number(form.maxPlayers);
+    if (!Number.isInteger(mp) || mp < 1 || mp > MAX_PLAYERS) next.maxPlayers = `Whole number from 1 to ${MAX_PLAYERS}.`;
+    if (form.feeType !== 'free') {
+      const fee = parseRupees(form.entryFee, { label: 'Entry fee', allowEmpty: false });
+      if (fee.error) next.entryFee = fee.error;
+      else if (fee.value < MIN_ENTRY_FEE) next.entryFee = `The entry fee must be at least ${formatINR(MIN_ENTRY_FEE)}.`;
+      else if (fee.value > MAX_ENTRY_FEE) next.entryFee = 'The entry fee is too high.';
     }
-    if (totalPrize > MAX_PRIZE_POOL) {
-      showToast(`An exception can never exceed the ₹${MAX_PRIZE_POOL.toLocaleString('en-IN')} platform ceiling.`, 'error');
-      return;
-    }
-    if (!overPrizeLimit) { showToast('Your current limit already covers this prize pool.', 'error'); return; }
-    if (exceptionReason.trim().length < 10) {
-      showToast('Explain why the higher prize pool is needed (10+ characters).', 'error');
-      return;
-    }
-    setRequestingException(true);
+    const me = String(session?.username || '').toLowerCase();
+    const coOrgs = form.coOrganizers;
+    if (coOrgs.some((c) => c.toLowerCase() === me)) next.coOrganizers = 'You are already the primary organizer.';
+    if (largePrize) Object.entries(validateContact(form.contact)).forEach(([key, msg]) => { next[`contact.${key}`] = msg; });
+    setErrors(next);
+    return Object.keys(next).length === 0 ? coOrgs : null;
+  }
+
+  async function onBanner(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try { setBanner(await readBanner(file)); } catch (err) { showToast(err.message, 'error'); }
+  }
+
+  async function requestException() {
+    if (exceptionReason.trim().length < 10) { showToast('Explain why the higher prize pool is needed (at least 10 characters).', 'error'); return; }
+    setRequesting(true);
     const res = await ReputationAPI.requestException(totalPrize, exceptionReason.trim());
-    setRequestingException(false);
-    if (!res.ok) { showToast(res.error || 'Unable to submit the exception request.', 'error'); return; }
+    setRequesting(false);
+    if (!res.ok) { showToast(res.error || 'Unable to send the request.', 'error'); return; }
     setExceptionReason('');
-    showToast('Exception request submitted to the Support Team.', 'success');
+    showToast('Exception request sent to the administrators.');
     loadExceptions();
   }
 
-  const effectiveBanner = bannerSrc || getDefaultBanner(game);
-
-  function fieldProps(id) {
-    return {
-      style: errors[id] ? { borderColor: '#ef4444', boxShadow: '0 0 0 1px rgba(239,68,68,0.4)' } : undefined,
-    };
-  }
-  function FieldError({ id }) {
-    if (!errors[id]) return null;
-    return <p className="field-error-msg" style={{ color: '#ef4444', fontSize: 12, fontWeight: 600, marginTop: 5 }}><span>⚠</span> <span>{errors[id]}</span></p>;
-  }
-
-  function previewBanner(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => { setBannerSrc(ev.target.result); setUserUploadedBanner(true); };
-    reader.readAsDataURL(file);
-  }
-
-  async function submit(event) {
+  function submit(event) {
     event.preventDefault();
-    const next = {};
-    if (!session) { showToast('Session expired. Please login again.', 'error'); return; }
-
-    if (isCreationBlocked(reputation)) {
-      showToast('An active organising ban or competition-creation restriction blocks this action.', 'error');
-      return;
-    }
-
-    if (!name) next['comp-name'] = 'Please enter the valid name';
-    else if (name.length < 3) next['comp-name'] = 'Please enter the valid name (at least 3 characters)';
-    else if (name.length > 100) next['comp-name'] = 'Tournament name cannot exceed 100 characters.';
-
-    if (!game) next['comp-game'] = 'Please select a game.';
-    if (!format) next['comp-format'] = 'Please select a tournament format.';
-
-    if (!description) next['comp-desc'] = 'Tournament description is required.';
-    else if (description.length < 10) next['comp-desc'] = 'Description must be at least 10 characters long.';
-
-    const dateErrors = validateDates(regOpen, regClose, startDate, endDate);
-    if (dateErrors) Object.assign(next, dateErrors);
-
-    const mt = parseInt(maxTeams, 10);
-    if (Number.isNaN(mt) || mt < 2) next['max-teams'] = 'Max Teams must be at least 2 teams.';
-    else if (mt > 256) next['max-teams'] = 'Max Teams cannot exceed 256 teams.';
-
-    const mp = parseInt(maxPlayers, 10);
-    if (Number.isNaN(mp) || mp < 1) next['max-players'] = 'Max Players per Team must be at least 1 player.';
-    else if (mp > 20) next['max-players'] = 'Max Players per Team cannot exceed 20 players.';
-
-    const entryFeeRaw = String(entryFee).trim();
-    const entryFeeNum = entryFeeRaw !== '' ? parseFloat(entryFeeRaw) : 0;
-    if (feeType !== 'free') {
-      if (entryFeeRaw === '' || Number.isNaN(entryFeeNum) || entryFeeNum < 0) next['entry-fee'] = 'Entry fee must be a valid amount.';
-      else if (entryFeeNum < MIN_ENTRY_FEE) next['entry-fee'] = 'Entry fee must be at least ₹10.';
-      else if (entryFeeNum > MAX_PRIZE_POOL) next['entry-fee'] = 'Entry fee is unreasonably high.';
-    }
-
-    if (n1 < 0) next['prize-1'] = 'Prize cannot be negative.';
-    if (n2 < 0) next['prize-2'] = 'Prize cannot be negative.';
-    if (n3 < 0) next['prize-3'] = 'Prize cannot be negative.';
-    if (n2 > 0 && n2 > n1) next['prize-2'] = '1st place prize must be ≥ 2nd place prize.';
-    if (n3 > 0 && n3 > n2 && n2 > 0) next['prize-3'] = '2nd place prize must be ≥ 3rd place prize.';
-    // Platform ceiling + organiser reputation limit (the backend is authoritative).
-    if (totalPrize > MAX_PRIZE_POOL) next['prize-total'] = `Total prize pool cannot exceed ₹${MAX_PRIZE_POOL.toLocaleString('en-IN')} (₹3 lakh platform maximum).`;
-    else if (totalPrize > prizeLimit && !approvedException) next['prize-total'] = `Your current reputation level permits a maximum prize pool of ₹${prizeLimit.toLocaleString('en-IN')}. Request a Support-approved exception to go above it.`;
-
- // Co-organizers — self/duplicate checks synchronously; existence is validated
- // against registered accounts via the backend below (§2.1).
-    const cleanCoOrgs = [];
-    let coOrgError = false;
-    coOrgs.forEach((val) => {
-      const v = String(val || '').trim().replace(/^@/, '');
-      if (!v) return;
-      if (v.toLowerCase() === String(session.username || '').toLowerCase()) {
-        showToast(`You (@${session.username}) are already the primary creator/owner.`, 'error');
-        coOrgError = true;
-      } else if (cleanCoOrgs.map((s) => s.toLowerCase()).includes(v.toLowerCase())) {
-        showToast(`Co-organizer @${v} is added multiple times.`, 'error');
-        coOrgError = true;
-      } else {
-        cleanCoOrgs.push(v);
-      }
-    });
-    if (!coOrgError && cleanCoOrgs.length) {
-      // Validate against ACTUAL registered accounts before publishing. The
-      // single-username endpoint is available to any authenticated user; the
-      // full user list remains admin-only.
-      let validationUnavailable = false;
-      const checks = await Promise.all(cleanCoOrgs.map(async (username) => {
-        const res = await NexusAPI.Auth.userExists(username);
-        if (!res.ok) {
-          if (res.status === 0) validationUnavailable = true;
-          return { username, exists: false };
-        }
-        return { username, exists: !!res.data?.exists };
-      }));
-      const unknown = checks.filter((c) => !c.exists).map((c) => c.username);
-      if (validationUnavailable) {
-        next['co-organizers'] = 'Unable to validate co-organizers right now. Please try again.';
-        coOrgError = true;
-      } else if (unknown.length) {
-        next['co-organizers'] = `This username does not exist. (@${unknown.join(', @')})`;
-        coOrgError = true;
-      }
-    }
-    if (coOrgError) next['co-organizers'] = next['co-organizers'] || 'Fix the co-organizer entries.';
-
-    setErrors(next);
-    if (Object.keys(next).length > 0) {
-      showToast('Please fix all highlighted errors to auto-approve tournament.', 'error');
-      return;
-    }
-
-    const type = format.toLowerCase().includes('robin') ? 'league' : 'tournament';
-    const bannerImg = userUploadedBanner && bannerSrc ? bannerSrc : getDefaultBanner(game);
-    const prizePoolStr = totalPrize > 0 ? `₹${totalPrize.toLocaleString('en-IN')}` : 'No Prize Pool';
-    const entryFeeAmount = feeType !== 'free' ? (parseFloat(entryFee) || 0) : 0;
-    let formattedEntryFee = 'Free';
-    if (feeType === 'per_team') formattedEntryFee = `₹${entryFeeAmount.toLocaleString('en-IN')} / Team`;
-    else if (feeType === 'per_player') formattedEntryFee = `₹${entryFeeAmount.toLocaleString('en-IN')} / Player`;
-
-    // §2.2 — competitions are auto-approved at any prize size; the >₹50,000
-    // administrative approval requirement has been removed.
-    const newComp = {
-      id: NexusData.generateId(name),
-      name,
-      game,
-      type,
-      format,
-      description,
-      startDate: startDate ? new Date(`${startDate}T00:00:00`).toISOString() : '',
-      endDate: endDate ? new Date(`${endDate}T00:00:00`).toISOString() : '',
-      createdAt: new Date().toISOString(),
-      dates: startDate ? `${startDate} to ${endDate}` : 'TBD',
-      registrationDates: { open: regOpen, close: regClose },
-      maxTeams: parseInt(maxTeams, 10) || 16,
-      maxPlayersPerTeam: parseInt(maxPlayers, 10) || 5,
-      prizePool: totalPrize > 0 ? prizePoolStr : 'No Prize Pool',
-      prize: totalPrize,
-      platformFee,
-      feeType,
+    if (blocked) { showToast(blocked, 'error'); return; }
+    const coOrganizers = validate();
+    if (!coOrganizers) { showToast('Fix the highlighted fields.', 'error'); return; }
+    const entryFeeAmount = form.feeType === 'free' ? 0 : parseRupees(form.entryFee).value;
+    const payload = {
+      name: form.name.trim(),
+      description: form.description.trim(),
+      game: form.game,
+      format: form.format,
+      type: form.format === 'Round Robin' ? 'league' : 'tournament',
+      visibility: form.visibility,
+      ...scheduleToIso(form),
+      maxTeams: Number(form.maxTeams),
+      maxPlayersPerTeam: Number(form.maxPlayers),
+      feeType: form.feeType,
       entryFeeAmount,
-      entryFee: formattedEntryFee,
-      // No payment provider is connected in this build: never claim the fee
-      // was collected before a backend/provider confirmation exists.
-      organizerPaid: false,
-      platformFeeStatus: 'pending',
-      prizes: [
-        { place: '1st Place', amount: `₹${n1.toLocaleString('en-IN')}` },
-        { place: '2nd Place', amount: `₹${n2.toLocaleString('en-IN')}` },
-        { place: '3rd Place', amount: `₹${n3.toLocaleString('en-IN')}` },
-      ],
-      status: 'upcoming',
-      img: bannerImg,
-      participants: 0,
-      teams: [],
-      matches: [],
-      standings: [],
-      disputes: [],
-      organizerId: session.username,
-      createdBy: session.username,
-      organizers: Array.from(new Set([session.username, ...cleanCoOrgs].filter(Boolean))),
-      pendingCoOrganizers: Array.from(new Set(cleanCoOrgs)),
-      visibility, // §2.4 — join code (private) is generated by the backend
-      approvalStatus: 'approved',
-      badge: 'New',
-      badgeClass: 'hot',
-      regOpen,
-      regClose,
-      season: 'Season 1',
-      totalMatches: 0,
-      matchesCompleted: 0,
+      prize: totalPrize,
+      prizes: prizeValues.map((amount, i) => ({ place: ['1st Place', '2nd Place', '3rd Place'][i], amount })).filter((p) => p.amount > 0),
+      coOrganizers,
+      ...(banner ? { img: banner } : {}),
+      ...(largePrize ? {
+        contactDetails: {
+          fullName: form.contact.fullName.trim(),
+          phone: form.contact.phone.trim(),
+          email: form.contact.email.trim(),
+          ...(form.contact.organisation.trim() ? { organisation: form.contact.organisation.trim() } : {}),
+          purpose: form.contact.purpose.trim(),
+        },
+      } : {}),
     };
-
-    setPublishError('');
-    setCheckout({ comp: newComp, prizePool: totalPrize, platformFee });
+    setCheckout(payload);
   }
 
-  async function confirmCheckout() {
-    if (confirmingRef.current || publishingRef.current || !checkout) return;
-    confirmingRef.current = true;
-    const checkoutData = checkout;
-    try {
-      setPublishError('');
-      await publishCompetition(checkoutData);
-    } finally {
-      confirmingRef.current = false;
-    }
-  }
-
-  async function publishCompetition(checkoutData) {
-    if (!checkoutData || publishingRef.current) return;
-    const { comp } = checkoutData;
-    const { pendingCoOrganizers } = comp;
-
-    // Local reputation/prize engine is authoritative for this build. It is
-    // re-checked at publish time so changing the form after validation cannot
-    // bypass the level limit, sanctions or the ₹3,00,000 platform ceiling.
-    const repRes = await ReputationAPI.me();
-    const repProfile = repRes.ok ? repRes.data : reputation;
-    if (isCreationBlocked(repProfile)) {
-      const message = 'An active organising ban or competition-creation restriction blocks this action.';
-      setPublishError(message);
-      setCheckout(checkoutData);
-      showToast(message, 'error');
-      return;
-    }
-    const prizeGuard = checkPrizePool(session?.username, comp.prize);
-    // A single-use Support approval for this amount lets creation proceed; the
-    // permanent organiser limit is never changed and the backend re-validates.
-    const usableException = prizeGuard.ok ? null : availableExceptionFor(session?.username, comp.prize);
-    if (!prizeGuard.ok && !usableException) {
-      setPublishError(prizeGuard.error);
-      setCheckout(checkoutData);
-      showToast(prizeGuard.error, 'error');
-      return;
-    }
-
-    // Backend is the source of truth — create there first, merge the returned
-    // id/joinCode; failure here must not leave a partially published competition.
-    publishingRef.current = true;
+  async function publish() {
     setPublishing(true);
-    setPublishError('');
-    const backendPayload = {
-      name: comp.name,
-      description: comp.description,
-      startDate: comp.startDate,
-      endDate: comp.endDate,
-      game: comp.game,
-      type: comp.type,
-      format: comp.format,
-      visibility: comp.visibility,
-      coOrganizers: pendingCoOrganizers,
-      prize: comp.prize,
-      prizePool: comp.prizePool,
-      prizes: comp.prizes,
-      maxTeams: comp.maxTeams,
-      maxPlayersPerTeam: comp.maxPlayersPerTeam,
-      feeType: comp.feeType,
-      entryFeeAmount: comp.entryFeeAmount,
-      registrationOpenAt: comp.registrationDates?.open ? new Date(`${comp.registrationDates.open}T00:00:00`).toISOString() : undefined,
-      // "Registration closes on 4 Nov" means teams can still register all of 4 Nov.
-      registrationCloseAt: comp.registrationDates?.close ? new Date(`${comp.registrationDates.close}T23:59:59`).toISOString() : undefined,
-    };
-    let res;
-    try {
-      res = await CompetitionsAPI.create(backendPayload);
-    } catch (err) {
-      res = { ok: false, error: 'Unable to reach the backend. The competition was not published.' };
-    }
-    publishingRef.current = false;
+    const res = await CompetitionsAPI.create(checkout);
     setPublishing(false);
-
-    if (!res.ok) {
-      // Backend validation failed — nothing was created. Keep (or reopen) the
-      // checkout dialog so the organizer can read the error and retry.
-      const message = res.error || 'Publishing failed. Please fix the highlighted issues and try again.';
-      setPublishError(message);
-      setCheckout(checkoutData);
-      showToast(message, 'error');
-      return;
-    }
-    const created = res.data || {};
-    if (usableException && created.id) bindExceptionToCompetition(usableException.id, created.id);
+    if (!res.ok) { showToast(res.error || 'The competition was not created.', 'error'); return; }
     setCheckout(null);
-    navigate(`/pages/competition-payment.html?id=${encodeURIComponent(created.id)}`);
+    showToast(res.data.paymentStatus === 'AWAITING_FINANCE_APPROVAL'
+      ? 'Draft saved and sent to finance. You can pay the platform fee once they approve the prize pool.'
+      : 'Draft saved. Pay the platform fee to publish it.');
+    navigate(`/pages/competition-payment.html?id=${encodeURIComponent(res.data.id)}`);
   }
 
-  const formatOptions = ['Single Elimination', 'Round Robin'].filter((f) => (f === 'Round Robin' ? platform.allowRoundRobin : platform.allowKnockout));
+  const err = (key) => errors[key] || (/^p\d$/.test(key) ? prizeErrors[key] : '');
 
   return (
-    <>
-      <main className="create-comp-page">
-        <Link to="/pages/competitions.html" className="back-btn">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M12 8H4M4 8L8 12M4 8L8 4" /></svg>
-          Back to Competitions
-        </Link>
-        <h1 className="page-title">Create Competition</h1>
-        <p className="page-subtitle">Set up a new tournament for your community.</p>
+    <main className="create-comp-page">
+      <Link to="/pages/competitions.html" className="back-btn">← Back to competitions</Link>
+      <h1 className="page-title">Create competition</h1>
+      <p className="page-subtitle">Set up a new tournament for your community.</p>
+      {blocked && <Notice tone="danger">{blocked}</Notice>}
 
-        <div className="create-layout">
-          <div className="form-card">
-            <form id="create-comp-form" noValidate onSubmit={submit}>
-              <div className="form-section-title">Basic Information</div>
+      <div className="create-layout">
+        <div className="form-card">
+          <form noValidate onSubmit={submit}>
+            <div className="form-section-title">Basic information</div>
+            <Field id="comp-name" label="Competition name *" error={err('name')}>
+              <input className="form-input" id="comp-name" type="text" maxLength={100} placeholder="e.g. Summer Showdown 2026" value={form.name} onChange={set('name')} />
+            </Field>
+            <div className="form-row">
+              <Field id="comp-game" label="Game *" error={err('game')}>
+                <select className="form-select" id="comp-game" value={form.game} onChange={set('game')}>
+                  <option value="">Select game…</option>
+                  {GAMES.map((g) => <option key={g}>{g}</option>)}
+                </select>
+              </Field>
+              <Field id="comp-format" label="Format *" error={err('format')}>
+                <select className="form-select" id="comp-format" value={form.format} onChange={set('format')}>
+                  <option value="">Select format…</option>
+                  {formats.map((f) => <option key={f}>{f}</option>)}
+                </select>
+              </Field>
+            </div>
+            <Field id="comp-desc" label="Description *" error={err('description')} help="Rules, schedule and eligibility. At least 10 characters.">
+              <textarea className="form-textarea" id="comp-desc" maxLength={2000} value={form.description} onChange={set('description')} />
+            </Field>
 
-              <div className="form-group">
-                <label className="form-label" htmlFor="comp-name">Competition Name <span style={{ color: '#ef4444' }}>*</span></label>
-                <input className="form-input" type="text" id="comp-name" placeholder="e.g. Summer Showdown 2026" value={name} onChange={(e) => setName(e.target.value)} {...fieldProps('comp-name')} />
-                <FieldError id="comp-name" />
-              </div>
+            <div className="form-section-title">Co-organizers</div>
+            <Field id="co-orgs" label="Usernames (optional)" error={err('coOrganizers')} help="Type to search. Each one gets an invitation and becomes a co-organizer only after accepting. Staff accounts cannot co-organize, and co-organizers cannot play.">
+              <UsernameChips id="co-orgs" value={form.coOrganizers} onChange={(names) => setForm((f) => ({ ...f, coOrganizers: names }))} max={5} placeholder="Search a username to invite…" />
+            </Field>
 
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="comp-game">Game <span style={{ color: '#ef4444' }}>*</span></label>
-                  <select className="form-select" id="comp-game" value={game} onChange={(e) => setGame(e.target.value)} {...fieldProps('comp-game')}>
-                    <option value="">Select game…</option>
-                    {GAMES.map((g) => <option key={g}>{g}</option>)}
-                  </select>
-                  <FieldError id="comp-game" />
+            <div className="form-section-title">Banner</div>
+            <label className="upload-area" style={{ display: 'block', cursor: 'pointer' }}>
+              <div className="upload-icon">🖼️</div>
+              <div className="upload-text"><span>Click to upload a banner</span> (PNG or JPEG, up to 5 MB).<br />The game&apos;s banner is used if you skip this.</div>
+              <input type="file" accept="image/png,image/jpeg" style={{ display: 'none' }} onChange={onBanner} />
+            </label>
+            <img src={banner || competitionBanner({ game: form.game })} alt="" style={{ width: '100%', borderRadius: 10, marginTop: 12, maxHeight: 180, objectFit: 'cover' }} />
+            {banner && <button type="button" className="btn-cancel" style={{ marginTop: 8 }} onClick={() => setBanner('')}>Remove upload</button>}
+
+            <div className="form-section-title">Visibility</div>
+            <Field id="comp-visibility" label="Who can register" help={form.visibility === 'private' ? 'A join code is generated when you publish. You will see it on the competition page.' : 'Anyone eligible can register without a code.'}>
+              <select className="form-select" id="comp-visibility" value={form.visibility} onChange={set('visibility')}>
+                <option value="public">Public — anyone can join</option>
+                <option value="private">Private — join code required</option>
+              </select>
+            </Field>
+
+            <div className="form-section-title">Dates and capacity</div>
+            <div className="form-row">
+              <Field id="reg-open" label="Registration opens *" error={err('regOpen')}><input className="form-input" type="date" id="reg-open" min={todayInput()} value={form.regOpen} onChange={set('regOpen')} /></Field>
+              <Field id="reg-close" label="Registration closes *" error={err('regClose')} help="Closes at the end of this day, or when play starts if that is the same day."><input className="form-input" type="date" id="reg-close" min={form.regOpen || todayInput()} max={form.start || undefined} value={form.regClose} onChange={set('regClose')} /></Field>
+            </div>
+            <div className="form-row">
+              <Field id="start-date" label="Starts *" error={err('start')}><input className="form-input" type="date" id="start-date" min={form.regClose || todayInput()} value={form.start} onChange={set('start')} /></Field>
+              <Field id="end-date" label="Ends *" error={err('end')} help="Same day as the start for a one-day event."><input className="form-input" type="date" id="end-date" min={form.start || todayInput()} value={form.end} onChange={set('end')} /></Field>
+            </div>
+            <div className="form-row">
+              <Field id="max-teams" label={`Max teams (2–${platform.maxTeams}) *`} error={err('maxTeams')}><input className="form-input" type="number" id="max-teams" min="2" max={platform.maxTeams} step="1" value={form.maxTeams} onChange={set('maxTeams')} /></Field>
+              <Field id="max-players" label={`Players per team (1–${MAX_PLAYERS}) *`} error={err('maxPlayers')}><input className="form-input" type="number" id="max-players" min="1" max={MAX_PLAYERS} step="1" value={form.maxPlayers} onChange={set('maxPlayers')} /></Field>
+            </div>
+            <div className="form-row">
+              <Field id="fee-type" label="Entry fee">
+                <select className="form-select" id="fee-type" value={form.feeType} onChange={set('feeType')}>
+                  <option value="free">Free</option>
+                  <option value="per_team">Per team (captain pays)</option>
+                  <option value="per_player">Per player (each player pays)</option>
+                </select>
+              </Field>
+              {form.feeType !== 'free' && (
+                <Field id="entry-fee" label="Entry fee amount (₹) *" error={err('entryFee')}><input className="form-input" type="number" id="entry-fee" min={MIN_ENTRY_FEE} step="1" value={form.entryFee} onChange={set('entryFee')} /></Field>
+              )}
+            </div>
+
+            <div className="form-section-title">Prize pool (whole rupees)</div>
+            <div className="prize-tiers">
+              {[['p1', '🥇', '1st place'], ['p2', '🥈', '2nd place'], ['p3', '🥉', '3rd place']].map(([key, icon, label]) => (
+                <div className="prize-tier" key={key}>
+                  <div className="prize-tier-main">
+                    <div className="prize-rank">{icon}</div>
+                    <div className="prize-label">{label}</div>
+                    <input className="prize-input" type="number" min="0" step="1" placeholder="0" aria-label={`${label} prize`} value={form[key]} onChange={set(key)} />
+                  </div>
+                  {err(key) && <p className="ui-field-error">⚠ {err(key)}</p>}
                 </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="comp-format">Format <span style={{ color: '#ef4444' }}>*</span></label>
-                  <select className="form-select" id="comp-format" value={format} onChange={(e) => setFormat(e.target.value)} {...fieldProps('comp-format')}>
-                    <option value="">Select format…</option>
-                    {formatOptions.map((f) => <option key={f}>{f}</option>)}
-                  </select>
-                  <FieldError id="comp-format" />
+              ))}
+            </div>
+            <div className="ui-card" style={{ marginTop: 14 }}>
+              <div className="ui-kv"><span className="k">Total prize pool</span><span className="v" style={{ color: '#c6ff33' }}>{formatINR(totalPrize)}</span></div>
+              <div className="ui-kv"><span className="k">Platform fee ({revenue.percentage}% of the prize pool, minimum {formatINR(revenue.minCost)})</span><span className="v">{formatINR(platformFee)}</span></div>
+              {prizeErrors.prizeTotal && <p className="ui-field-error">⚠ {prizeErrors.prizeTotal}</p>}
+              {overLimit && canRequestException && !approvedException && (
+                <div style={{ marginTop: 12 }}>
+                  <label className="form-label" htmlFor="exception-reason">Why do you need a higher prize pool?</label>
+                  <textarea id="exception-reason" className="form-input" rows={2} maxLength={1000} value={exceptionReason} onChange={(e) => setExceptionReason(e.target.value)} />
+                  <button type="button" className="btn-table-secondary" style={{ marginTop: 8 }} disabled={requesting} onClick={requestException}>{requesting ? 'Sending…' : 'Request a one-time exception'}</button>
                 </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label" htmlFor="comp-desc">Description <span style={{ color: '#ef4444' }}>*</span></label>
-                <textarea className="form-textarea" id="comp-desc" placeholder="Describe your tournament — rules, schedule, eligibility requirements… (at least 10 characters)" value={description} onChange={(e) => setDescription(e.target.value)} {...fieldProps('comp-desc')} />
-                <FieldError id="comp-desc" />
-              </div>
-
-              <div className="form-section-title">Tournament Co-Organizers</div>
-              <div className="form-group">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                  <label className="form-label" style={{ margin: 0 }}>Co-Organizers (Assign Multiple)</label>
-                  <button type="button" className="btn-table-secondary" onClick={() => setCoOrgs((c) => [...c, ''])} style={{ padding: '6px 14px', fontSize: 12, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px solid rgba(198,255,51,0.3)', color: '#c6ff33', cursor: 'pointer' }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-                    Add Co-Organizer
-                  </button>
+              )}
+              {approvedException && overLimit && <Notice tone="success">An administrator approved up to {formatINR(approvedException.requestedAmount)} for your next competition.</Notice>}
+              {largePrize && (
+                <div style={{ marginTop: 14 }}>
+                  <Notice tone="info">
+                    Prize pools above {formatINR(LARGE_PRIZE_POOL)} are reviewed by a finance moderator before the competition can be published.
+                    Add your contact details: finance may call or email you to confirm how the prize pool is funded.
+                  </Notice>
+                  <div className="form-row">
+                    <Field id="contact-name" label="Full name *" error={err('contact.fullName')}><input className="form-input" id="contact-name" autoComplete="name" maxLength={80} value={form.contact.fullName} onChange={setContact('fullName')} /></Field>
+                    <Field id="contact-org" label="Organisation (optional)"><input className="form-input" id="contact-org" autoComplete="organization" maxLength={120} value={form.contact.organisation} onChange={setContact('organisation')} /></Field>
+                  </div>
+                  <div className="form-row">
+                    <Field id="contact-phone" label="Phone *" error={err('contact.phone')}><input className="form-input" id="contact-phone" type="tel" autoComplete="tel" placeholder="+91 98765 43210" maxLength={20} value={form.contact.phone} onChange={setContact('phone')} /></Field>
+                    <Field id="contact-email" label="Email *" error={err('contact.email')}><input className="form-input" id="contact-email" type="email" autoComplete="email" maxLength={120} value={form.contact.email} onChange={setContact('email')} /></Field>
+                  </div>
+                  <Field id="contact-purpose" label="How is the prize pool funded? *" error={err('contact.purpose')} help="e.g. sponsor name and agreement, or where the money comes from.">
+                    <textarea className="form-textarea" id="contact-purpose" maxLength={2000} value={form.contact.purpose} onChange={setContact('purpose')} />
+                  </Field>
                 </div>
-                <div id="co-organizers-container" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {coOrgs.map((val, i) => (
-                    <div className="co-organizer-row" style={{ display: 'flex', gap: 8, alignItems: 'center' }} key={i}>
-                      <div style={{ position: 'relative', flex: 1 }}>
-                        <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontSize: 13, fontWeight: 700 }}>@</span>
-                        <input type="text" className="form-input co-organizer-input" placeholder="e.g. co_organizer_username or ID" value={val} onChange={(e) => setCoOrgs((c) => c.map((x, j) => (j === i ? e.target.value : x)))} style={{ paddingLeft: 28, width: '100%' }} />
-                      </div>
-                      <button type="button" className="btn-table-danger" onClick={() => setCoOrgs((c) => c.filter((_, j) => j !== i))} style={{ padding: '10px 14px', fontSize: 13, cursor: 'pointer', borderRadius: 6, background: 'rgba(239,68,68,0.12)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }} title="Remove co-organizer">✕</button>
-                    </div>
+              )}
+              {exceptions.length > 0 && (
+                <div style={{ marginTop: 10 }}>
+                  {exceptions.map((x) => (
+                    <div className="ui-kv" key={x.id}><span className="k">Exception {formatINR(x.requestedAmount)} · {new Date(x.createdAt).toLocaleDateString('en-IN')}</span><span className="v">{String(x.status).toUpperCase()}{x.competitionId ? ' · USED' : ''}</span></div>
                   ))}
                 </div>
-                <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>Click <strong>+ Add Co-Organizer</strong> to assign organizers. Co-organizers can manage brackets, approve teams, and resolve disputes for this tournament.</p>
-                <FieldError id="co-organizers" />
-              </div>
-
-              <div className="form-section-title">Tournament Banner</div>
-              <div className="upload-area" onClick={() => document.getElementById('banner-file')?.click()}>
-                <div className="upload-icon">🖼️</div>
-                <div className="upload-text">
-                  <span>Click to upload custom banner</span> or drag &amp; drop<br />
-                  Automatic game-tailored banner will be used if left empty
-                </div>
-                <input type="file" id="banner-file" accept="image/*" style={{ display: 'none' }} onChange={previewBanner} />
-              </div>
-              <img id="banner-preview" src={effectiveBanner} alt="" style={{ display: effectiveBanner ? 'block' : 'none', width: '100%', borderRadius: 10, marginTop: 12, maxHeight: 180, objectFit: 'cover' }} />
-
-              <div className="form-section-title">Visibility</div>
-              <div className="form-row" id="visibility-group">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="comp-visibility">Competition Visibility <span style={{ color: '#ef4444' }}>*</span></label>
-                  <select className="form-select" id="comp-visibility" value={visibility} onChange={(e) => setVisibility(e.target.value)}>
-                    <option value="public">Public — anyone eligible can join (no code)</option>
-                    <option value="private">Private — join code required</option>
-                  </select>
-                  <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>
-                    {visibility === 'private'
-                      ? 'A unique join code is generated when you publish. Only participants with the correct code can register — share it only with the teams you want to join.'
-                      : 'Public competitions never ask for a join code and are discoverable on the Competitions page.'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="form-section-title">Dates &amp; Capacity</div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="reg-open">Registration Opens <span style={{ color: '#ef4444' }}>*</span></label>
-                  <input className="form-input" type="date" id="reg-open" value={regOpen} onChange={(e) => setRegOpen(e.target.value)} {...fieldProps('reg-open')} />
-                  <FieldError id="reg-open" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="reg-close">Registration Closes <span style={{ color: '#ef4444' }}>*</span></label>
-                  <input className="form-input" type="date" id="reg-close" value={regClose} onChange={(e) => setRegClose(e.target.value)} {...fieldProps('reg-close')} />
-                  <FieldError id="reg-close" />
-                </div>
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="start-date">Tournament Start Date <span style={{ color: '#ef4444' }}>*</span></label>
-                  <input className="form-input" type="date" id="start-date" value={startDate} onChange={(e) => setStartDate(e.target.value)} {...fieldProps('start-date')} />
-                  <FieldError id="start-date" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="end-date">Tournament End Date <span style={{ color: '#ef4444' }}>*</span></label>
-                  <input className="form-input" type="date" id="end-date" value={endDate} onChange={(e) => setEndDate(e.target.value)} {...fieldProps('end-date')} />
-                  <FieldError id="end-date" />
-                </div>
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="max-teams">Max Teams (2–{platform.maxTeams}) <span style={{ color: '#ef4444' }}>*</span></label>
-                  <input className="form-input" type="number" id="max-teams" placeholder="e.g. 16" min="2" max={platform.maxTeams} value={maxTeams} onChange={(e) => setMaxTeams(e.target.value)} {...fieldProps('max-teams')} />
-                  <FieldError id="max-teams" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="max-players">Max Players per Team (1–20) <span style={{ color: '#ef4444' }}>*</span></label>
-                  <input className="form-input" type="number" id="max-players" placeholder="e.g. 5" min="1" max="20" value={maxPlayers} onChange={(e) => setMaxPlayers(e.target.value)} {...fieldProps('max-players')} />
-                  <FieldError id="max-players" />
-                </div>
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="fee-type">Participation Fee Model <span style={{ color: '#ef4444' }}>*</span></label>
-                  <select className="form-select" id="fee-type" value={feeType} onChange={(e) => setFeeType(e.target.value)}>
-                    <option value="free">Free (No Entry Fee)</option>
-                    <option value="per_team">Charged Per Team (Team Lead Pays)</option>
-                    <option value="per_player">Charged Per Player (Each Player Pays)</option>
-                  </select>
-                </div>
-                <div className="form-group" id="entry-fee-group" style={{ display: feeType === 'free' ? 'none' : 'block' }}>
-                  <label className="form-label" htmlFor="entry-fee">Entry Fee Amount (₹) <span style={{ color: '#ef4444' }}>*</span></label>
-                  <input className="form-input" type="number" id="entry-fee" placeholder="e.g. 100" min="0" value={entryFee} onChange={(e) => setEntryFee(e.target.value)} {...fieldProps('entry-fee')} />
-                  <FieldError id="entry-fee" />
-                </div>
-              </div>
-
-              <div className="form-section-title">Prize Pool Distribution (₹)</div>
-
-              <div className="prize-tiers">
-                <div className="prize-tier">
-                  <div className="prize-tier-main">
-                    <div className="prize-rank">🥇</div>
-                    <div className="prize-label">1st Place</div>
-                    <input className="prize-input" type="number" id="prize-1" placeholder="0" min="0" value={p1} onChange={(e) => setP1(e.target.value)} {...fieldProps('prize-1')} />
-                  </div>
-                  <FieldError id="prize-1" />
-                </div>
-                <div className="prize-tier">
-                  <div className="prize-tier-main">
-                    <div className="prize-rank">🥈</div>
-                    <div className="prize-label">2nd Place</div>
-                    <input className="prize-input" type="number" id="prize-2" placeholder="0" min="0" value={p2} onChange={(e) => setP2(e.target.value)} {...fieldProps('prize-2')} />
-                  </div>
-                  <FieldError id="prize-2" />
-                </div>
-                <div className="prize-tier">
-                  <div className="prize-tier-main">
-                    <div className="prize-rank">🥉</div>
-                    <div className="prize-label">3rd Place</div>
-                    <input className="prize-input" type="number" id="prize-3" placeholder="0" min="0" value={p3} onChange={(e) => setP3(e.target.value)} {...fieldProps('prize-3')} />
-                  </div>
-                  <FieldError id="prize-3" />
-                </div>
-              </div>
-
-              <div id="prize-total-row" style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10, padding: 16, borderRadius: 10, background: 'rgba(198,255,51,0.06)', border: errors['prize-total'] ? '1px solid rgba(239,68,68,0.6)' : '1px solid rgba(198,255,51,0.2)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.5px' }}>TOTAL PRIZE POOL</span>
-                  <span id="prize-total-display" style={{ fontSize: 18, fontWeight: 800, color: '#c6ff33' }}>₹{totalPrize.toLocaleString('en-IN')}</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px dashed rgba(198,255,51,0.3)', paddingTop: 10, marginTop: 2 }}>
-                  <span style={{ fontSize: 13, color: 'var(--accent, #c6ff33)', fontWeight: 700, letterSpacing: '0.5px' }}>PLATFORM FEE DUE BY ORGANIZER</span>
-                  <span id="total-due-display" style={{ fontSize: 20, fontWeight: 900, color: 'var(--accent, #c6ff33)' }}>₹{platformFee.toLocaleString('en-IN')}</span>
-                </div>
-                <FieldError id="prize-total" />
-
-                {overPrizeLimit && canRequestException && (
-                  <div style={{ display: 'grid', gap: 8, borderTop: '1px dashed rgba(251,146,60,0.4)', paddingTop: 12 }}>
-                    {approvedException ? (
-                      <p style={{ margin: 0, fontSize: 12.5, color: '#86efac' }}>
-                        ✅ The Support Team approved ₹{Number(approvedException.requestedAmount).toLocaleString('en-IN')} for this
-                        competition. You can publish now — the approval is single-use and is used up by this competition only.
-                      </p>
-                    ) : (
-                      <>
-                        <p style={{ margin: 0, fontSize: 12.5, color: '#fb923c' }}>
-                          ₹{totalPrize.toLocaleString('en-IN')} exceeds your current reputation limit of ₹{prizeLimit.toLocaleString('en-IN')}.
-                          Request a single-use exception from the Support Team — it never changes your reputation or permanent limit.
-                        </p>
-                        <label htmlFor="exception-reason" style={{ fontSize: 12, color: 'var(--text-muted)' }}>Reason for the higher prize pool</label>
-                        <textarea
-                          id="exception-reason"
-                          className="form-input"
-                          rows={2}
-                          maxLength={1000}
-                          value={exceptionReason}
-                          onChange={(e) => setExceptionReason(e.target.value)}
-                          placeholder="e.g. Sponsor-backed community event with a committed prize partner"
-                        />
-                        <button type="button" className="btn-table-secondary" disabled={requestingException} onClick={requestPrizeException} style={{ justifySelf: 'start' }}>
-                          {requestingException ? 'Submitting…' : 'Request exception'}
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
-
-                {overPrizeLimit && !canRequestException && (
-                  <p style={{ margin: 0, fontSize: 12.5, color: '#f87171' }}>
-                    Your current reputation level cannot request a prize-pool exception. Reduce the prize pool to
-                    ₹{prizeLimit.toLocaleString('en-IN')} or below.
-                  </p>
-                )}
-
-                {exceptionRequests.length > 0 && (
-                  <div style={{ display: 'grid', gap: 6, borderTop: '1px dashed rgba(198,255,51,0.25)', paddingTop: 10 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                      <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.5px' }}>EXCEPTION REQUESTS</span>
-                      <button type="button" className="btn-table-secondary" onClick={loadExceptions}>Check status</button>
-                    </div>
-                    {exceptionRequests.map((row) => (
-                      <div key={row.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 12.5, color: '#cbd5e1' }}>
-                        <span>₹{Number(row.requestedAmount).toLocaleString('en-IN')} · {new Date(row.createdAt).toLocaleDateString('en-IN')}</span>
-                        <strong style={{ color: row.status === 'approved' ? '#86efac' : row.status === 'rejected' ? '#f87171' : '#fb923c' }}>
-                          {String(row.status).toUpperCase()}{row.competitionId ? ' · USED' : ''}
-                        </strong>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>Platform fee status is recorded as pending. No external payment gateway is connected in this build. A prize-pool exception never funds or verifies the prize pool.</p>
-              </div>
-
-              <div style={{ marginTop: 32 }}>
-                <button type="submit" className="btn-submit">Publish Competition</button>
-              </div>
-            </form>
-          </div>
-
-          <div className="summary-card">
-            <h3>Summary</h3>
-            <div className="summary-row"><span className="k">Name</span> <span className="v" id="s-name">{name.trim() || '—'}</span></div>
-            <div className="summary-row"><span className="k">Game</span> <span className="v" id="s-game">{game || '—'}</span></div>
-            <div className="summary-row"><span className="k">Format</span> <span className="v" id="s-format">{format || '—'}</span></div>
-            <div className="summary-row"><span className="k">Visibility</span> <span className="v" id="s-visibility">{visibility === 'private' ? 'Private (join code)' : 'Public'}</span></div>
-            <div className="summary-row"><span className="k">Teams</span> <span className="v" id="s-teams">{maxTeams || '—'} Teams / {maxPlayers || '—'} Players</span></div>
-            <div className="summary-row"><span className="k">Reg. Opens</span> <span className="v" id="s-reg">{regOpen || '—'}</span></div>
-            <div style={{ marginTop: 24 }}>
-              <h3>Next Steps</h3>
-              <div className="steps-list">
-                <div className="step-item"><div className="step-num done">✓</div><span className="step-text">Fill in competition details</span></div>
-                <div className="step-item"><div className="step-num">2</div><span className="step-text">Pay the platform fee to publish</span></div>
-                <div className="step-item"><div className="step-num">3</div><span className="step-text">Deposit the prize pool into escrow</span></div>
-                <div className="step-item"><div className="step-num">4</div><span className="step-text">Manage registrations &amp; schedule matches</span></div>
-              </div>
+              )}
             </div>
-          </div>
+
+            <div style={{ marginTop: 28 }}>
+              <button type="submit" className="btn-submit" disabled={!!blocked}>Review and save draft</button>
+            </div>
+          </form>
         </div>
-      </main>
 
-      {checkout && (
-        <div id="org-checkout-modal" style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          {/* §2.3 — theme-consistent dialog (was orange); focus lands on the confirm action */}
-          <div role="dialog" aria-modal="true" aria-label="Publish competition confirmation" style={{ background: '#0f172a', border: '1px solid rgba(198,255,51,0.55)', borderRadius: 16, width: 'min(90vw,480px)', padding: 32, boxShadow: '0 20px 60px #000a', color: '#f1f5f9' }}>
-            <h3 style={{ margin: '0 0 4px', fontSize: 20, color: '#f1f5f9' }}>💳 Organizer Platform Fee Checkout</h3>
-            <p style={{ margin: '0 0 20px', fontSize: 13, color: '#94a3b8' }}>Review the platform fee due for "{checkout.comp.name}". Saving creates a private draft. On the next screen you pay the platform fee (simulated in mock mode — no real money) to publish, and can deposit the prize pool into escrow at the same time.</p>
-            <div style={{ background: '#1e293b', borderRadius: 12, padding: 16, marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#cbd5e1' }}><span>Tournament Prize Pool:</span><strong style={{ color: '#c6ff33' }}>₹{checkout.prizePool.toLocaleString('en-IN')}</strong></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#94a3b8', borderTop: '1px solid #334155', paddingTop: 8 }}><span>Fee Calculation:</span><strong style={{ color: '#f1f5f9' }}>{(() => { const c = NexusData && NexusData.getRevenueConfig ? NexusData.getRevenueConfig() : { percentage: 7, minCost: 50 }; return `${c.percentage}% Prize Pool Fee (Min. ₹${c.minCost})`; })()}</strong></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#94a3b8', borderTop: '1px solid #334155', paddingTop: 8 }}><span>Visibility:</span><strong style={{ color: '#f1f5f9' }}>{checkout.comp.visibility === 'private' ? 'Private (join code required)' : 'Public'}</strong></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#94a3b8', borderTop: '1px solid #334155', paddingTop: 8 }}><span>Participation Fee Model:</span><strong style={{ color: '#f1f5f9' }}>{checkout.comp.entryFee}</strong></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, color: '#f1f5f9', borderTop: '2px dashed rgba(198,255,51,0.5)', paddingTop: 10, marginTop: 2 }}><strong>Platform Fee Due by Organizer:</strong><strong style={{ color: '#c6ff33', fontSize: 22 }}>₹{checkout.platformFee.toLocaleString('en-IN')}</strong></div>
-            </div>
-            {publishError && (
-              <div role="alert" style={{ marginBottom: 16, padding: '10px 14px', borderRadius: 8, background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.45)', color: '#f87171', fontSize: 12.5, lineHeight: 1.5, overflowWrap: 'anywhere' }}>
-                {publishError}
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: 12 }}>
-              <button onClick={() => { setCheckout(null); setPublishError(''); }} disabled={publishing} style={{ flex: 1, padding: 12, background: 'none', border: '1px solid #334155', color: '#94a3b8', borderRadius: 8, cursor: publishing ? 'not-allowed' : 'pointer', fontSize: 14 }}>Cancel</button>
-              <button onClick={confirmCheckout} disabled={publishing} style={{ flex: 2, padding: 12, background: publishing ? 'rgba(198,255,51,0.35)' : '#c6ff33', border: 'none', color: '#111', borderRadius: 8, cursor: publishing ? 'wait' : 'pointer', fontSize: 14, fontWeight: 700 }}>
-                {publishing ? 'Publishing…' : 'Save draft & continue to payment'}
-              </button>
+        <aside className="summary-card">
+          <h3>Summary</h3>
+          <div className="summary-row"><span className="k">Name</span><span className="v">{form.name.trim() || '—'}</span></div>
+          <div className="summary-row"><span className="k">Game</span><span className="v">{form.game || '—'}</span></div>
+          <div className="summary-row"><span className="k">Format</span><span className="v">{form.format || '—'}</span></div>
+          <div className="summary-row"><span className="k">Teams</span><span className="v">{form.maxTeams || '—'} × {form.maxPlayers || '—'} players</span></div>
+          <div className="summary-row"><span className="k">Dates</span><span className="v">{form.start || '—'} → {form.end || '—'}</span></div>
+          <div className="summary-row"><span className="k">Prize pool</span><span className="v">{formatINR(totalPrize)}</span></div>
+          <div style={{ marginTop: 24 }}>
+            <h3>Next steps</h3>
+            <div className="steps-list">
+              <div className="step-item"><div className="step-num done">✓</div><span className="step-text">Fill in the details</span></div>
+              {largePrize && <div className="step-item"><div className="step-num">2</div><span className="step-text">Finance approves the prize pool</span></div>}
+              <div className="step-item"><div className="step-num">{largePrize ? 3 : 2}</div><span className="step-text">Pay the platform fee to publish</span></div>
+              <div className="step-item"><div className="step-num">{largePrize ? 4 : 3}</div><span className="step-text">Deposit the prize pool into escrow</span></div>
+              <div className="step-item"><div className="step-num">{largePrize ? 5 : 4}</div><span className="step-text">Run registrations and fixtures</span></div>
             </div>
           </div>
-        </div>
-      )}
+        </aside>
+      </div>
 
-      {published && (
-        <div id="publish-success-modal" style={{ position: 'fixed', inset: 0, zIndex: 100000, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div role="dialog" aria-modal="true" aria-label="Competition published" style={{ background: '#0f172a', border: '1px solid rgba(198,255,51,0.55)', borderRadius: 16, width: 'min(90vw,440px)', padding: 32, boxShadow: '0 20px 60px #000a', color: '#f1f5f9', textAlign: 'center' }}>
-            <div style={{ fontSize: 44, marginBottom: 8 }}>🏆</div>
-            <h3 style={{ margin: '0 0 6px', fontSize: 20, color: '#f1f5f9' }}>Competition Published!</h3>
-            <p style={{ margin: '0 0 16px', fontSize: 13.5, color: '#94a3b8' }}>"{published.comp.name}" is live.</p>
-            <p style={{ fontWeight: 800, letterSpacing: 2, color: '#c6ff33', marginBottom: 10 }}>PRIVATE JOIN CODE</p>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', alignItems: 'center', marginBottom: 18 }}>
-              <code id="join-code-display" style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 10, padding: '12px 18px', fontSize: 18, letterSpacing: 3, color: '#fff' }}>{published.joinCode || 'GENERATED IN BACKEND'}</code>
-              <button
-                id="copy-join-code-btn"
-                type="button"
-                onClick={() => {
-                  const code = published.joinCode || '';
-                  const done = () => showToast('Join code copied to clipboard.', 'success');
-                  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code).then(done).catch(() => {});
-                  else {
-                    try {
-                      const ta = document.createElement('textarea');
-                      ta.value = code; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); done();
-                    } catch (e) { /* ignore */ }
-                  }
-                }}
-                style={{ padding: '12px 16px', background: 'none', border: '1px solid rgba(198,255,51,0.45)', color: '#c6ff33', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}
-              >Copy</button>
-            </div>
-            <p style={{ fontSize: 12.5, color: '#94a3b8', marginBottom: 18 }}>Share this code only with teams you want to join. Participants must enter it correctly — the backend validates it.</p>
-            <button onClick={() => { setPublished(null); navigate('/pages/my-activity.html'); }} style={{ width: '100%', padding: 12, background: '#c6ff33', border: 'none', color: '#111', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}>Done</button>
-          </div>
-        </div>
-      )}
-
-    </>
+      <ConfirmDialog
+        open={!!checkout}
+        tone="primary"
+        title="Save draft"
+        message={checkout ? (largePrize
+          ? `"${checkout.name}" is saved as a private draft and sent to the finance moderators with your contact details. Once they approve the ${formatINR(totalPrize)} prize pool, you pay the ${formatINR(platformFee)} platform fee to publish it. Nothing is charged until then.`
+          : `"${checkout.name}" is saved as a private draft. Next you pay the ${formatINR(platformFee)} platform fee to publish it${totalPrize > 0 ? ` and deposit the ${formatINR(totalPrize)} prize pool into escrow` : ''}. In mock mode no real money moves.`) : ''}
+        confirmLabel={publishing ? 'Saving…' : largePrize ? 'Save and send to finance' : 'Save draft and continue'}
+        onConfirm={publish}
+        onClose={() => { if (!publishing) setCheckout(null); }}
+      />
+    </main>
   );
 }
-
-

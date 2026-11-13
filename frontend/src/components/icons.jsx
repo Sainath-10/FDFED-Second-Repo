@@ -87,6 +87,12 @@ export const LoginIcon = () => (
   </svg>
 );
 
+export const LogoutIcon = () => (
+  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.67" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M13.33 14.17L17.5 10l-4.17-4.17M17.5 10H7.5M7.5 17.5H4.17a1.67 1.67 0 0 1-1.67-1.67V4.17A1.67 1.67 0 0 1 4.17 2.5H7.5" />
+  </svg>
+);
+
 export const EyeIcon = () => (
   <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#A1A1AA" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
     <path d="M1 10s3.5-7 9-7 9 7 9 7-3.5 7-9 7-9-7-9-7z" />

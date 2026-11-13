@@ -1,196 +1,89 @@
 ﻿/**
- * NEXUS ESPORTS — Super Admin · Admins Roster
+ * NEXUS ESPORTS — Super Admin · Admins
  *
- * Original roster layout (header actions, sa-users-card / sa-users-table,
- * search, role/status filters). Each administrator has exactly one action:
- * View Activity. Community Moderators open the moderator Activity page; other
- * administrator roles keep using the existing Admin Activity page.
+ * Every staff account from the backend, with links to add, revoke and view
+ * each person's activity.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { listAdministrativeAccounts } from '../../services/auth.js';
-import '../../styles/pages/super-admin/super-dashboard.css';
-import '../../styles/pages/super-admin/users.css';
+import { Link } from 'react-router-dom';
+import { AuthAPI } from '../../services/api.js';
+import { ADMIN_ROLE_OPTIONS } from '../../lib/adminRoles.js';
+import { EmptyState, ErrorState, LoadingState, PageHeader, formatDate } from '../../components/ui.jsx';
 
-const normalize = (v) => String(v || '').trim().toLowerCase();
-
-const ROLE_OPTIONS = [
-  { value: 'super_admin', label: 'Super Admin' },
-  { value: 'admin', label: 'Admin' },
-  { value: 'finance_moderator', label: 'Finance Moderator' },
-  { value: 'community_moderator', label: 'Community Moderator' },
-];
-
-function formatAdminType(role, adminType) {
-  const r = normalize(role);
-  const t = normalize(adminType);
-  if (r === 'finance_moderator' || t === 'finance_moderator') return { key: 'finance_moderator', label: 'Finance Moderator', icon: '\uD83D\uDCB0', color: '#c084fc', bg: 'rgba(192,132,252,0.15)', border: 'rgba(192,132,252,0.3)' };
-  if (r === 'community_moderator' || t === 'community_moderator') return { key: 'community_moderator', label: 'Community Moderator', icon: '🚩', color: '#f472b6', bg: 'rgba(244, 114, 182, 0.15)', border: 'rgba(244, 114, 182, 0.3)' };
-  if (r === 'super_admin' || r === 'super-admin' || t === 'super_admin') return { key: 'super_admin', label: 'Super Admin', icon: '⚡', color: '#c6ff33', bg: 'rgba(198, 255, 51, 0.15)', border: 'rgba(198, 255, 51, 0.3)' };
-  if (r === 'admin' || t === 'admin') return { key: 'admin', label: 'Admin', icon: '🔧', color: '#94a3b8', bg: 'rgba(148, 163, 184, 0.15)', border: 'rgba(148, 163, 184, 0.3)' };
-  return { key: 'admin', label: 'Admin', icon: '🔧', color: '#94a3b8', bg: 'rgba(148, 163, 184, 0.15)', border: 'rgba(148, 163, 184, 0.3)' };
-}
-
-const statusOf = (account) => (String(account.status || '').toLowerCase() === 'inactive' || account.banned ? 'inactive' : 'active');
-const displayNameOf = (account) => account.displayName || account.name || account.username || 'Administrator';
-const emailOf = (account) => account.email || (String(account.username || '').includes('@') ? account.username : `${account.username}@nexus.gg`);
-
-const selectStyle = {
-  padding: '10px 12px',
-  background: 'var(--bg-input)',
-  border: '1px solid rgba(255,255,255,0.1)',
-  borderRadius: 8,
-  color: 'var(--text-white)',
-  fontSize: 13,
-  fontFamily: 'var(--font-body)',
-  cursor: 'pointer',
-};
-
-const activityButtonStyle = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 6,
-  padding: '6px 14px',
-  background: 'rgba(198,255,51,0.12)',
-  color: '#c6ff33',
-  border: '1px solid rgba(198,255,51,0.3)',
-  borderRadius: 8,
-  fontSize: 12,
-  fontWeight: 700,
-  textDecoration: 'none',
-};
-
-function activityHrefFor(account, typeInfo) {
-  const encoded = encodeURIComponent(account.username || '');
-  if (typeInfo.key === 'community_moderator') {
-    return `/pages/moderator/activity.html?admin=${encoded}`;
-  }
-  return `/pages/admin/admin-activity.html?admin=${encoded}`;
-}
+const STAFF = ['super_admin', 'admin', 'finance_moderator', 'community_moderator'];
+const typeOf = (u) => (STAFF.includes(u.adminType) ? u.adminType : u.role);
+const labelOf = (type) => ADMIN_ROLE_OPTIONS.find((o) => o.value === type)?.label || type;
 
 export default function Admins() {
-  const navigate = useNavigate();
-  const [roster, setRoster] = useState([]);
+  const [rows, setRows] = useState(null);
+  const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
 
-  const load = useCallback(() => {
-    const rows = listAdministrativeAccounts().slice();
-    rows.sort((a, b) => {
-      const roleA = formatAdminType(a.role, a.adminType).label;
-      const roleB = formatAdminType(b.role, b.adminType).label;
-      if (roleA !== roleB) return roleA.localeCompare(roleB);
-      return displayNameOf(a).localeCompare(displayNameOf(b));
-    });
-    setRoster(rows);
+  const load = useCallback(async () => {
+    const res = await AuthAPI.getAllUsers();
+    if (!res.ok) { setError(res.error || 'Unable to load administrators.'); return; }
+    setError('');
+    setRows((res.data || []).filter((u) => STAFF.includes(typeOf(u))).sort((a, b) => labelOf(typeOf(a)).localeCompare(labelOf(typeOf(b))) || a.username.localeCompare(b.username)));
   }, []);
-
   useEffect(() => { load(); }, [load]);
-  useEffect(() => {
-    const onStorage = (event) => {
-      if (!event.key || event.key === 'nexus.auth.accounts') load();
-    };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, [load]);
 
-  const list = useMemo(() => {
-    const q = normalize(query);
-    return roster.filter((account) => {
-      const typeInfo = formatAdminType(account.role, account.adminType);
-      if (roleFilter !== 'all' && typeInfo.key !== roleFilter) return false;
-      if (statusFilter !== 'all' && statusOf(account) !== statusFilter) return false;
-      if (!q) return true;
-      return [account.username, emailOf(account), displayNameOf(account), account.role, account.adminType, typeInfo.label]
-        .map(normalize)
-        .join(' ')
-        .includes(q);
-    });
-  }, [roster, query, roleFilter, statusFilter]);
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return (rows || []).filter((u) => (roleFilter === 'all' || typeOf(u) === roleFilter) && (!q || `${u.username} ${u.email} ${labelOf(typeOf(u))}`.toLowerCase().includes(q)));
+  }, [rows, query, roleFilter]);
 
   return (
-    <main className="sa-main-v2">
-      <header className="sa-header-v2" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
-        <div className="sa-header-left">
-          <h1 className="sa-title">Admins <span className="accent-text">Roster</span></h1>
-          <p className="sa-desc">All administrators and super administrators with their assigned admin roles in PostgreSQL.</p>
-        </div>
-        <div className="sa-header-actions" style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <Link to="/pages/super-admin/revoke-admin.html" className="btn-table-danger" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 18px', background: 'rgba(239,68,68,0.12)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="8" cy="8" r="6" /><line x1="5" y1="5" x2="11" y2="11" /></svg>
-            Revoke Admin
-          </Link>
-          <Link to="/pages/super-admin/add-admin.html" className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 18px', background: '#c6ff33', color: '#000', border: 'none', borderRadius: 8, fontWeight: 800, fontSize: 13, textDecoration: 'none', boxShadow: '0 0 16px rgba(198,255,51,0.2)' }}>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><line x1="8" y1="3" x2="8" y2="13" /><line x1="3" y1="8" x2="13" y2="8" /></svg>
-            Add Admin
-          </Link>
-        </div>
-      </header>
+    <main className="main-content">
+      <PageHeader
+        title="Administrators"
+        subtitle="Every staff account on the platform."
+        actions={<>
+          <Link className="btn-cancel" to="/pages/super-admin/revoke-admin.html">Revoke access</Link>
+          <Link className="btn-primary" to="/pages/super-admin/add-admin.html">+ Add administrator</Link>
+        </>}
+      />
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+        <input type="search" className="form-input" style={{ maxWidth: 340 }} aria-label="Search administrators" placeholder="Search…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <select className="form-input" style={{ maxWidth: 220 }} aria-label="Filter by role" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
+          <option value="all">All roles</option>
+          {ADMIN_ROLE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      </div>
 
-      <section className="sa-users-card">
-        <div className="sa-users-header">
-          <h2 className="sa-section-title">Administrator Directory</h2>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} aria-label="Filter by admin type" style={selectStyle}>
-              <option value="all">All admin types</option>
-              {ROLE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Filter by account status" style={selectStyle}>
-              <option value="all">All statuses</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-            <div className="search-bar table-search-wrap">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="7" cy="7" r="5" /><line x1="10.5" y1="10.5" x2="14" y2="14" /></svg>
-              <input type="text" placeholder="Search by username, admin type, or email..." id="admins-search" value={query} onChange={(e) => setQuery(e.target.value)} />
-            </div>
-          </div>
-        </div>
-        <div className="sa-users-table-wrap">
-          <table className="sa-users-table">
-            <thead><tr><th>Administrator / Username</th><th>Admin Type</th><th>Email</th><th style={{ textAlign: 'right' }}>Action</th></tr></thead>
-            <tbody id="admins-table-body">
-              {list.map((account) => {
-                const username = account.username || 'unknown';
-                const typeInfo = formatAdminType(account.role, account.adminType);
-                const email = emailOf(account);
-                const inactive = statusOf(account) === 'inactive';
-                const activityHref = activityHrefFor(account, typeInfo);
+      {error && <ErrorState message={error} onRetry={load} />}
+      {!error && rows === null && <LoadingState label="Loading administrators…" />}
+      {!error && rows && visible.length === 0 && <EmptyState title="No administrators match" />}
+      {!error && rows && visible.length > 0 && (
+        <div className="ui-table-wrap">
+          <table className="ui-table">
+            <thead><tr><th>Username</th><th>Email</th><th>Role</th><th>Since</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>
+              {visible.map((u) => {
+                const type = typeOf(u);
+                const activity = type === 'community_moderator'
+                  ? `/pages/moderator/activity.html?admin=${encodeURIComponent(u.username)}`
+                  : `/pages/admin/admin-activity.html?admin=${encodeURIComponent(u.username)}`;
                 return (
-                  <tr key={username} style={{ cursor: 'pointer' }} onClick={() => navigate(activityHref)}>
+                  <tr key={u.id}>
+                    <td>@{u.username}</td>
+                    <td>{u.email}</td>
+                    <td>{labelOf(type)}</td>
+                    <td>{formatDate(u.createdAt)}</td>
+                    <td>{u.banned ? <span className="status-pill rejected">Banned</span> : <span className="status-pill approved">Active</span>}</td>
                     <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: typeInfo.bg, border: `1px solid ${typeInfo.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: typeInfo.color, fontSize: 13 }}>
-                          {String(displayNameOf(account)).charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: 600, color: '#f5f5f5' }}>{displayNameOf(account)}</div>
-                          <div style={{ fontSize: 11.5, color: '#64748b' }}>@{username}</div>
-                        </div>
+                      <div className="ui-row-actions">
+                        <Link className="btn-table-secondary" to={activity}>Activity</Link>
+                        <Link className="btn-table-danger" to={`/pages/super-admin/revoke-admin.html?username=${encodeURIComponent(u.username)}`}>Revoke</Link>
                       </div>
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        <span className="sa-role-pill" style={{ background: typeInfo.bg, color: typeInfo.color, border: `1px solid ${typeInfo.border}`, fontWeight: 700 }}>{typeInfo.icon} {typeInfo.label}</span>
-                        {inactive && <span className="sa-role-pill" style={{ background: 'rgba(231,0,11,0.15)', color: '#e7000b', border: '1px solid rgba(231,0,11,0.3)' }}>Inactive</span>}
-                      </div>
-                    </td>
-                    <td className="sa-email">{email}</td>
-                    <td style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
-                      <Link to={activityHref} style={activityButtonStyle}>
-                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="8" cy="8" r="6" /><path d="M8 5v3.5l2.5 1.5" /></svg>
-                        View Activity
-                      </Link>
                     </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
-          {list.length === 0 && <div className="empty-state" id="admins-empty" style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>No administrators found.</div>}
         </div>
-      </section>
+      )}
     </main>
   );
 }

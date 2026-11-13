@@ -123,6 +123,9 @@ export class UploadController {
   })
   getFile(@Param('filename') filename: string, @Res() res: Response): void {
     const filePath = this.uploadService.getFilePath(filename);
+    // Never let a browser second-guess the type, and never render an upload as a page.
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'");
     res.sendFile(filePath);
   }
 }

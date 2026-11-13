@@ -12,14 +12,14 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { IsBoolean, IsIn, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/decorators/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../common/interfaces';
 import { ReputationService } from './reputation.service';
-import { REPUTATION_LEVELS, SANCTION_TYPES, ReputationLevel, SanctionType } from '../../common/reporting';
+import { REPUTATION_LEVELS, REPUTATION_LEVEL_LIMITS, SANCTION_TYPES, ReputationLevel, SanctionType } from '../../common/reporting';
 
 class EvaluateDto {
   @IsOptional()
@@ -65,6 +65,12 @@ class EvaluateDto {
   @IsOptional()
   @IsString()
   reportId?: string;
+}
+
+class EvaluateUserDto extends EvaluateDto {
+  @IsString()
+  @MaxLength(60)
+  username: string;
 }
 
 class PrizeExceptionDto {
@@ -134,7 +140,7 @@ export class ReputationController {
     const maxPrizePool = await this.reputation.getGlobalMax();
     return {
       maxPrizePool,
-      levelLimits: { blue: 300000, green: 300000, orange: 20000, red: 10000 },
+      levelLimits: REPUTATION_LEVEL_LIMITS,
       levels: REPUTATION_LEVELS,
     };
   }
@@ -192,10 +198,11 @@ export class ReputationController {
   @UseGuards(RolesGuard)
   @Roles(UserRole.COMMUNITY_MODERATOR, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Record reputation facts and apply the transition policy' })
-  async evaluate(@Body() dto: EvaluateDto & { username?: string }, @Request() req: any) {
-    const username = String((dto as any).username || '').trim();
+  async evaluate(@Body() dto: EvaluateUserDto, @Request() req: any) {
+    const { username: rawUsername, ...facts } = dto;
+    const username = String(rawUsername || '').trim();
     if (!username) throw new BadRequestException('username is required.');
-    return this.reputation.evaluate(username, dto, req.user.username);
+    return this.reputation.evaluate(username, facts, req.user.username);
   }
 
   @Get('user/:username')
@@ -203,7 +210,7 @@ export class ReputationController {
   async profile(@Param('username') username: string, @Request() req: any) {
     const role = String(req.user?.role || '');
     const isSelf = String(req.user?.username).toLowerCase() === String(username).toLowerCase();
-    const allowed = isSelf || ['community_moderator', 'super_admin', 'admin', 'admin'].includes(role);
+    const allowed = isSelf || ['community_moderator', 'super_admin', 'admin'].includes(role);
     if (!allowed) throw new ForbiddenException('You can only view your own reputation profile.');
     return this.reputation.getProfile(username);
   }
@@ -219,7 +226,7 @@ export class ReputationController {
   async overview(@Param('username') username: string, @Request() req: any) {
     const role = String(req.user?.role || '');
     const isSelf = String(req.user?.username).toLowerCase() === String(username).toLowerCase();
-    const allowed = isSelf || ['community_moderator', 'super_admin', 'admin', 'admin'].includes(role);
+    const allowed = isSelf || ['community_moderator', 'super_admin', 'admin'].includes(role);
     if (!allowed) throw new ForbiddenException('You can only view your own reputation overview.');
     return this.reputation.getOrganiserOverview(username);
   }

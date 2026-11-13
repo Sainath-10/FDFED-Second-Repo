@@ -1,91 +1,89 @@
 /**
  * NEXUS ESPORTS — Invitations Sent
  *
- * the sent-invite
- * list with status pill + revoke, and the "Invite More Players" footer link.
+ * Invitations this team sent, from the backend, with revoke for pending ones.
  */
-import { Link, Navigate } from 'react-router-dom';
+import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useTeamContext } from '../../hooks/useTeamContext.js';
-import NexusTeamWorkflow from '../../services/teamWorkflow.js';
-import TeamTabs from '../../components/TeamTabs.jsx';
+import { TeamsAPI } from '../../services/api.js';
+import TeamHeader from '../../components/TeamHeader.jsx';
+import { ConfirmDialog, EmptyState, ErrorState, LoadingState, formatDate } from '../../components/ui.jsx';
+import { teamGate } from './TeamGate.jsx';
 import { showToast } from '../../lib/toast.js';
 import '../../styles/pages/team/invitations-sent.css';
 
-function formatSentTime(value) {
-  if (!value) return 'just now';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'just now';
-  return date.toLocaleString();
-}
+const STATUS_CLASS = { accepted: 'approved', declined: 'rejected', revoked: 'rejected', pending: 'pending' };
 
 export default function InvitationsSent() {
-  const { ctx, checkingPermission, canChat, refresh, canManage: hookCanManage, isEnded: hookIsEnded } = useTeamContext();
+  const t = useTeamContext();
+  const [invites, setInvites] = useState(null);
+  const [error, setError] = useState('');
+  const [pendingRequests, setPendingRequests] = useState(0);
+  const [revoking, setRevoking] = useState(null);
+  const teamId = t.team?.id;
 
-  if (!ctx || !ctx.comp || !ctx.team) {
-    return <main className="main-content"><h1 className="page-title">Team</h1></main>;
-  }
+  const load = useCallback(async () => {
+    if (!teamId) return;
+    const [inv, req] = await Promise.all([TeamsAPI.getTeamInvites(teamId), TeamsAPI.getJoinRequests(teamId)]);
+    if (inv.ok) { setInvites(Array.isArray(inv.data) ? inv.data : []); setError(''); } else setError(inv.error || 'Unable to load invitations.');
+    if (req.ok && Array.isArray(req.data)) setPendingRequests(req.data.filter((r) => r.status === 'pending').length);
+  }, [teamId]);
 
-  const { comp, team, session, context } = ctx;
-  const canManage = hookCanManage ?? !!(session && (session.username || '').toLowerCase() === (team.createdBy || '').toLowerCase());
-  const isEnded = hookIsEnded ?? !!(comp.ended || comp.status === 'completed');
+  useEffect(() => { if (t.canManage) load(); }, [load, t.canManage]);
 
-  if (checkingPermission) return <main className="main-content"><p role="status">Checking team permissions...</p></main>;
+  const gate = teamGate(t, { captainOnly: true, title: 'Invitations sent' });
+  if (gate) return gate;
 
-  if (!canManage) {
-    return <Navigate to={`/pages/team/team-roster.html?compId=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(team.id)}`} replace />;
-  }
+  const { team, comp, isEnded } = t;
 
-  const invites = NexusTeamWorkflow.getInvites(comp.id, team.id) || [];
-  const requests = NexusTeamWorkflow.getJoinRequests(comp.id, team.id) || [];
-  const pendingRequests = requests.filter((r) => r.status === 'pending').length;
-  const inviteMoreHref = `/pages/team/add-players.html?compId=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(team.id)}`;
-
-  async function revoke(inviteId, username) {
-    if (!window.confirm(`Revoke invitation to ${username}?`)) return;
-    const result = await NexusTeamWorkflow.revokeInvite({ compId: comp.id, teamId: team.id, inviteId });
-    if (!result.ok) { showToast(result.error || 'Failed to revoke invite.', 'error'); return; }
-    showToast(`Invitation to ${username} revoked.`, 'error');
-    refresh();
+  async function revoke() {
+    const res = await TeamsAPI.revokeInvite(team.id, revoking.id);
+    if (!res.ok) { showToast(res.error || 'Unable to revoke the invitation.', 'error'); return; }
+    showToast(`Invitation to ${revoking.toUsername} revoked.`);
+    setRevoking(null);
+    load();
   }
 
   return (
     <main className="main-content">
-      <h1 className="page-title">{team.name}</h1>
-      <p className="page-subtitle">Track invitations sent to players.</p>
-
-      <TeamTabs active="invitations" context={context} canManage={canManage} canChat={canChat} isEnded={isEnded} joinRequestCount={pendingRequests} />
-
-      <div className="invites-stack">
-        {invites.map((invite) => {
-          const username = invite.toUsername || 'user';
-          const initial = username.charAt(0).toUpperCase();
-          const statusClass = invite.status === 'accepted' ? 'approved' : (invite.status === 'declined' ? 'rejected' : 'pending');
-          const statusLabel = invite.status ? invite.status.toUpperCase() : 'PENDING';
-          return (
-            <div className="invite-row" data-invite-id={invite.id} key={invite.id}>
-              <div className="invite-avatar-sm">{initial}</div>
-              <div className="invite-info-wrapper">
-                <div className="invite-name">{username}</div>
-                <div className="invite-meta">Invited for: {invite.roleOffered || 'Player'} slot - Sent {formatSentTime(invite.sentAt)}</div>
-              </div>
-              <span className={`status-pill ${statusClass}`}>{statusLabel}</span>
-              {invite.status === 'pending' ? (
-                <button className="btn-table-danger btn-revoke-mini" onClick={() => revoke(invite.id, username)}>Revoke</button>
-              ) : (
-                <span className={`status-text-${invite.status === 'accepted' ? 'green' : 'red'}`}>
-                  {invite.status === 'accepted' ? 'Joined team' : 'Invitation closed'}
-                </span>
-              )}
-            </div>
-          );
-        })}
-
-        <div className="invites-footer-actions">
-          <Link to={inviteMoreHref} className="btn-primary invite-more-btn">+ Invite More Players</Link>
+      <TeamHeader t={t} active="invitations" joinRequestCount={pendingRequests} />
+      <div className="td-section-head">
+        <div>
+          <h2 className="td-section-title">Invitations sent</h2>
+          <p className="td-section-sub">Players you invited, and whether they accepted.</p>
         </div>
+        {!isEnded && <Link to={`/pages/team/add-players.html?compId=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(team.id)}`} className="td-btn td-btn-primary">+ Invite more players</Link>}
       </div>
+
+      {error && <ErrorState message={error} onRetry={load} />}
+      {!error && invites === null && <LoadingState label="Loading invitations…" />}
+      {!error && invites && invites.length === 0 && <EmptyState title="No invitations yet" message="Invitations you send appear here with their status." />}
+
+      <div className="ui-list">
+        {(invites || []).map((invite) => (
+          <div className="ui-row" key={invite.id}>
+            <div className="ui-avatar">{String(invite.toUsername || 'U').charAt(0).toUpperCase()}</div>
+            <div className="ui-row-main">
+              <div className="ui-row-title">@{invite.toUsername}</div>
+              <div className="ui-row-meta">Sent {formatDate(invite.createdAt, true)} by @{invite.fromUsername}</div>
+            </div>
+            <span className={`status-pill ${STATUS_CLASS[invite.status] || 'pending'}`}>{String(invite.status || 'pending').toUpperCase()}</span>
+            {invite.status === 'pending' && !isEnded && (
+              <button type="button" className="btn-table-danger" onClick={() => setRevoking(invite)}>Revoke</button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <ConfirmDialog
+        open={!!revoking}
+        title="Revoke invitation"
+        message={revoking ? `Revoke the invitation to @${revoking.toUsername}? They will no longer be able to accept it.` : ''}
+        confirmLabel="Revoke"
+        onConfirm={revoke}
+        onClose={() => setRevoking(null)}
+      />
     </main>
   );
 }
-
-

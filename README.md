@@ -46,16 +46,20 @@ cp .env.example .env          # optional; defaults already work
 
 ```env
 DB_HOST=127.0.0.1
-DB_PORT=5433
-DB_USER=postgres
+DB_PORT=5432
+DB_USERNAME=postgres
 DB_PASSWORD=postgres
-DB_NAME=postgres
-DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5433/postgres
+DB_DATABASE=nexus_db
 PORT=3000
-JWT_SECRET=change_me
-JWT_EXPIRATION=7d
+JWT_SECRET=replace-with-a-long-random-string   # required: the API refuses to start without it
+JWT_EXPIRES_IN=7d
 NODE_ENV=development
+PAYMENT_PROVIDER=mock
 ```
+
+`DATABASE_URL=postgresql://user:password@host:5432/db` can be used instead of the `DB_*` values.
+On a brand-new empty database the migrations create every table on first start; no
+`DB_SYNCHRONIZE` is needed.
 
 `frontend/.env` (optional):
 
@@ -97,27 +101,32 @@ npm run preview                                      # serve the built app local
 
 ## 4. About the users
 
-These accounts are created automatically. **Every account uses the password `nexus`.**
+These accounts are created automatically in a development database. Change their passwords
+before exposing the app to anyone.
 
-| Username | Email | Role | Lands on after login |
+| Username | Password | Role | Lands on after login |
 |---|---|---|---|
-| `superadmin1` | superadmin1@nexus.gg | `super-admin` | `/pages/super-admin/super-dashboard.html` |
-| `superadmin2` | superadmin2@nexus.gg | `super-admin` | `/pages/super-admin/super-dashboard.html` |
-| `admin` | admin@nexus.gg | `admin` | `/pages/admin/dashboard.html` |
-| `communitymod` | communitymod@nexus.gg | `community_moderator` | `/pages/moderator/reports.html` |
-| `regular1` | regular1@nexus.gg | `participant` | `/pages/profile.html` |
-| `regular2` | regular2@nexus.gg | `participant` | `/pages/profile.html` |
-| `regular3` | regular3@nexus.gg | `participant` | `/pages/profile.html` |
+| `superadmin` | `super123` | `super-admin` | `/pages/super-admin/super-dashboard.html` |
+| `superadmin1`, `superadmin2` | `nexus` | `super-admin` | `/pages/super-admin/super-dashboard.html` |
+| `admin` | `admin123` | `admin` | `/pages/admin/dashboard.html` |
+| `finance` | `nexus` | `finance_moderator` | `/pages/admin/finance.html` |
+| `communitymod` | `nexus` | `community_moderator` | `/pages/moderator/reports.html` |
+| `regular` | `regular123` | `participant` (organizes the demo competitions) | `/pages/profile.html` |
+| `regular1`, `regular2`, `regular3` | `nexus` | `participant` | `/pages/profile.html` |
 
-You can sign in with **either the username or the email**.
+Emails are `<username>@nexus.gg`. You can sign in with **either the username or the email**.
 
-How the accounts exist in two places (so login works online *and* offline):
+Accounts live only in PostgreSQL (`seedDemoAccounts()` in
+`backend/src/modules/auth/repositories/user.repository.ts`, run on boot by
+`backend/src/database/seeder.service.ts`), with bcrypt-hashed passwords. The browser never stores
+passwords or an account list; when the API is unreachable, login fails with a clear message.
 
-1. **PostgreSQL** — `backend/src/modules/auth/repositories/user.repository.ts` → `seedDemoAccounts()`,
-   executed on boot by `backend/src/database/seeder.service.ts`. Passwords are stored bcrypt-hashed.
-2. **Browser** — `frontend/src/vendor/auth-accounts.js` (`window.NEXUS_DEMO_ACCOUNTS`) and
-   `frontend/src/services/auth.js` (`DEMO_ACCOUNTS`) power the local fallback login used when the
-   API is unreachable.
+Four demo competitions are seeded as free, public and upcoming (registration open today, play in
+two to three weeks), so team registration can be tried straight away.
+
+**Forgot password:** the login page sends a reset request to the administrators. An Admin or
+Super Admin opens **Users**, picks the account and chooses **Reset password**, which shows a
+one-time password to pass on to the user.
 
 Roles in this app: `participant`, `team_lead`, `community_moderator`, `admin`, `super-admin`
 (the UI name for the backend's `super_admin`). The retired `comp_admin`, `dispute_admin` and
@@ -196,23 +205,22 @@ frontend/
     │   ├── team/              TeamRoster, AddPlayers, InvitePlayer, JoinRequests, …
     │   ├── admin/  (21 pages) super-admin/ (10 pages)
     ├── layouts/        AppLayout (sidebar + content + footer), AuthLayout
-    ├── components/     Sidebar, SiteFooter, CompCard, TeamTabs, RoutePlaceholder,
-    │                   ProtectedRoute, RoleGuard, ScrollToTop, PolicyEditor, icons
-    ├── context/        AuthContext (session + login/logout)
+    ├── components/     Sidebar, SiteFooter, CompCard, TeamTabs, ui.jsx (shared states/dialogs),
+    │                   UserDirectory, StaffProfile, AccountSettings, ProtectedRoute, RoleGuard, …
+    ├── context/        AuthContext (session from the server; refreshed on focus)
     ├── config/         nav.js — sidebar navigation per role
-    ├── hooks/          useTeamContext
-    ├── lib/            toast.js, assets.js (image resolver), policies.js (policy store)
+    ├── hooks/          useTeamContext (team from the API), useReportSync (focus + polling refresh)
+    ├── lib/            toast.js, assets.js, competitionForm.js (shared create/edit rules), evidence.js
     ├── services/
-    │   ├── api.js            the HTTP client (8 namespaces, one per backend module)
-    │   ├── auth.js           session/accounts, login/signup, local fallback
-    │   ├── data.js           competitions data layer -> src/vendor/competitions-data.js
-    │   └── teamWorkflow.js   team operations      -> src/vendor/team-workflow.js
+    │   ├── api.js            the HTTP client (one namespace per backend module)
+    │   ├── auth.js           session handling around the backend login (no local accounts)
+    │   ├── competitions.js   competition/team fetching, display state, registration rules
+    │   └── payments.js       escrow ledger client and formatters
     ├── styles/
     │   ├── styles.css        global tokens + shared components
     │   ├── pages/*.css       one stylesheet per page (51 total)
     │   └── pages/{admin,super-admin,team}/
     ├── assets/         54 images (logos, banners, avatars)
-    ├── vendor/         three modules executed as-is (see §5.4)
     └── utils/
 ```
 
@@ -226,16 +234,28 @@ the dev and preview servers — nothing else is touched, so Vite's own asset req
 Access control: `ProtectedRoute` requires a session, `RoleGuard` enforces the per-route `roles` from
 `routes.js` (team-lead, admin roles, super-admin). Anything else is viewable by any signed-in user.
 
-### 5.4 `src/vendor/` — modules executed as-is
+### 5.4 The backend is the only source of data
 
-Three large, previously browser-only modules are bundled unchanged and re-exported by the `services/`
-bridges, so their behaviour (including the exact localStorage keys and seed data) is preserved:
+Every page reads and writes through `services/api.js`. Nothing about competitions, teams,
+disputes, reports, accounts or settings is kept in the browser, so every user and device sees
+the same data. Pages that show other people's activity refresh when the tab regains focus and
+every 15–20 seconds while visible.
 
-| File | Re-exported as | Used by |
-|---|---|---|
-| `vendor/competitions-data.js` | `window.NexusData` (via `services/data.js`) | competitions, organizer, admin pages |
-| `vendor/team-workflow.js` | `window.NexusTeamWorkflow` (via `services/teamWorkflow.js`) | team pages |
-| `vendor/auth-accounts.js` | `window.NEXUS_DEMO_ACCOUNTS` | offline account seeding |
+### 5.5 Competition rules worth knowing
+
+| Situation | What happens |
+|---|---|
+| Prize pool up to ₹10,00,000 | Published after the platform fee (organiser reputation limits still apply). |
+| Prize pool above ₹10,00,000 (max ₹1,00,00,000) | The organiser adds contact details; the draft waits in **Finance → Organiser requests** until a finance moderator approves it, then the platform fee can be paid. |
+| Who can play | Only player accounts. Staff, the competition's organisers and invited co-organisers can never join a team. |
+| Player unregisters before the start | Leaves the roster; a per-player fee is refunded. |
+| Player unregisters after the start | Leaves the roster; nothing is refunded. |
+| Captain unregisters the team | Before the start only; every fee paid for the team is refunded. |
+| Wrong result entered | The organiser can edit it until the competition ends. The winner can't change once the next round has been played. |
+| Ending with fixtures still to play | The organiser gives a reason; a finance moderator approves or rejects. If approved, every player is refunded, 10% of the deposited prize pool is kept as a penalty, the rest goes back to the organiser, and their trust score drops. |
+| Cancelling | Allowed directly only before the start. |
+| Report against an organiser | A Community Moderator can choose **End competition & refund players** (same refunds and penalty; cannot be uplifted). |
+| Competition finished | Final placings, prizes and players appear as a podium on the competition and team pages. |
 
 ---
 
@@ -262,36 +282,25 @@ Tables are defined as TypeORM entities in `backend/src/entities/`:
 
 ### 6.2 Browser storage (frontend)
 
-Both `localStorage` and `sessionStorage` are used. The full set:
+Only the sign-in is kept in the browser:
 
 | Key | Purpose |
 |---|---|
-| `nexus.auth.session` | the signed-in session (read by guards, stored by auth) |
-| `nexus.auth.accounts` | local accounts cache (seeded from `NEXUS_DEMO_ACCOUNTS`) |
-| `nexus.auth.token` / `nexus.auth.user` | JWT + user object from the API |
-| `nexus_competitions` | competitions store (used when the API is unavailable) |
-| `nexus.deleted.competitionIds` | ids deleted locally so seeding cannot resurrect them |
-| `nexus_comp_draft` | in-progress "create competition" draft |
-| `nexus.team.context` / `nexus.team.activeContext` | active competition/team context |
-| `nexus.disputes` | disputes filed from the app |
-| `nexus.disputes.evidence` | uploaded evidence metadata (names, sizes, image data URLs) |
-| `nexus_admin_disputes` | admin dispute queue |
-| `nexus.notifications.items` | notification feed |
-| `nexus_policies` | platform policies (also mirrored to `sessionStorage`) |
-| `nexus.admin.activity` | admin activity feed |
-| `nexus.superadmin.dashboard.state` | platform settings (formats, max teams, security) |
-| `nexus.banned.users` | locally banned accounts |
-| `nexus.profile.email` / `nexus.profile.language` | profile preferences |
-| `last_comp_id` / `last_admin_comp_id` (sessionStorage) | last viewed competition, for tab links |
+| `nexus.auth.token` / `nexus.auth.user` | JWT and the user object from the login response |
+| `nexus.auth.session` | the UI session derived from that user |
+| `nexus.verifiedJoinCode.<id>` (sessionStorage) | a private join code already verified this session |
+
+Older builds stored accounts (with plain-text passwords), competitions and disputes in
+`localStorage`; those keys are deleted automatically on load.
 
 ### 6.3 Images and styles
 
 - **Images** — `frontend/src/assets/` (54 files). They are resolved by
   `frontend/src/lib/assets.js` → `assetUrl(name)`, which maps a legacy reference (a bare filename or
   `../assets/<name>`) to the URL Vite emits. Small files are inlined as `data:` URIs by the bundler.
-- **Styles** — `frontend/src/styles/styles.css` holds the shared design tokens
-  (`--accent: #c6ff33`, `--sidebar-w`, fonts, buttons, tables) and one file per page lives under
-  `frontend/src/styles/pages/`. Each page component imports its own stylesheet.
+- **Styles** — `frontend/src/styles/styles.css` holds the design tokens, one file per page lives
+  under `frontend/src/styles/pages/`, and `frontend/src/styles/system.css` (imported last) defines
+  the shared page frame, buttons, dialogs, states and responsive sidebar so every page looks the same.
 - **Favicon** — `frontend/public/favicon.png`, referenced from `index.html`.
 
 ---
@@ -302,10 +311,12 @@ Both `localStorage` and `sessionStorage` are used. The full set:
 |---|---|---|
 | backend | `npm run start:dev` | run API with watch |
 | backend | `npm run build` / `start:prod` | compile to `dist/` / run compiled |
+| backend | `npm test` | business-rule, payment, lifecycle, chat and report tests |
 | backend | `npm run lint` / `format` | eslint / prettier |
 | frontend | `npm run dev` | Vite dev server (5173) |
 | frontend | `npm run build` | production build to `frontend/dist` |
 | frontend | `npm run preview` | serve the production build |
+| frontend | `npm test` | component and rule tests (run `npm install` first) |
 
 ---
 

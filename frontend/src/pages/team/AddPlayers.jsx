@@ -1,196 +1,149 @@
 /**
  * NEXUS ESPORTS — Add Players
  *
- * available-player search +
- * send-invite, invite-by-username, roster-status sidebar, and the ended-competition
- * lock (banner + all controls disabled).
+ * The captain finds players as they type and sends invitations. Suggestions
+ * come from the server and already leave out staff, organisers of this
+ * competition, players on another team and anyone removed from it. The
+ * backend re-checks all of that, the roster limit and the start-date lock.
  */
-import { useEffect, useState } from 'react';
-import { Link, Navigate } from 'react-router-dom';
-import { useTeamContext, hasCompetitionStarted } from '../../hooks/useTeamContext.js';
-import NexusTeamWorkflow from '../../services/teamWorkflow.js';
+import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useTeamContext } from '../../hooks/useTeamContext.js';
 import { TeamsAPI } from '../../services/api.js';
-import TeamTabs from '../../components/TeamTabs.jsx';
+import TeamHeader, { TeamAvatar } from '../../components/TeamHeader.jsx';
+import UsernameSearch from '../../components/UsernameSearch.jsx';
+import { Notice } from '../../components/ui.jsx';
+import { teamGate } from './TeamGate.jsx';
 import { showToast } from '../../lib/toast.js';
-import '../../styles/pages/team/add-players.css';
 
 export default function AddPlayers() {
-  const { ctx, checkingPermission, canChat, refresh, canManage: hookCanManage, isEnded: hookIsEnded, isRemoved } = useTeamContext();
-  const [query, setQuery] = useState('');
-  const [direct, setDirect] = useState('');
-  const [players, setPlayers] = useState([]);
-  const [searchStatus, setSearchStatus] = useState('No available players found.');
-  const [playersVersion, setPlayersVersion] = useState(0);
+  const t = useTeamContext();
+  const [text, setText] = useState('');
+  const [suggested, setSuggested] = useState([]);
+  const [invites, setInvites] = useState([]);
+  const [requests, setRequests] = useState([]);
+  const [version, setVersion] = useState(0);
   const [sendingTo, setSendingTo] = useState('');
+  const teamId = t.team?.id;
 
-  const backendTeamId = ctx && ctx.team ? (ctx.team.dbId || ctx.team.id) : null;
-  useEffect(() => {
-    if (!backendTeamId) return undefined;
-    let cancelled = false;
-    const timer = setTimeout(async () => {
-      const res = await TeamsAPI.getAvailablePlayers(backendTeamId, query.trim());
-      if (cancelled) return;
-      setPlayers(res.ok && Array.isArray(res.data) ? res.data : []);
-      setSearchStatus(res.ok ? 'No available players found.' : (res.error || 'Unable to load players.'));
-    }, 250);
-    return () => { cancelled = true; clearTimeout(timer); };
-  }, [backendTeamId, query, playersVersion]);
+  // Players the team can still invite, for the live search and the suggestions list.
+  const searchAvailable = useCallback(async (query) => {
+    const res = await TeamsAPI.getAvailablePlayers(teamId, query);
+    if (!res.ok) throw new Error(res.error || 'Unable to search players.');
+    return (res.data || []).map((p) => ({ ...p, disabled: p.invited }));
+  }, [teamId]);
 
   useEffect(() => {
-    if (!ctx || !ctx.comp || !ctx.team) return;
-    if (NexusTeamWorkflow && NexusTeamWorkflow.refreshTeamManagementUI) {
-      NexusTeamWorkflow.refreshTeamManagementUI(ctx.comp.id, ctx.team.id);
-    }
-  }, [ctx]);
+    if (!teamId || !t.canManage) return;
+    TeamsAPI.getAvailablePlayers(teamId, '').then((res) => setSuggested(res.ok && Array.isArray(res.data) ? res.data.slice(0, 8) : []));
+    TeamsAPI.getTeamInvites(teamId).then((res) => { if (res.ok && Array.isArray(res.data)) setInvites(res.data); });
+    TeamsAPI.getJoinRequests(teamId).then((res) => { if (res.ok && Array.isArray(res.data)) setRequests(res.data); });
+  }, [teamId, t.canManage, version]);
 
-  if (!ctx || !ctx.comp || !ctx.team) {
-    return <main className="main-content"><h1 className="page-title">Team</h1></main>;
-  }
+  const gate = teamGate(t, { captainOnly: true, title: 'Add players' });
+  if (gate) return gate;
 
-  const { comp, team, session, context } = ctx;
-  const canManage = hookCanManage ?? !!(session && (session.username || '').toLowerCase() === (team.createdBy || '').toLowerCase());
-  const isEnded = hookIsEnded ?? !!(comp.ended || comp.status === 'completed');
-
-  if (checkingPermission) return <main className="main-content"><p role="status">Checking team permissions...</p></main>;
-
-  if (isRemoved) {
-    return (
-      <main className="main-content">
-        <h1 className="page-title">Access restricted</h1>
-        <p className="page-subtitle">
-          You have been removed from this competition. You can no longer access its team or competition management features.
-        </p>
-        <Link to="/pages/my-reports.html" className="btn-primary">View your reports</Link>
-      </main>
-    );
-  }
-
-  if (!canManage || isEnded) {
-    return <Navigate to={`/pages/team/team-roster.html?compId=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(team.id)}`} replace />;
-  }
-
-  const members = NexusTeamWorkflow.getTeamRoster(comp.id, team.id) || [];
-  const invites = NexusTeamWorkflow.getInvites(comp.id, team.id) || [];
-  const requests = NexusTeamWorkflow.getJoinRequests(comp.id, team.id) || [];
+  const { team, comp, members, isEnded, isStarted, rosterLocked } = t;
   const maxPlayers = comp.maxPlayersPerTeam || 5;
-  // §5/§6 — shared competition-started check; roster additions are locked once it begins
-  const isStarted = hasCompetitionStarted(comp);
   const isFull = members.length >= maxPlayers;
-  const rosterLocked = isEnded || isStarted;
-
-  const pendingInvites = invites.filter((i) => i.status === 'pending').length;
+  const pendingInvites = invites.filter((i) => i.status === 'pending');
   const pendingRequests = requests.filter((r) => r.status === 'pending').length;
+  const perPlayerFee = comp.feeType === 'per_player' && Number(comp.entryFeeAmount) > 0;
+  const blocked = rosterLocked || isFull;
 
   async function sendInvite(name) {
-    if (!name) return;
-    if (isFull) { showToast('Team is full — no slots remaining.', 'error'); return; }
-    if (isStarted) { showToast('The competition has started — team members can no longer be added.', 'error'); return; }
-    setSendingTo(name);
-    const result = await NexusTeamWorkflow.sendInvite({ compId: comp.id, teamId: team.id, toUsername: name, roleOffered: 'Player' });
+    const username = String(name || '').trim().replace(/^@/, '');
+    if (!username) return;
+    setSendingTo(username);
+    const res = await TeamsAPI.createInvite(team.id, comp.id, username);
     setSendingTo('');
-    if (!result.ok) { showToast(result.error || 'Failed to send invite.', 'error'); return; }
-    showToast(`Invitation sent to ${name}.`);
-    setPlayers((list) => list.map((p) => (p.username === name ? { ...p, invited: true } : p)));
-    setPlayersVersion((v) => v + 1);
-    refresh();
-  }
-
-  function directInvite() {
-    const username = direct.trim();
-    if (!username) { showToast('Please enter a username.', 'error'); return; }
-    sendInvite(username);
-    setDirect('');
+    if (!res.ok) { showToast(res.error || 'Unable to send the invitation.', 'error'); return; }
+    setText('');
+    showToast(`Invitation sent to @${username}. They accept it from their notifications.`);
+    setVersion((v) => v + 1);
   }
 
   return (
     <main className="main-content">
-      <h1 className="page-title">{team.name}</h1>
-      <p className="page-subtitle">Invite players to join your roster.</p>
+      <TeamHeader t={t} active="add-players" joinRequestCount={pendingRequests} />
 
-      <TeamTabs active="add-players" context={context} canManage={canManage} canChat={canChat} isEnded={isEnded} joinRequestCount={pendingRequests} />
+      {isEnded && <Notice tone="warning">This competition has ended, so no more players can be invited.</Notice>}
+      {!isEnded && isStarted && <Notice tone="info">The competition has started, so the roster is locked.</Notice>}
+      {!rosterLocked && isFull && <Notice tone="danger">The team is full ({members.length} / {maxPlayers}). Remove a player to free a slot.</Notice>}
 
-      {isEnded && (
-        <div style={{ background: 'rgba(251,146,60,0.12)', border: '1px solid rgba(251,146,60,0.4)', color: '#fb923c', padding: '14px 20px', borderRadius: 10, fontSize: 14, fontWeight: 700, textAlign: 'center', margin: '24px 0', letterSpacing: '0.5px' }}>
-          🏁 Competition has ended — inviting new players is no longer possible.
-        </div>
-      )}
+      <div className="td-two-col">
+        <div>
+          <section className="td-panel td-section">
+            <h2 className="td-section-title">Invite a player</h2>
+            <p className="td-section-sub" style={{ marginBottom: 14 }}>
+              Start typing a username. Only players who can join this team are shown — never staff, this competition&apos;s organisers, or anyone already on a team here.
+              {perPlayerFee && ` Each player pays their own ₹${Number(comp.entryFeeAmount).toLocaleString('en-IN')} entry fee when they accept.`}
+            </p>
+            <UsernameSearch
+              id="invite-search"
+              value={text}
+              onChange={setText}
+              onPick={sendInvite}
+              search={searchAvailable}
+              disabled={blocked || !!sendingTo}
+              placeholder={blocked ? 'The roster is closed' : 'Search players by username…'}
+              renderHint={(row) => (row.invited ? 'Already invited' : 'Send invite ↵')}
+            />
+            {sendingTo && <p className="td-section-sub" style={{ marginTop: 10 }}>Sending an invitation to @{sendingTo}…</p>}
+          </section>
 
-
-      {isFull && !isEnded && !isStarted && (
-        <div style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.35)', color: '#f87171', padding: '14px 20px', borderRadius: 10, fontSize: 14, fontWeight: 700, textAlign: 'center', margin: '24px 0' }}>
-          🚫 Team is full — {members.length} / {maxPlayers} slots taken. Remove a player first to free a slot.
-        </div>
-      )}
-
-      <div className="layout-wrapper">
-        <div className="content-column">
-          <div className="search-card">
-            <h2 className="card-title-sm">Search Players</h2>
-            <div className="search-controls-row">
-              <div className="search-bar search-bar-alt" style={{ maxWidth: '100%' }}>
-                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="7" cy="7" r="5" /><line x1="10.5" y1="10.5" x2="14" y2="14" /></svg>
-                <input type="text" placeholder="Search by username…" id="player-search" value={query} onChange={(e) => setQuery(e.target.value)} disabled={rosterLocked} />
+          {!blocked && suggested.length > 0 && (
+            <section className="td-section">
+              <div className="td-section-head">
+                <div>
+                  <h2 className="td-section-title">Available players</h2>
+                  <p className="td-section-sub">A few players you can invite right now.</p>
+                </div>
               </div>
-            </div>
-
-            <div id="player-results" className="results-stack">
-              {players.length === 0 ? (
-                <div className="role-user-item"><div className="role-user-info"><div className="role-user-name">{searchStatus}</div></div></div>
-              ) : (
-                players.map((player) => {
-                  const username = player.username || 'U';
-                  const initial = username.charAt(0).toUpperCase();
-                  return (
-                    <div className="role-user-item" data-name={username} key={username}>
-                      <div className="player-avatar-sm">{initial}</div>
-                      <div className="role-user-info">
-                        <div className="role-user-name">{username}</div>
-                        <div className="player-meta-info">Registered user</div>
+              <div className="td-roster">
+                {suggested.map((player) => (
+                  <article className="td-player" key={player.username}>
+                    <div className="td-player-top">
+                      <TeamAvatar name={player.username} size="md" />
+                      <div style={{ minWidth: 0 }}>
+                        <div className="td-player-name">@{player.username}</div>
+                        <div className="td-player-role">Registered player</div>
                       </div>
-                      {player.invited ? (
-                        <>
-                          <span className="status-pill pending status-pill-sm">Invited</span>
-                          <button className="btn-table-secondary" style={{ cursor: 'default' }} disabled>Invite Sent</button>
-                        </>
-                      ) : (
-                        <>
-                          <span className="status-pill approved status-pill-sm">Available</span>
-                          <button className="btn-table-primary" onClick={() => sendInvite(username)} disabled={rosterLocked || isFull || sendingTo === username}>{isFull ? 'Team Full' : (sendingTo === username ? 'Sending…' : 'Send Invite')}</button>
-                        </>
-                      )}
                     </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-
-          <div className="direct-invite-card">
-            <h2 className="card-title-sm">Invite by Username</h2>
-            <div className="direct-invite-row">
-              <input className="form-input direct-invite-input" type="text" id="direct-username" placeholder="Enter exact username…" value={direct} onChange={(e) => setDirect(e.target.value)} disabled={rosterLocked} />
-              <button className="btn-primary" onClick={directInvite} disabled={rosterLocked}>{isFull ? 'Team Is Full' : 'Send Invitation'}</button>
-            </div>
-          </div>
+                    <div className="td-player-actions">
+                      {player.invited
+                        ? <span className="td-pill td-pill-muted">Invited</span>
+                        : <button type="button" className="td-btn td-btn-sm td-btn-primary" disabled={sendingTo === player.username} onClick={() => sendInvite(player.username)}>{sendingTo === player.username ? 'Sending…' : 'Send invite'}</button>}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
         </div>
 
-        <div className="sidebar-sticky-stack">
-          <div className="comp-sidebar-block">
-            <h3>Roster Status</h3>
-            <div className="info-row"><span className="key">Current Players</span><span className="val">{members.length} / {maxPlayers}</span></div>
-            <div className="info-row"><span className="key">Max Team Size</span><span className="val stat-val-accent">{maxPlayers}</span></div>
-            <div className="info-row"><span className="key">Open Slots</span><span className="val stat-val-accent">{Math.max(0, maxPlayers - members.length)}</span></div>
-            <div className="info-row"><span className="key">Pending Invites</span><span className="val" id="pending-count">{pendingInvites}</span></div>
-            <div className="info-row"><span className="key">Join Requests</span><span className="val stat-val-accent">{pendingRequests}</span></div>
+        <aside className="td-side">
+          <div className="td-panel">
+            <h3 className="td-section-title" style={{ fontSize: 16, marginBottom: 8 }}>Roster status</h3>
+            <div className="td-kv"><span>Players</span><strong>{members.length} / {maxPlayers}</strong></div>
+            <div className="td-kv"><span>Open slots</span><strong style={{ color: 'var(--accent)' }}>{Math.max(0, maxPlayers - members.length)}</strong></div>
+            <div className="td-kv"><span>Pending invites</span><strong>{pendingInvites.length}</strong></div>
+            <div className="td-kv"><span>Join requests</span><strong>{pendingRequests}</strong></div>
+            <div style={{ display: 'grid', gap: 8, marginTop: 14 }}>
+              <Link to={`/pages/team/join-requests.html?compId=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(team.id)}`} className="td-btn td-btn-primary">Review join requests</Link>
+              <Link to={`/pages/team/invitations-sent.html?compId=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(team.id)}`} className="td-btn">View invitations</Link>
+            </div>
           </div>
-          <div className="comp-sidebar-block sidebar-btns-stack">
-            <Link to={`/pages/team/join-requests.html${context && context.compId ? `?compId=${encodeURIComponent(context.compId)}&teamId=${encodeURIComponent(context.teamId)}` : ''}`} className="btn-table-primary btn-sidebar-full">Review Join Requests</Link>
-            <Link to={`/pages/team/invitations-sent.html${context && context.compId ? `?compId=${encodeURIComponent(context.compId)}&teamId=${encodeURIComponent(context.teamId)}` : ''}`} className="btn-table-secondary btn-sidebar-full">View Invitations Sent</Link>
-          </div>
-        </div>
+          {pendingInvites.length > 0 && (
+            <div className="td-panel">
+              <h3 className="td-section-title" style={{ fontSize: 16, marginBottom: 8 }}>Waiting for a reply</h3>
+              {pendingInvites.slice(0, 6).map((inv) => (
+                <div className="td-kv" key={inv.id}><span>@{inv.toUsername}</span><strong>Pending</strong></div>
+              ))}
+            </div>
+          )}
+        </aside>
       </div>
     </main>
   );
 }
-
-

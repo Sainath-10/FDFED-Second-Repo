@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { CompetitionsService } from './competitions.service';
-import { CreateCompetitionDto, UpdateCompetitionDto, CompetitionResponseDto, AddCoOrganizerDto, JoinValidateDto } from './dto/competition.dto';
+import { CreateCompetitionDto, UpdateCompetitionDto, CompetitionResponseDto, AddCoOrganizerDto, JoinValidateDto, ApprovalDecisionDto } from './dto/competition.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../../common/guards/optional-jwt-auth.guard';
 import { RolesGuard } from '../../common/decorators/roles.guard';
@@ -72,6 +72,24 @@ export class CompetitionsController {
     @CurrentUser() user?: any,
   ): Promise<CompetitionResponseDto> {
     return this.competitionsService.addCoOrganizer(id, addCoOrganizerDto.organizerId, user?.username);
+  }
+
+  @Post(':id/organizer-invite/accept')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Accept a co-organizer invitation' })
+  async acceptOrganizerInvite(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.competitionsService.respondToOrganizerInvite(id, user, true);
+  }
+
+  @Post(':id/organizer-invite/decline')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Decline a co-organizer invitation' })
+  async declineOrganizerInvite(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.competitionsService.respondToOrganizerInvite(id, user, false);
   }
 
   @Delete(':id/organizers/:organizerId')
@@ -179,6 +197,13 @@ export class CompetitionsController {
     return this.competitionsService.getParticipantContacts(id, user?.username, String(user?.role || 'participant'));
   }
 
+  @Get(':id/results')
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiOperation({ summary: 'Final placings and prizes once a competition has finished' })
+  async getResults(@Param('id') id: string, @CurrentUser() user?: any) {
+    return this.competitionsService.getResults(id, user?.username);
+  }
+
   @Get(':id')
   @ApiOperation({
     summary: 'Get competition by ID',
@@ -244,7 +269,7 @@ export class CompetitionsController {
 
   @Patch(':id/approval')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Approve or reject a competition',
@@ -252,7 +277,7 @@ export class CompetitionsController {
   })
   async setApproval(
     @Param('id') id: string,
-    @Body() body: { decision: string },
+    @Body() body: ApprovalDecisionDto,
     @CurrentUser() user?: any,
   ): Promise<CompetitionResponseDto> {
     const adminUsername = user?.username || user?.id || 'admin';

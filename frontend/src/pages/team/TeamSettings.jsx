@@ -1,219 +1,90 @@
 /**
  * NEXUS ESPORTS — Team Settings
  *
- * name/tag (+ logo
- * picker), join-policy selector, save-changes validation and the disband flow.
+ * The captain renames the team or unregisters it. Both go through the backend,
+ * which enforces unique names, the start-date lock and refunds.
  */
-import { useState } from 'react';
-import { useNavigate, Navigate } from 'react-router-dom';
-import { useTeamContext, hasCompetitionStarted } from '../../hooks/useTeamContext.js';
-import NexusTeamWorkflow from '../../services/teamWorkflow.js';
-import NexusData from '../../services/data.js';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useTeamContext } from '../../hooks/useTeamContext.js';
 import { TeamsAPI } from '../../services/api.js';
-import TeamTabs from '../../components/TeamTabs.jsx';
+import TeamHeader, { TeamAvatar } from '../../components/TeamHeader.jsx';
+import { Notice, ReasonDialog } from '../../components/ui.jsx';
+import { teamGate } from './TeamGate.jsx';
 import { showToast } from '../../lib/toast.js';
-import '../../styles/pages/team/team-settings.css';
-
-const LOGOS = [
-  { id: 'shield', svg: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>' },
-  { id: 'trophy', svg: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2z"></path></svg>' },
-  { id: 'gamepad', svg: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"></rect><path d="M6 12h4"></path><path d="M8 10v4"></path><line x1="15" y1="13" x2="15.01" y2="13"></line><line x1="18" y1="11" x2="18.01" y2="11"></line></svg>' },
-  { id: 'bolt', svg: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>' },
-  { id: 'star', svg: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>' },
-  { id: 'diamond', svg: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h12l4 6-10 12L2 9z"></path><path d="M11 3 8 9l3 12"></path><path d="M13 3l3 6-3 12"></path><path d="M2.2 9h19.6"></path></svg>' },
-];
-
-const UPLOAD_SVG = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>';
 
 export default function TeamSettings() {
   const navigate = useNavigate();
-  const { ctx, checkingPermission, canChat, refresh, canManage: hookCanManage, isEnded: hookIsEnded, isStarted: hookIsStarted } = useTeamContext();
-  const [name, setName] = useState(() => (ctx && ctx.team ? ctx.team.name || '' : ''));
-  const [tag, setTag] = useState(() => (ctx && ctx.team ? ctx.team.tag || '' : ''));
-  const [logo, setLogo] = useState('shield');
-  const [policy, setPolicy] = useState('open');
+  const t = useTeamContext();
+  const [name, setName] = useState('');
+  const [saving, setSaving] = useState(false);
   const [disbandOpen, setDisbandOpen] = useState(false);
-  const [disbandReason, setDisbandReason] = useState('');
-  const [disbanding, setDisbanding] = useState(false);
 
-  if (!ctx || !ctx.comp || !ctx.team) {
-    return <main className="main-content"><h1 className="page-title">Team Settings</h1></main>;
+  useEffect(() => { if (t.team) setName(t.team.name); }, [t.team?.id, t.team?.name]);
+
+  const gate = teamGate(t, { captainOnly: true, title: 'Team settings' });
+  if (gate) return gate;
+
+  const { team, comp, isEnded, isStarted, rosterLocked } = t;
+  const trimmed = name.trim();
+  const nameError = trimmed.length < 3 ? 'At least 3 characters.' : trimmed.length > 40 ? 'At most 40 characters.' : /[<>]/.test(trimmed) ? 'Cannot contain < or >.' : '';
+  const hasFee = comp.feeType !== 'free' && Number(comp.entryFeeAmount) > 0;
+
+  async function save(event) {
+    event.preventDefault();
+    if (nameError || trimmed === team.name) return;
+    setSaving(true);
+    const res = await TeamsAPI.update(team.id, { name: trimmed });
+    setSaving(false);
+    if (!res.ok) { showToast(res.error || 'Unable to rename the team.', 'error'); return; }
+    showToast('Team name updated.');
+    t.refresh();
   }
 
-  const { comp, team, session, context } = ctx;
-  const canManage = hookCanManage ?? !!(session && (session.username || '').toLowerCase() === (team.createdBy || '').toLowerCase());
-  const isEnded = hookIsEnded ?? !!(comp.ended || comp.status === 'completed');
-  const isStarted = hookIsStarted ?? hasCompetitionStarted(comp);
-
-  if (checkingPermission) return <main className="main-content"><p role="status">Checking team permissions...</p></main>;
-
-  if (!canManage) {
-    return <Navigate to={`/pages/team/team-roster.html?compId=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(team.id)}`} replace />;
-  }
-
-  const requests = NexusTeamWorkflow.getJoinRequests(comp.id, team.id) || [];
-  const pendingRequests = requests.filter((r) => r.status === 'pending').length;
-
-  function setJoinPolicy(next) {
-    setPolicy(next);
-    showToast(`Join policy set to: ${next === 'open' ? 'Open (Anyone can request)' : 'Invite Only'}`);
-  }
-
-  function saveChanges() {
-    if (!name.trim() || !tag.trim()) { showToast('Please fill in both Team Name and Team Tag!', 'error'); return; }
-    showToast(`Team settings for "${name.trim()}" updated successfully!`);
-  }
-
-  // §4.2 — disband opens a reason modal; the competition-started and ended locks apply.
-  function disbandTeam() {
-    if (isStarted) { showToast('The competition has started — teams can no longer be disbanded.', 'error'); return; }
-    if (isEnded) { showToast('This competition has ended — teams can no longer be disbanded.', 'error'); return; }
-    setDisbandReason('');
-    setDisbandOpen(true);
-  }
-
-  async function confirmDisband() {
-    const reason = String(disbandReason || '').trim();
-    if (reason.length < 10) { showToast('Please provide a meaningful reason (min 10 characters) — it will be shared with the organizer and participants.', 'error'); return; }
-    if (disbanding) return;
-    setDisbanding(true);
-    // Backend first: records the reason, notifies organizer + participants,
-    // creates pending refund requests for eligible paid participants (idempotent).
-    let offline = false;
-    const memberUsernames = (team.members || []).map((m) => m && m.username).filter(Boolean);
-    try {
-      const res = await TeamsAPI.disband(team.dbId || team.id, reason, memberUsernames);
-      if (!res.ok && !/backend|network|Failed to fetch|is the backend/i.test(String(res.error || ''))) {
-        setDisbanding(false);
-        showToast(res.error || 'Unable to disband the team.', 'error');
-        return;
-      }
-      if (!res.ok) offline = true;
-    } catch (err) { offline = true; }
-
-    const comps = (NexusData && NexusData.loadCompetitions) ? NexusData.loadCompetitions() || [] : [];
-    const found = comps.find((c) => String(c.id) === String(comp.id));
-    if (found && Array.isArray(found.teams)) {
-      found.teams = found.teams.filter((t) => String(t.id) !== String(team.id));
-      if (NexusData.updateCompetition) NexusData.updateCompetition(found);
-    }
-    // The backend notifies members when it is reachable; offline, this browser's copy is all there is.
-    if (offline) {
-      memberUsernames
-        .filter((m) => m.toLowerCase() !== String(session.username || '').toLowerCase())
-        .forEach((m) => NexusTeamWorkflow.pushNotification({
-          toUsername: m,
-          type: 'team-disbanded',
-          status: 'rejected',
-          title: '⚠️ Your Team Was Disbanded',
-          body: `Your team "${team.name}" in "${comp.name}" was disbanded by the team lead. Reason: ${reason}.`,
-          meta: { compId: comp.id, teamId: team.id, reason },
-        }));
-    }
-    try { localStorage.removeItem('nexus.team.activeContext'); } catch (e) { /* ignore */ }
-    setDisbanding(false);
+  async function disband(reason) {
+    const res = await TeamsAPI.disband(team.id, reason, team.memberUsernames || []);
+    if (!res.ok) { showToast(res.error || 'Unable to unregister the team.', 'error'); return; }
     setDisbandOpen(false);
-    showToast(offline ? 'Team disbanded locally (backend offline). Refund records will be created when the API returns.' : 'Team disbanded. Refunds for eligible paid participants may take a few days to process.', 'error');
-    setTimeout(() => { navigate('/pages/competitions.html'); }, 1500);
+    showToast(`${team.name} is unregistered.${hasFee ? ' Every fee paid is refunded.' : ''} Members are notified.`);
+    navigate('/pages/my-activity.html');
   }
 
   return (
     <main className="main-content">
-      <h1 className="page-title">{team.name || 'Team Settings'}</h1>
-      <p className="page-subtitle">Team settings and management options</p>
+      <TeamHeader t={t} active="settings" />
 
-      <TeamTabs active="settings" context={context} canManage={canManage} canChat={canChat} isEnded={isEnded} joinRequestCount={pendingRequests} />
-
-      <div className="settings-container-centered">
-        <div className="design-card">
-          <label className="design-label">Team Name</label>
-          <div className="design-input-wrapper">
-            <input type="text" id="team-name" value={name} className="design-input" onChange={(e) => setName(e.target.value)} />
+      <div className="td-two-col">
+        <form className="td-panel" onSubmit={save}>
+          <h2 className="td-section-title">Team name</h2>
+          <p className="td-section-sub" style={{ marginBottom: 16 }}>Names are unique within a competition: 3–40 characters, no &lt; or &gt;.</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14 }}>
+            <TeamAvatar name={trimmed || team.name} size="md" />
+            <input id="team-name" type="text" className="form-input" style={{ flex: 1 }} aria-label="Team name" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} disabled={isEnded} />
           </div>
-        </div>
+          {nameError && <p className="ui-field-error">{nameError}</p>}
+          <button type="submit" className="td-btn td-btn-primary" disabled={isEnded || saving || !!nameError || trimmed === team.name}>{saving ? 'Saving…' : 'Save name'}</button>
+        </form>
 
-        <div className="design-card">
-          <label className="design-label">Team Tag</label>
-          <div className="design-input-wrapper">
-            <input type="text" id="team-tag" value={tag} className="design-input" maxLength={5} onChange={(e) => setTag(e.target.value)} />
-          </div>
-        </div>
-
-        <div className="design-card">
-          <label className="design-label">Team Logo</label>
-          <div className="logo-grid">
-            {LOGOS.map((l) => (
-              <div
-                key={l.id}
-                className={`logo-option${logo === l.id ? ' active' : ''}`}
-                data-logo={l.id}
-                onClick={() => setLogo(l.id)}
-                dangerouslySetInnerHTML={{ __html: l.svg }}
-              />
-            ))}
-            <div className="logo-option upload-btn">
-              <div className="upload-content">
-                <span dangerouslySetInnerHTML={{ __html: UPLOAD_SVG }} />
-                <span>UPLOAD</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="design-card">
-          <label className="design-label">Join Requests</label>
-          <div className="join-policy-selector">
-            <button type="button" className={`policy-option${policy === 'open' ? ' active' : ''}`} id="policy-open" onClick={() => setJoinPolicy('open')}>OPEN (ANYONE CAN REQUEST)</button>
-            <button type="button" className={`policy-option${policy === 'invite' ? ' active' : ''}`} id="policy-invite" onClick={() => setJoinPolicy('invite')}>INVITE ONLY</button>
-          </div>
-        </div>
-
-        <div className="footer-actions">
-          <button className="btn-action create" onClick={saveChanges}>SAVE CHANGES</button>
-        </div>
-
-        <div className="design-card danger-card-red-border">
-          <label className="design-label" style={{ color: '#f87171' }}>⚠ Danger Zone</label>
-          <p className="danger-desc-v2">Disbanding this team is permanent and cannot be undone. All members will be removed from the competition registry immediately. A refund request will be recorded for eligible paid participants (processing may take a few days).</p>
-          {isStarted && !isEnded && (
-            <p className="danger-desc-v2" style={{ color: '#fb923c', marginBottom: 8 }}><strong>🔒 The competition has started — disbanding is no longer permitted.</strong></p>
-          )}
-          <button className="btn-action btn-disband-v2" onClick={disbandTeam} disabled={isEnded || isStarted}>{isStarted && !isEnded ? 'DISBANDING LOCKED' : 'DISBAND TEAM PERMANENTLY'}</button>
-        </div>
+        <aside className="td-panel" style={{ borderColor: 'rgba(239,68,68,0.35)' }}>
+          <h2 className="td-section-title" style={{ color: '#f87171' }}>Unregister team</h2>
+          <p className="td-section-sub" style={{ margin: '6px 0 14px' }}>
+            The team leaves {comp.name}. Every member and the organiser are notified{hasFee ? ', and every fee paid for this team is refunded in full' : ''}.
+          </p>
+          {rosterLocked && <Notice tone="info">{isStarted && !isEnded ? 'The competition has started, so the team can no longer be unregistered. Players can still unregister themselves, without a refund.' : 'This competition has ended.'}</Notice>}
+          <button type="button" className="td-btn td-btn-danger" onClick={() => setDisbandOpen(true)} disabled={rosterLocked}>Unregister team</button>
+        </aside>
       </div>
 
-      {disbandOpen && (
-        <div className="modal-overlay open" style={{ display: 'flex' }}>
-          <div className="modal-box" style={{ maxWidth: 480 }}>
-            <div className="modal-header">
-              <h3 className="modal-title" style={{ color: '#f87171' }}>Disband Team</h3>
-              <button className="modal-close" onClick={() => { if (!disbanding) setDisbandOpen(false); }}>✕</button>
-            </div>
-            <p style={{ color: '#9aa4b2', fontSize: 14, marginBottom: 8 }}>
-              You are disbanding <strong style={{ color: '#fff' }}>{team.name}</strong> for <strong style={{ color: '#c6ff33' }}>{comp.name}</strong>. This cannot be undone.
-            </p>
-            <p style={{ color: '#9aa4b2', fontSize: 12, marginBottom: 12 }}>
-              A meaningful reason is mandatory: the organizer and all participants are notified with this reason, and eligible paid participants get a refund request recorded (refunds may take a few days, subject to payment-provider processing).
-            </p>
-            <textarea
-              className="form-input"
-              rows={3}
-              placeholder="e.g. Half the roster cannot attend the scheduled match days"
-              value={disbandReason}
-              onChange={(e) => setDisbandReason(e.target.value)}
-              style={{ width: '100%', marginBottom: 16 }}
-              maxLength={500}
-              disabled={disbanding}
-            />
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-              <button className="btn-cancel" onClick={() => { if (!disbanding) setDisbandOpen(false); }}>Cancel</button>
-              <button className="btn-submit" style={{ background: '#ef4444' }} disabled={disbanding} onClick={confirmDisband}>{disbanding ? 'Disbanding…' : 'Disband Team'}</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ReasonDialog
+        open={disbandOpen}
+        title={`Unregister ${team.name}`}
+        description="This cannot be undone. The reason is sent to the organiser and every member."
+        placeholder="e.g. Half the roster cannot attend the match days"
+        minLength={10}
+        confirmLabel="Unregister team"
+        onConfirm={disband}
+        onClose={() => setDisbandOpen(false)}
+      />
     </main>
   );
 }
-
-

@@ -5,6 +5,23 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/decorators/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../common/interfaces';
+import { ApiProperty } from '@nestjs/swagger';
+import { IsIn, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+
+export class RevenueConfigDto {
+  @ApiProperty() @IsNumber() @Min(0) @Max(14.99) percentage: number;
+  @ApiProperty() @IsNumber() @Min(0) @Max(99.99) minCost: number;
+  @ApiProperty({ required: false, description: 'Ignored: comes from the token' })
+  @IsOptional() @IsString() @MaxLength(60) updatedBy?: string;
+}
+
+export class CreateRevenueTransactionDto {
+  @ApiProperty({ required: false }) @IsOptional() @IsString() @MaxLength(60) competitionId?: string;
+  @ApiProperty({ required: false }) @IsOptional() @IsString() @MaxLength(200) competitionName?: string;
+  @ApiProperty({ required: false }) @IsOptional() @IsString() @MaxLength(60) organizerName?: string;
+  @ApiProperty({ required: false }) @IsOptional() @IsNumber() @Min(0) grossAmount?: number;
+  @ApiProperty({ required: false }) @IsOptional() @IsIn(['CONFIRMED', 'PENDING', 'FAILED']) status?: string;
+}
 
 @Controller('revenue')
 @ApiTags('Revenue')
@@ -25,15 +42,15 @@ export class RevenueController {
   @ApiOperation({ summary: 'Update revenue configuration (Revenue/Super Admin only)' })
   async updateConfig(
     @Request() req: any,
-    @Body() body: { percentage: number; minCost: number; updatedBy?: string },
+    @Body() body: RevenueConfigDto,
   ) {
-    const updatedBy = req.user?.username || body.updatedBy || 'admin';
+    const updatedBy = req.user.username;
     return await this.revenueService.updateConfig({ ...body, updatedBy });
   }
 
   @Get('transactions')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.FINANCE_MODERATOR)
   @ApiOperation({ summary: 'Get revenue transactions (Admin only)' })
   async getTransactions(
     @Query('status') status?: string,
@@ -46,16 +63,10 @@ export class RevenueController {
 
   @Post('transactions')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.FINANCE_MODERATOR)
   @ApiOperation({ summary: 'Create revenue transaction (Admin only)' })
   async createTransaction(
-    @Body() body: {
-      competitionId?: string;
-      competitionName?: string;
-      organizerName?: string;
-      grossAmount?: number;
-      status?: string;
-    },
+    @Body() body: CreateRevenueTransactionDto,
   ) {
     return await this.revenueService.createTransaction(body);
   }

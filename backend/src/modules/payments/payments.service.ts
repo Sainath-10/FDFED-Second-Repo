@@ -1,7 +1,7 @@
 import { LifecycleService } from './lifecycle.service';
 import { UserEntity } from '../../entities/user.entity';
 import { Optional, Injectable, BadRequestException, ForbiddenException, NotFoundException, UnauthorizedException } from '@nestjs/common';
-import { DataSource, EntityManager } from 'typeorm';
+import { DataSource, EntityManager, In } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { CompetitionEntity } from '../../entities/competition.entity';
 import { PaymentTransactionEntity } from '../../entities/payment-transaction.entity';
@@ -35,6 +35,7 @@ export class PaymentsService {
       const comp = await manager.findOne(CompetitionEntity, { where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!comp) throw new NotFoundException('Competition not found');
       this.assertOwner(comp, username);
+      if (comp.paymentStatus === 'AWAITING_FINANCE_APPROVAL') throw new BadRequestException('A finance moderator must approve this prize pool before you can pay the platform fee.');
       if (comp.paymentStatus !== 'AWAITING_PLATFORM_FEE' || comp.organizerPaid) throw new BadRequestException('This competition does not require a platform fee payment.');
       let tx = await manager.findOneBy(PaymentTransactionEntity, { competitionId: id, type: 'PLATFORM_FEE' });
       if (!tx) {
@@ -124,13 +125,72 @@ export class PaymentsService {
     if (!comp) throw new NotFoundException('Competition not found');
     if (!['finance_moderator', 'admin', 'super_admin'].includes(user.role)) this.assertOwner(comp, user.username);
     const transactions = await this.db.getRepository(PaymentTransactionEntity).find({ where: { competitionId: id }, order: { createdAt: 'DESC' } });
-    return { provider: this.provider, competitionId: id, paymentStatus: comp.paymentStatus, platformFeePaid: comp.organizerPaid, platformFeeAmount: comp.platformFee, transactions };
+    return { provider: this.provider, competitionId: id, paymentStatus: comp.paymentStatus, platformFeePaid: comp.organizerPaid, platformFeeAmount: comp.platformFee, largePrizeRequest: comp.largePrizeRequest || null, transactions };
   }
 
-  async transactions(page = 1) {
+  /** Competitions whose prize pool is above ₹10,00,000, newest first (pending only by default). */
+  async largePrizeRequests(status = 'pending') {
+    const rows = await this.db.getRepository(CompetitionEntity).createQueryBuilder('c')
+      .where('c.largePrizeRequest IS NOT NULL')
+      .orderBy('c.createdAt', 'DESC').take(200).getMany();
+    const filtered = status === 'all' ? rows : rows.filter((c) => c.largePrizeRequest?.status === status);
+    const owners = Array.from(new Set(filtered.map((c) => c.createdBy)));
+    const users = owners.length ? await this.db.getRepository(UserEntity).find({ where: { username: In(owners) }, select: { username: true, organizerTrustScore: true, email: true } }) : [];
+    const byName = new Map(users.map((u) => [u.username, u]));
+    return filtered.map((c) => ({
+      id: c.id, name: c.name, game: c.game, createdBy: c.createdBy, prize: c.prize, platformFee: c.platformFee,
+      startDate: c.startDate, endDate: c.endDate, maxTeams: c.maxTeams, feeType: c.feeType, entryFeeAmount: c.entryFeeAmount,
+      paymentStatus: c.paymentStatus, request: c.largePrizeRequest,
+      accountEmail: byName.get(c.createdBy)?.email || null, organizerTrustScore: byName.get(c.createdBy)?.organizerTrustScore ?? 100,
+    }));
+  }
+
+  /** Finance approves (organiser may then pay the platform fee) or rejects a large prize pool. */
+  async reviewLargePrize(id: string, user: any, approve: boolean, note: string) {
+    return this.db.transaction(async (manager) => {
+      const comp = await manager.findOne(CompetitionEntity, { where: { id }, lock: { mode: 'pessimistic_write' } });
+      if (!comp) throw new NotFoundException('Competition not found');
+      if (comp.paymentStatus !== 'AWAITING_FINANCE_APPROVAL' || comp.largePrizeRequest?.status !== 'pending') {
+        throw new BadRequestException('This prize pool is not waiting for finance approval.');
+      }
+      if ([comp.createdBy, ...(comp.organizers || []), ...(comp.pendingOrganizers || [])].includes(user.username)) {
+        throw new ForbiddenException('Conflict of interest: you organise this competition. Another finance moderator must review it.');
+      }
+      if (approve && +new Date(comp.startDate) <= Date.now()) {
+        throw new BadRequestException('The competition start date has already passed. Reject this request; the organiser can create it again with new dates.');
+      }
+      const decidedAt = new Date().toISOString();
+      comp.largePrizeRequest = { ...comp.largePrizeRequest, status: approve ? 'approved' : 'rejected', decidedBy: user.username, decidedAt, note };
+      if (approve) comp.paymentStatus = 'AWAITING_PLATFORM_FEE';
+      else { comp.paymentStatus = 'CANCELLED'; comp.status = 'cancelled'; comp.abandonedReason = `Prize pool not approved by finance: ${note}`; }
+      await manager.save(comp);
+      await manager.save(manager.create(NotificationEntity, {
+        toUsername: comp.createdBy,
+        type: approve ? 'large-prize-approved' : 'large-prize-rejected',
+        status: approve ? 'approved' : 'rejected',
+        title: approve ? `Prize pool approved: ${comp.name}` : `Prize pool rejected: ${comp.name}`,
+        body: approve
+          ? `A finance moderator approved the ₹${Number(comp.prize).toLocaleString('en-IN')} prize pool for "${comp.name}". Pay the platform fee to publish it. Note: ${note}`
+          : `A finance moderator did not approve the ₹${Number(comp.prize).toLocaleString('en-IN')} prize pool for "${comp.name}", so the draft was closed. Nothing was charged. Note: ${note}`,
+        meta: { compId: comp.id, link: `/pages/competition-payment.html?id=${comp.id}` },
+      }));
+      await manager.save(manager.create(AdminActivityLogEntity, {
+        adminUsername: user.username, actionType: approve ? 'LARGE_PRIZE_APPROVED' : 'LARGE_PRIZE_REJECTED', details: note,
+        metadata: { competitionId: comp.id, competitionName: comp.name, prize: comp.prize },
+      }));
+      return { id: comp.id, paymentStatus: comp.paymentStatus, largePrizeRequest: comp.largePrizeRequest };
+    });
+  }
+
+  async transactions(page = 1, type?: string) {
     const limit = 25;
-    const [items, total] = await this.db.getRepository(PaymentTransactionEntity).findAndCount({ order: { createdAt: 'DESC' }, take: limit, skip: (page - 1) * limit });
-    return { items, total, page, limit };
+    const safePage = Math.max(1, Number(page) || 1);
+    const where = type ? { type } : {};
+    const [items, total] = await this.db.getRepository(PaymentTransactionEntity).findAndCount({ where, order: { createdAt: 'DESC' }, take: limit, skip: (safePage - 1) * limit });
+    const ids = Array.from(new Set(items.map((t) => t.competitionId)));
+    const comps = ids.length ? await this.db.getRepository(CompetitionEntity).find({ where: { id: In(ids) }, select: { id: true, name: true } }) : [];
+    const names = new Map(comps.map((c) => [c.id, c.name]));
+    return { items: items.map((t) => ({ ...t, competitionName: names.get(t.competitionId) || null })), total, page: safePage, limit };
   }
 
   async review(id: string, username: string, note: string) {

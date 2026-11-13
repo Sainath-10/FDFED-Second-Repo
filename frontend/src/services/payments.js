@@ -16,6 +16,14 @@ export async function paymentRequest(path, method = 'GET', body) {
   return data;
 }
 
+/** Organiser: ask finance to end a started competition before its fixtures finish. */
+export const requestEarlyEnd = (id, reason) => paymentRequest(`/competitions/${encodeURIComponent(id)}/early-end-request`, 'POST', { reason });
+/** Finance: approve or reject an early-end request. */
+export const reviewEarlyEnd = (id, decision, note) => paymentRequest(`/competitions/${encodeURIComponent(id)}/early-end-review`, 'POST', { decision, note });
+/** Finance: prize pools above ₹10,00,000 waiting for approval. */
+export const largePrizeRequests = (status = 'pending') => paymentRequest(`/large-prize-requests?status=${encodeURIComponent(status)}`);
+export const reviewLargePrize = (id, decision, note) => paymentRequest(`/competitions/${encodeURIComponent(id)}/large-prize-review`, 'POST', { decision, note });
+
 let checkoutScript;
 export function loadCheckout() {
   if (window.Razorpay) return Promise.resolve();
@@ -44,6 +52,7 @@ export const formatDateTime = (value) => {
 export const TERMINAL_STATES = ['PRIZE_RELEASED', 'REFUND_ISSUED', 'CANCELLED', 'EXPIRED', 'ABANDONED', 'REVERSED'];
 
 const COMPETITION_STATES = {
+  AWAITING_FINANCE_APPROVAL: ['Awaiting finance approval', 'warn'],
   AWAITING_PLATFORM_FEE: ['Awaiting platform fee', 'warn'],
   OPEN_FOR_REGISTRATION: ['Open for registration', 'accent'],
   COMPLETED: ['Awaiting finance review', 'info'],
@@ -70,6 +79,7 @@ export const TX_TYPES = {
   REFUND: 'Refund',
   PAYOUT: 'Prize payout',
   REG_FEE_RELEASED: 'Revenue release',
+  PENALTY: 'Early-end penalty',
   PRIZE_RETURN: 'Prize pool return',
   CLAWBACK: 'Fraud clawback',
 };

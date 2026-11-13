@@ -47,14 +47,14 @@ export const LEVEL_META = {
     label: 'Blue',
     color: '#60a5fa',
     bg: 'rgba(96,165,250,0.14)',
-    limit: 300000,
+    limit: 1000000,
     description: 'New organiser — insufficient history to establish reliability.',
   },
   green: {
     label: 'Green',
     color: '#22c55e',
     bg: 'rgba(34,197,94,0.14)',
-    limit: 300000,
+    limit: 1000000,
     description: 'Established organiser with a reliable track record.',
   },
   orange: {
@@ -94,6 +94,7 @@ export const MODERATOR_ACTIONS = [
   { value: 'reputation_downgrade', label: 'Reputation Downgrade' },
   { value: 'creation_restriction', label: 'Temporary Competition Creation Restriction' },
   { value: 'competition_suspension', label: 'Competition Suspension' },
+  { value: 'competition_termination', label: 'End competition & refund players' },
   { value: 'no_action', label: 'No Action' },
 ];
 

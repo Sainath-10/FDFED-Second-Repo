@@ -1,86 +1,71 @@
 /**
  * NEXUS ESPORTS — Invite Player
  *
- * username + role +
- * message form, send invite, then redirect to the roster.
+ * Sends one invitation, picked from a live username search limited to players
+ * this team may invite, then returns to the invitations list.
  */
-import { useState } from 'react';
-import { Link, useNavigate, Navigate } from 'react-router-dom';
+import { useCallback, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useTeamContext } from '../../hooks/useTeamContext.js';
-import NexusTeamWorkflow from '../../services/teamWorkflow.js';
+import { TeamsAPI } from '../../services/api.js';
+import TeamHeader from '../../components/TeamHeader.jsx';
 import { withTeamContext } from '../../components/TeamTabs.jsx';
+import UsernameSearch from '../../components/UsernameSearch.jsx';
+import { Notice } from '../../components/ui.jsx';
+import { teamGate } from './TeamGate.jsx';
 import { showToast } from '../../lib/toast.js';
-import '../../styles/pages/team/invite-player.css';
-
-const ROLES = ['IGL', 'AWPer', 'Entry Fragger', 'Support', 'Rifler'];
 
 export default function InvitePlayer() {
-  const { ctx, checkingPermission, canManage, isEnded } = useTeamContext();
+  const t = useTeamContext();
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
-  const [role, setRole] = useState('');
-  const [message, setMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const teamId = t.team?.id;
 
-  if (checkingPermission) return <main className="main-content"><p role="status">Checking team permissions...</p></main>;
+  const searchAvailable = useCallback(async (query) => {
+    const res = await TeamsAPI.getAvailablePlayers(teamId, query);
+    if (!res.ok) throw new Error(res.error || 'Unable to search players.');
+    return (res.data || []).map((p) => ({ ...p, disabled: p.invited }));
+  }, [teamId]);
 
-  if (ctx && ctx.comp && ctx.team && (!canManage || isEnded)) {
-    return <Navigate to={`/pages/team/team-roster.html?compId=${encodeURIComponent(ctx.comp.id)}&teamId=${encodeURIComponent(ctx.team.id)}`} replace />;
-  }
+  const gate = teamGate(t, { captainOnly: true, title: 'Send invitation' });
+  if (gate) return gate;
 
-  const backHref = withTeamContext('/pages/team/add-players.html', ctx && ctx.context);
+  const { team, comp, rosterLocked, context } = t;
 
-  async function onSubmit(event) {
-    event.preventDefault();
-    const u = username.trim();
-    if (!u) { showToast('Please enter a username!', 'error'); return; }
-    if (!ctx || !ctx.comp || !ctx.team) { showToast('Team context not found.', 'error'); return; }
-
-    const result = await NexusTeamWorkflow.sendInvite({
-      compId: ctx.comp.id,
-      teamId: ctx.team.id,
-      toUsername: u,
-      roleOffered: role || 'Player',
-      message: message.trim(),
-    });
-    if (!result.ok) { showToast(result.error || 'Failed to send invite.', 'error'); return; }
-
-    showToast(`Invitation sent to ${u} successfully!`);
-    setTimeout(() => navigate(`/pages/team/team-roster.html?compId=${encodeURIComponent(ctx.comp.id)}&teamId=${encodeURIComponent(ctx.team.id)}`), 1400);
+  async function send(name) {
+    const clean = String(name || '').trim().replace(/^@/, '');
+    if (!clean) { showToast('Choose a player from the list.', 'error'); return; }
+    setSending(true);
+    const res = await TeamsAPI.createInvite(team.id, comp.id, clean);
+    setSending(false);
+    if (!res.ok) { showToast(res.error || 'Unable to send the invitation.', 'error'); return; }
+    showToast(`Invitation sent to @${clean}.`);
+    navigate(withTeamContext('/pages/team/invitations-sent.html', context));
   }
 
   return (
     <main className="main-content">
-      <Link to={backHref} className="back-btn-alt">← Back to Add Players</Link>
-      <h1 className="page-title">Send Invitation</h1>
-      <p className="page-subtitle">Invite a specific player to join {ctx && ctx.team ? ctx.team.name : 'your team'}.</p>
+      <TeamHeader t={t} active="add-players" />
+      {rosterLocked && <Notice tone="info">The roster is locked because the competition has started or ended.</Notice>}
 
-      <div className="form-container-sm">
-        <div className="form-card">
-          <form id="invite-form" className="form-stack" onSubmit={onSubmit}>
-            <div className="form-group">
-              <label className="form-label">Player Username</label>
-              <input className="form-input" type="text" id="invite-username" placeholder="Enter username exactly as registered…" required value={username} onChange={(e) => setUsername(e.target.value)} />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Role Offered</label>
-              <select className="form-select" value={role} onChange={(e) => setRole(e.target.value)}>
-                <option value="">Select role…</option>
-                {ROLES.map((r) => <option key={r}>{r}</option>)}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Personal Message (optional)</label>
-              <textarea className="form-textarea form-textarea-sm" placeholder="Add a personal note to your invitation…" value={message} onChange={(e) => setMessage(e.target.value)} />
-            </div>
-            <div className="btn-row">
-              <button type="submit" className="btn-primary btn-submit-full">Send Invitation</button>
-              <button type="button" className="btn-outline btn-cancel-alt" onClick={() => window.history.back()}>Cancel</button>
-            </div>
-          </form>
+      <section className="td-panel" style={{ maxWidth: 560 }}>
+        <h2 className="td-section-title">Send an invitation</h2>
+        <p className="td-section-sub" style={{ marginBottom: 14 }}>The player receives a notification and accepts or declines it there.</p>
+        <UsernameSearch
+          id="invite-username"
+          value={username}
+          onChange={setUsername}
+          onPick={send}
+          search={searchAvailable}
+          disabled={rosterLocked || sending}
+          autoFocus
+          renderHint={(row) => (row.invited ? 'Already invited' : 'Invite')}
+        />
+        <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+          <Link className="td-btn" to={withTeamContext('/pages/team/add-players.html', context)}>Back to Add players</Link>
         </div>
-      </div>
+      </section>
     </main>
   );
 }
-
-

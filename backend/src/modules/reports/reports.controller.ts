@@ -24,6 +24,7 @@ import {
   ModeratorDecisionDto,
   PlayerDecisionDto,
   PriorityDto,
+  UpliftDto,
 } from './dto/report.dto';
 
 @ApiTags('Reports')
@@ -146,6 +147,26 @@ export class ReportsController {
     return this.reports.getConfigValues();
   }
 
+  @Get('competition/:competitionId')
+  @ApiOperation({ summary: 'Reports in one competition (its organisers and moderators)' })
+  async forCompetition(@Param('competitionId') competitionId: string, @Request() req: any) {
+    return this.reports.forCompetition(competitionId, req.user);
+  }
+
+  @Get('removal/:competitionId')
+  @ApiOperation({ summary: 'Whether I was removed from this competition' })
+  async removalStatus(@Param('competitionId') competitionId: string, @Request() req: any) {
+    return this.reports.removalStatus(competitionId, req.user);
+  }
+
+  @Get('moderator-activity')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.COMMUNITY_MODERATOR, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Reports a Community Moderator closed (?username= for Super Admins)' })
+  async moderatorActivity(@Query('username') username: string, @Request() req: any) {
+    return this.reports.moderatorActivity(username, req.user);
+  }
+
   // ─── Single report ──────────────────────────────────────────────────────────
   @Get(':id')
   @ApiOperation({ summary: 'Report details (reviewer, participants only)' })
@@ -189,6 +210,34 @@ export class ReportsController {
   @ApiOperation({ summary: 'Community Moderator finding and action against an organiser' })
   async actOnOrganiser(@Param('id') id: string, @Body() dto: ModeratorDecisionDto, @Request() req: any) {
     return this.reports.actOnOrganiser(id, dto, req.user);
+  }
+
+  @Post(':id/appeal')
+  @ApiOperation({ summary: 'Organiser appeals a restrictive decision (once per report)' })
+  async appeal(@Param('id') id: string, @Request() req: any) {
+    return this.reports.appeal(id, req.user);
+  }
+
+  @Post(':id/uplift')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.COMMUNITY_MODERATOR)
+  @ApiOperation({ summary: 'Community Moderator reverses the current decision and reopens the report' })
+  async uplift(@Param('id') id: string, @Body() dto: UpliftDto, @Request() req: any) {
+    return this.reports.uplift(id, dto, req.user);
+  }
+
+  @Post(':id/appeal-room')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.COMMUNITY_MODERATOR)
+  @ApiOperation({ summary: 'Moderator opens the report discussion room' })
+  async appealRoom(@Param('id') id: string, @Request() req: any) {
+    return this.reports.appealRoom(id, req.user);
+  }
+
+  @Post(':id/organiser-appeal-room')
+  @ApiOperation({ summary: 'Reporter or organiser opens the report discussion room' })
+  async organiserAppealRoom(@Param('id') id: string, @Request() req: any) {
+    return this.reports.organiserAppealRoom(id, req.user);
   }
 
   @Get(':id/investigation')

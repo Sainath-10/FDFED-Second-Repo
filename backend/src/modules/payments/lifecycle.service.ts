@@ -13,6 +13,7 @@ import { TeamJoinRequestEntity as JoinRequest } from '../../entities/team-join-r
 import { TeamInviteEntity as Invite } from '../../entities/team-invite.entity';
 import { NotificationEntity as Notification } from '../../entities/notification.entity';
 import { AdminActivityLogEntity as Audit } from '../../entities/admin-activity-log.entity';
+import { RevenueTransactionEntity as Revenue } from '../../entities/revenue-transaction.entity';
 import { UserRole, DisputeStatus } from '../../common/interfaces';
 import { TERMINAL_PAYMENT_STATES, TRUST_PENALTY_CANCEL, TRUST_PENALTY_FRAUD, mailSubject, prizeDeadline, allocatePrizes, standingsGroups, DEFAULT_MIN_ORGANIZER_TRUST } from './payment.rules';
 import { CompetitionRemovalEntity } from '../../entities/competition-removal.entity';
@@ -20,6 +21,9 @@ import { isEligiblePlayerAccount } from '../../common/validation/player-eligibil
 import { computeStandings } from '../../common/tournament/tournament.utils';
 
 const PLAYOFF_ROUNDS = ['Qualifier 1', 'Eliminator', 'Qualifier 2', 'Final'];
+/** Share of the deposited prize pool an organiser forfeits for ending a started competition early. */
+export const EARLY_END_PENALTY_PERCENT = 10;
+const organizerNames = (c: Competition) => [c.createdBy, ...(c.organizers || []), ...(c.pendingOrganizers || [])].map(name => String(name || '').toLowerCase());
 
 export const managed = (c: any) => !!c?.paymentStatus && c.paymentStatus !== 'LEGACY';
 const terminal = (c: Competition) => TERMINAL_PAYMENT_STATES.includes(c.paymentStatus);
@@ -111,10 +115,12 @@ export class LifecycleService implements OnModuleInit, OnModuleDestroy {
     tx.gatewayRefId = `mock_pay_${tx.id}`;
     return m.save(tx);
   }
-  private async verified(m: EntityManager, username: string, competitionId: string) {
+  private async verified(m: EntityManager, username: string, c: Competition) {
+    const competitionId = c.id;
     const user = await m.findOneBy(User, { username });
-    if (!user || user.banned) throw new ForbiddenException('An active, non-banned account is required.');
-    if (!isEligiblePlayerAccount(user)) throw new ForbiddenException('Staff accounts cannot join a competition team.');
+    if (!user || user.banned) throw new ForbiddenException(`@${username} needs an active, non-banned account.`);
+    if (!isEligiblePlayerAccount(user)) throw new ForbiddenException(`@${username} is a staff account and cannot join a competition team.`);
+    if (organizerNames(c).includes(username.toLowerCase())) throw new ForbiddenException(`@${username} organises this competition and cannot play in it.`);
     const removals = await m.find(CompetitionRemovalEntity, { where: { competitionId } });
     if (removals.some(removal => removal.username.toLowerCase() === username.toLowerCase())) {
       throw new ForbiddenException('You have been removed from this competition.');
@@ -166,7 +172,7 @@ export class LifecycleService implements OnModuleInit, OnModuleDestroy {
   async registerTeam(dto: any, user: any) {
     return this.locked(dto.competitionId, async (m, c) => {
       this.open(c);
-      const payer = await this.verified(m, user.username, c.id);
+      const payer = await this.verified(m, user.username, c);
       if ([c.createdBy, ...c.organizers].includes(user.username)) throw new BadRequestException('Organizers cannot register in their own competition.');
       if (c.visibility === 'private' && String(dto.joinCode || '').toUpperCase() !== c.joinCode?.toUpperCase()) throw new BadRequestException('Invalid join code');
       const teams = await m.find(Team, { where: { competitionId: c.id } });
@@ -178,7 +184,7 @@ export class LifecycleService implements OnModuleInit, OnModuleDestroy {
       if (c.feeType === 'per_player' && members.length > 1) throw new BadRequestException('Each player must accept an invitation or pay their own join request.');
       if (c.maxPlayersPerTeam && members.length > c.maxPlayersPerTeam) throw new BadRequestException('Team is full');
       for (const name of members) {
-        await this.verified(m, name, c.id);
+        await this.verified(m, name, c);
         if (current.some(t => t.memberUsernames.includes(name))) throw new BadRequestException(`${name} is already in a team.`);
       }
       if (String(dto.name || '').trim().length < 3) throw new BadRequestException('Team name must be at least 3 characters.');
@@ -195,7 +201,7 @@ export class LifecycleService implements OnModuleInit, OnModuleDestroy {
     if (!reference) throw new NotFoundException('Request not found');
     return this.locked(reference.competitionId, async (m, c) => {
       this.open(c);
-      await this.verified(m, user.username, c.id);
+      await this.verified(m, user.username, c);
       const request: any = invitation ? await m.findOneBy(Invite, { id: requestId }) : await m.findOneBy(JoinRequest, { id: requestId });
       if ((invitation ? request.toUsername : request.fromUsername) !== user.username) throw new ForbiddenException('This request belongs to another player.');
       const team = await m.findOneBy(Team, { id: request.teamId });
@@ -250,6 +256,43 @@ export class LifecycleService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * A player leaves a team, or the captain removes them. Before the competition
+   * starts, a fee the player paid themselves (per-player competitions) is
+   * refunded from escrow in the same transaction. A player may still unregister
+   * after the start (`afterStart`), but then nothing is refunded and the fee is
+   * settled with the competition like every other registration.
+   */
+  async releaseMember(teamId: string, username: string, actor: any, reason: string, afterStart = false) {
+    const existing = await this.db.getRepository(Team).findOneBy({ id: teamId });
+    if (!existing) throw new NotFoundException('Team not found');
+    return this.locked(existing.competitionId, async (m, c) => {
+      const team = await m.findOneBy(Team, { id: teamId });
+      if (!activeTeam(team)) throw new BadRequestException('This team is no longer active.');
+      const member = (team.memberUsernames || []).find(name => name.toLowerCase() === username.toLowerCase());
+      if (!member) throw new NotFoundException(`@${username} is not on this team.`);
+      if (member.toLowerCase() === String(team.leaderId).toLowerCase()) throw new BadRequestException('The captain cannot leave; disband the team instead.');
+      if (terminal(c) || c.paymentStatus === 'COMPLETED' || c.status === 'completed') {
+        throw new BadRequestException('This competition has ended: the roster is final.');
+      }
+      const started = +new Date(c.startDate) <= Date.now();
+      if (started && !afterStart) throw new BadRequestException('The competition has started: rosters are locked.');
+      if (!started) {
+        for (const tx of await m.find(Transaction, { where: { competitionId: c.id, type: 'REGISTRATION', teamId, subjectKey: member } })) {
+          await this.refund(m, c, tx, `You left team ${team.name}: ${reason}`, 'registration-refunded');
+        }
+      } else {
+        await this.notify(m, c, member, 'unregistered-no-refund', teamId,
+          `You unregistered from team ${team.name} after "${c.name}" started.\nReason: ${reason}.\n\nRegistration fees are refunded only before a competition starts, so no refund was issued.`);
+      }
+      team.memberUsernames = team.memberUsernames.filter(name => name !== member);
+      await m.save(team);
+      const self = member.toLowerCase() === String(actor?.username || '').toLowerCase();
+      await this.audit(m, c, actor?.username || 'system', self ? 'TEAM_MEMBER_LEFT' : 'TEAM_MEMBER_REMOVED', `@${member} ${self ? 'left' : 'removed from'} ${team.name}: ${reason}`);
+      return team;
+    });
+  }
+
+  /**
    * Finance must be neutral: a moderator who organizes or plays in a competition
    * cannot settle, hold, cancel, compensate or reverse it.
    */
@@ -298,6 +341,26 @@ export class LifecycleService implements OnModuleInit, OnModuleDestroy {
   }
 
   async cancel(id: string, user: any, reason: string) {
+    // Competitions created before payments existed have no escrow: cancelling only closes them.
+    const existing = await this.db.getRepository(Competition).findOneBy({ id });
+    if (existing && !managed(existing)) {
+      if (!financeRole(user)) this.owner(existing, user);
+      if (['cancelled', 'completed'].includes(String(existing.status))) return { status: existing.status, duplicate: true };
+      existing.status = 'cancelled'; existing.abandonedReason = reason; existing.endedAt = new Date();
+      await this.db.getRepository(Competition).save(existing);
+      await this.db.getRepository(Audit).save(this.db.getRepository(Audit).create({
+        adminUsername: user.username, actionType: 'COMPETITION_CANCELLED', details: reason, metadata: { competitionId: id, competitionName: existing.name },
+      }));
+      const teams = await this.db.getRepository(Team).find({ where: { competitionId: id } });
+      for (const name of new Set(teams.filter(activeTeam).flatMap(t => t.memberUsernames))) {
+        await this.db.getRepository(Notification).save(this.db.getRepository(Notification).create({
+          toUsername: name, type: 'competition-cancelled-player', status: 'info',
+          title: `"${existing.name}" was cancelled`, body: `Reason: ${reason}. No fees were charged for this competition.`,
+          meta: { compId: id },
+        }));
+      }
+      return { status: 'cancelled' };
+    }
     return this.locked(id, async (m, c) => {
       const finance = this.actingAsFinance(c, user);
       if (finance) await this.assertNeutral(m, c, user);
@@ -306,11 +369,15 @@ export class LifecycleService implements OnModuleInit, OnModuleDestroy {
       if (c.paymentStatus === 'COMPLETED' && !finance) {
         throw new ForbiddenException('Results are final. Only a finance moderator can cancel a completed competition.');
       }
+      if (!finance && c.organizerPaid && +new Date(c.startDate) <= Date.now()) {
+        throw new ForbiddenException('The competition has started. Use "End competition": with fixtures still to play, you give a reason and a finance moderator reviews it.');
+      }
 
       // Unpaid draft: nothing was charged, so nothing is forfeited or penalised.
       if (!c.organizerPaid) {
         const pending = await m.findOneBy(Transaction, { competitionId: id, type: 'PLATFORM_FEE' });
         if (pending && pending.status === 'PENDING') { pending.status = 'FAILED'; await m.save(pending); }
+        if (c.largePrizeRequest?.status === 'pending') c.largePrizeRequest = { ...c.largePrizeRequest, status: 'withdrawn', decidedAt: new Date().toISOString() };
         c.paymentStatus = 'CANCELLED'; c.status = 'cancelled'; c.abandonedReason = reason; c.endedAt = new Date();
         await m.save(c);
         await this.audit(m, c, user.username, 'DRAFT_CANCELLED', reason);
@@ -336,6 +403,196 @@ export class LifecycleService implements OnModuleInit, OnModuleDestroy {
       await this.audit(m, c, user.username, 'COMPETITION_CANCELLED', reason);
       return { status: c.paymentStatus, escrow: e };
     });
+  }
+
+  /**
+   * Ends a started competition early: every registration still in escrow is
+   * refunded, the organiser forfeits a share of the deposited prize pool as a
+   * penalty and gets the rest back, and their trust score drops.
+   */
+  private async terminate(m: EntityManager, c: Competition, actor: string, reason: string, cause: string) {
+    const exposed = (await m.find(Transaction, { where: { competitionId: c.id, type: 'REGISTRATION' } })).filter(tx => tx.status === 'ESCROWED');
+    for (const tx of exposed) await this.refund(m, c, tx, reason);
+    const e = await this.escrow(m, c);
+    const prizeRow = await m.findOneBy(Transaction, { competitionId: c.id, type: 'PRIZE_POOL' });
+    const deposited = prizeRow && prizeRow.status === 'ESCROWED' ? Math.min(prizeRow.amountMinor, e.balanceMinor) : 0;
+    const penalty = Math.round(deposited * EARLY_END_PENALTY_PERCENT / 100);
+    if (penalty > 0) {
+      await this.entry(m, c, 'PENALTY', 'early-end', c.createdBy, penalty, 'OUT', undefined, 'CONFIRMED');
+      await m.save(m.create(Revenue, {
+        competitionId: c.id, competitionName: c.name, organizerName: c.createdBy,
+        grossAmount: penalty / 100, platformFee: penalty / 100, netPayout: 0, status: 'PENALTY', date: new Date(),
+      }));
+    }
+    if (deposited - penalty > 0) await this.entry(m, c, 'PRIZE_RETURN', 'early-end', c.createdBy, deposited - penalty, 'OUT');
+    if (prizeRow && prizeRow.status === 'ESCROWED') { prizeRow.status = 'REFUNDED'; await m.save(prizeRow); }
+    e.balanceMinor -= deposited; e.refundsMinor += deposited - penalty; e.payoutsMinor += penalty;
+    e.status = e.balanceMinor > 0 ? 'HELD' : 'REFUNDED';
+    await m.save(e);
+    c.paymentStatus = 'REFUND_ISSUED'; c.status = 'cancelled'; c.abandonedReason = `Ended early: ${reason}`; c.endedAt = new Date();
+    if (c.earlyEndRequest?.status === 'pending') c.earlyEndRequest = { ...c.earlyEndRequest, status: 'approved', decidedBy: actor, decidedAt: new Date().toISOString() };
+    await m.save(c);
+    await this.penalize(m, c.createdBy, TRUST_PENALTY_CANCEL);
+    await this.notify(m, c, c.createdBy, 'competition-ended-early', '',
+      `"${c.name}" was ended before all of its fixtures were played (${cause}).\nReason: ${reason}.\n\nEvery registration fee still in escrow (${exposed.length}) was refunded to the players.\nPenalty: ${inr(penalty)} (${EARLY_END_PENALTY_PERCENT}% of the ${inr(deposited)} prize pool you deposited).\nReturned to you: ${inr(deposited - penalty)}.\nYour organizer trust score was reduced by ${TRUST_PENALTY_CANCEL}.`);
+    await this.audit(m, c, actor, 'COMPETITION_ENDED_EARLY', `${cause}. ${reason}. Penalty ${inr(penalty)}; ${exposed.length} registration(s) refunded.`);
+    return { status: c.paymentStatus, refunded: exposed.length, penaltyMinor: penalty, returnedMinor: deposited - penalty };
+  }
+
+  /** Legacy competitions have no escrow: ending early only closes them and tells the players. */
+  private async terminateLegacy(c: Competition, actor: string, reason: string) {
+    c.status = 'cancelled'; c.abandonedReason = `Ended early: ${reason}`; c.endedAt = new Date();
+    if (c.earlyEndRequest?.status === 'pending') c.earlyEndRequest = { ...c.earlyEndRequest, status: 'approved', decidedBy: actor, decidedAt: new Date().toISOString() };
+    await this.db.getRepository(Competition).save(c);
+    const teams = await this.db.getRepository(Team).find({ where: { competitionId: c.id } });
+    for (const name of new Set(teams.filter(activeTeam).flatMap(t => t.memberUsernames))) {
+      await this.db.getRepository(Notification).save(this.db.getRepository(Notification).create({
+        toUsername: name, type: 'competition-cancelled-player', status: 'info',
+        title: `"${c.name}" was ended early`, body: `Reason: ${reason}. No fees were charged for this competition.`, meta: { compId: c.id },
+      }));
+    }
+    await this.db.getRepository(Audit).save(this.db.getRepository(Audit).create({
+      adminUsername: actor, actionType: 'COMPETITION_ENDED_EARLY', details: reason, metadata: { competitionId: c.id, competitionName: c.name },
+    }));
+    return { status: 'cancelled', refunded: 0, penaltyMinor: 0, returnedMinor: 0 };
+  }
+
+  private assertCanEndEarly(c: Competition) {
+    if (['completed', 'cancelled'].includes(String(c.status)) || terminal(c) || c.paymentStatus === 'COMPLETED') {
+      throw new BadRequestException('This competition has already ended.');
+    }
+    if (managed(c) && !c.organizerPaid) throw new BadRequestException('This competition was never published. Cancel the draft instead.');
+    if (+new Date(c.startDate) > Date.now()) throw new BadRequestException('The competition has not started yet. Cancel it instead: every player is refunded.');
+  }
+
+  private async financeStaff(m: EntityManager) {
+    return m.find(User, { where: { role: UserRole.FINANCE_MODERATOR as any, banned: false } });
+  }
+
+  /**
+   * The organiser asks to end a started competition before every fixture is
+   * played. Nothing changes until a finance moderator approves it.
+   */
+  async requestEarlyEnd(id: string, user: any, reason: string) {
+    const text = String(reason || '').trim();
+    if (text.length < 20) throw new BadRequestException('Explain in at least 20 characters why the competition must end early.');
+    const c = await this.db.getRepository(Competition).findOneBy({ id });
+    if (!c) throw new NotFoundException('Competition not found');
+    this.owner(c, user);
+    this.assertCanEndEarly(c);
+    if (c.earlyEndRequest?.status === 'pending') throw new BadRequestException('A request to end this competition early is already waiting for finance.');
+    const fixtures = await this.db.getRepository(Match).find({ where: { competitionId: id } });
+    if (fixtures.length && fixtures.every(x => ['completed', 'bye'].includes(x.status))) {
+      throw new BadRequestException('Every fixture is complete. End the competition normally instead.');
+    }
+    c.earlyEndRequest = {
+      status: 'pending', reason: text, requestedBy: user.username, requestedAt: new Date().toISOString(),
+      fixturesPlayed: fixtures.filter(x => x.status === 'completed').length, fixturesTotal: fixtures.filter(x => x.status !== 'bye').length,
+    };
+    await this.db.getRepository(Competition).save(c);
+    const m = this.db.manager;
+    for (const staff of await this.financeStaff(m)) {
+      await m.save(m.create(Notification, {
+        toUsername: staff.username, type: 'early-end-request', status: 'pending', title: `Early end requested: ${c.name}`,
+        body: `@${user.username} asked to end "${c.name}" before all fixtures were played. Reason: ${text}`,
+        meta: { compId: c.id, link: `/pages/admin/finance.html?tab=requests&id=${c.id}` },
+      }));
+    }
+    await m.save(m.create(Audit, { adminUsername: user.username, actionType: 'EARLY_END_REQUESTED', details: text, metadata: { competitionId: c.id, competitionName: c.name } }));
+    return c.earlyEndRequest;
+  }
+
+  /** Finance approves (refunds + penalty) or rejects an organiser's early-end request. */
+  async reviewEarlyEnd(id: string, user: any, approve: boolean, note: string) {
+    if (!financeRole(user)) throw new ForbiddenException('Finance moderator access required');
+    const existing = await this.db.getRepository(Competition).findOneBy({ id });
+    if (!existing) throw new NotFoundException('Competition not found');
+    if (existing.earlyEndRequest?.status !== 'pending') throw new BadRequestException('There is no pending request to end this competition early.');
+    const decide = async (m: EntityManager, c: Competition) => {
+      const req = c.earlyEndRequest;
+      if (!approve) {
+        c.earlyEndRequest = { ...req, status: 'rejected', decidedBy: user.username, decidedAt: new Date().toISOString(), note };
+        await m.save(c);
+        await m.save(m.create(Notification, {
+          toUsername: req.requestedBy || c.createdBy, type: 'early-end-rejected', status: 'rejected', title: `Early end rejected: ${c.name}`,
+          body: `A finance moderator rejected your request to end "${c.name}" early. Note: ${note}. Finish the remaining fixtures, then end it normally.`,
+          meta: { compId: c.id },
+        }));
+        await m.save(m.create(Audit, { adminUsername: user.username, actionType: 'EARLY_END_REJECTED', details: note, metadata: { competitionId: c.id, competitionName: c.name } }));
+        return { status: 'rejected' };
+      }
+      this.assertCanEndEarly(c);
+      return null;
+    };
+    if (!managed(existing)) {
+      if (!approve) return decide(this.db.manager, existing);
+      this.assertCanEndEarly(existing);
+      return this.terminateLegacy(existing, user.username, existing.earlyEndRequest.reason);
+    }
+    return this.locked(id, async (m, c) => {
+      await this.assertNeutral(m, c, user);
+      if (c.earlyEndRequest?.status !== 'pending') throw new BadRequestException('There is no pending request to end this competition early.');
+      const rejected = await decide(m, c);
+      if (rejected) return rejected;
+      c.earlyEndRequest = { ...c.earlyEndRequest, note };
+      return this.terminate(m, c, user.username, c.earlyEndRequest.reason, `approved by finance moderator @${user.username}`);
+    });
+  }
+
+  /**
+   * A Community Moderator ends a competition after a substantiated report against
+   * its organiser: the same refunds and penalty as an approved early end.
+   */
+  async terminateForMisconduct(id: string, moderator: any, reason: string) {
+    const existing = await this.db.getRepository(Competition).findOneBy({ id });
+    if (!existing) throw new NotFoundException('Competition not found');
+    if (organizerNames(existing).includes(String(moderator?.username || '').toLowerCase())) {
+      throw new ForbiddenException('Conflict of interest: you organise this competition.');
+    }
+    if (['cancelled'].includes(String(existing.status)) || terminal(existing)) throw new BadRequestException('This competition has already ended or been settled.');
+    if (managed(existing) && !existing.organizerPaid) throw new BadRequestException('This competition was never published.');
+    if (!managed(existing)) return this.terminateLegacy(existing, moderator.username, reason);
+    return this.locked(id, async (m, c) => {
+      const teams = await m.find(Team, { where: { competitionId: c.id } });
+      if (teams.some(t => (t.memberUsernames || []).includes(moderator.username))) throw new ForbiddenException('Conflict of interest: you play in this competition.');
+      return this.terminate(m, c, moderator.username, reason, `ended by Community Moderator @${moderator.username} after a report against the organiser`);
+    });
+  }
+
+  /**
+   * Final placings for a finished competition: ranked groups of teams with their
+   * members and the prize each place pays. Read-only and public.
+   */
+  async results(id: string) {
+    const c = await this.db.getRepository(Competition).findOneBy({ id });
+    if (!c) throw new NotFoundException('Competition not found');
+    const finished = c.status === 'completed' || ['COMPLETED', 'PRIZE_RELEASED', 'REVERSED'].includes(c.paymentStatus);
+    if (!finished) return { available: false, reason: c.status === 'cancelled' ? 'cancelled' : 'in_progress', status: c.status, paymentStatus: c.paymentStatus };
+    try {
+      const { groups, teams } = await this.rankGroups(this.db.manager, c);
+      const byId = new Map(teams.map(t => [t.id, t]));
+      const distribution = c.prizeDistributionMinor?.length ? c.prizeDistributionMinor : (Number(c.prize) > 0 ? [minor(c.prize)] : []);
+      const { allocations } = allocatePrizes(distribution, groups);
+      const prizeBy = new Map(allocations.map(a => [a.teamId, a.amount]));
+      let position = 1;
+      const places = groups.map(group => {
+        const place = {
+          position, tied: group.length > 1,
+          teams: group.map(teamId => {
+            const team = byId.get(teamId);
+            return { id: teamId, name: team?.name || 'Team', captain: team?.leaderId || null, members: team?.memberUsernames || [], prizeMinor: prizeBy.get(teamId) || 0 };
+          }),
+        };
+        position += group.length;
+        return place;
+      });
+      return {
+        available: true, status: c.status, paymentStatus: c.paymentStatus, settled: c.paymentStatus === 'PRIZE_RELEASED',
+        endedAt: c.endedAt, disputeWindowEndsAt: this.disputeWindowEndsAt(c), prizeMinor: distribution.reduce((a, b) => a + b, 0), places,
+      };
+    } catch (error) {
+      return { available: false, reason: 'unranked', detail: error.message, status: c.status, paymentStatus: c.paymentStatus };
+    }
   }
 
   private isFinal(x: Match) {
@@ -413,6 +670,10 @@ export class LifecycleService implements OnModuleInit, OnModuleDestroy {
       if (terminal(c) || !c.organizerPaid) throw new BadRequestException('This competition can no longer be ended.');
       if (!c.prizePoolPaid) throw new HttpException('Pay the prize pool to end this competition.', HttpStatus.PAYMENT_REQUIRED);
       if (+new Date(c.startDate) > Date.now()) throw new BadRequestException('Competition has not started.');
+      const fixtures = await m.find(Match, { where: { competitionId: c.id } });
+      if (!fixtures.length || fixtures.some(x => !['completed', 'bye'].includes(x.status))) {
+        throw new BadRequestException('Some fixtures are still to be played. To end the competition early, give a reason: a finance moderator reviews it, players are refunded, and you forfeit 10% of the prize pool.');
+      }
       await this.rankGroups(m, c);
       c.status = 'completed'; c.paymentStatus = 'COMPLETED'; c.endedAt = new Date();
       await m.save(c);
@@ -563,6 +824,9 @@ export class LifecycleService implements OnModuleInit, OnModuleDestroy {
       }
       e.payoutsMinor += total; e.balanceMinor = 0; e.status = 'REFUNDED';
       await m.save(e);
+      // The deposited prize pool has now been paid out, so its ledger row must not look unpaid.
+      const prizeRow = await m.findOneBy(Transaction, { competitionId: id, type: 'PRIZE_POOL' });
+      if (prizeRow && prizeRow.status === 'ESCROWED') { prizeRow.status = 'RELEASED'; await m.save(prizeRow); }
       await this.notify(m, c, c.createdBy, 'held-prize-distributed', '',
         `Finance reviewed the prize pool you deposited for the cancelled competition "${c.name}".\n${inr(total)} was distributed to ${payers.length} affected player(s) as compensation.\nNote: ${reason}`);
       await this.audit(m, c, user.username, 'HELD_PRIZE_DISTRIBUTED', reason);
@@ -647,7 +911,7 @@ export class LifecycleService implements OnModuleInit, OnModuleDestroy {
     const finance = financeRole(user);
     const transactions = await this.db.getRepository(Transaction).find({ where: owner || finance ? { competitionId: id } : { competitionId: id, userUsername: user.username }, order: { createdAt: 'DESC' } });
     const registrations = owner || finance ? transactions.filter(t => t.type === 'REGISTRATION') : [];
-    const organizer = await this.db.getRepository(User).findOne({ where: { username: c.createdBy }, select: { username: true, organizerTrustScore: true } });
+    const organizer = await this.db.getRepository(User).findOne({ where: { username: c.createdBy }, select: { username: true, organizerTrustScore: true, email: true } });
     const openDisputes = finance ? await this.db.getRepository(Dispute).count({ where: { competitionId: id } }) - await this.db.getRepository(Dispute).count({ where: { competitionId: id, status: DisputeStatus.RESOLVED } }) : 0;
     const started = +new Date(c.startDate) <= Date.now();
     return {
@@ -660,9 +924,13 @@ export class LifecycleService implements OnModuleInit, OnModuleDestroy {
       financeHold: c.financeHold, owner, canModerate: finance,
       canEnd: c.organizerPaid && c.prizePoolPaid && started && !terminal(c) && c.paymentStatus !== 'COMPLETED',
       started, openDisputes, organizer: c.createdBy, organizerTrustScore: organizer?.organizerTrustScore ?? 100,
+      organizerEmail: finance ? organizer?.email || null : undefined, coOrganizers: (c.organizers || []).filter((o) => o !== c.createdBy),
       totalRegistrations: registrations.length,
       payoutPreview: (owner || finance) && managed(c) && c.organizerPaid && started && ['OPEN_FOR_REGISTRATION', 'COMPLETED'].includes(c.paymentStatus) ? await this.payoutPreview(c) : null,
       prizeDistributionMinor: c.prizeDistributionMinor,
+      earlyEndRequest: owner || finance ? c.earlyEndRequest || null : undefined,
+      largePrizeRequest: owner || finance ? c.largePrizeRequest || null : undefined,
+      earlyEndPenaltyPercent: EARLY_END_PENALTY_PERCENT,
       escrow: await this.db.getRepository(Escrow).findOneBy({ competitionId: id }),
       transactions,
     };
@@ -685,7 +953,7 @@ export class LifecycleService implements OnModuleInit, OnModuleDestroy {
   async competitions() {
     const items = await this.db.getRepository(Competition).createQueryBuilder('c')
       .where('c.paymentStatus != :legacy', { legacy: 'LEGACY' })
-      .select(['c.id', 'c.name', 'c.createdBy', 'c.paymentStatus', 'c.status', 'c.organizerPaid', 'c.prizePoolPaid', 'c.financeHold', 'c.startDate', 'c.endDate', 'c.prize', 'c.platformFee', 'c.feeType', 'c.entryFeeAmount', 'c.endedAt', 'c.abandonedReason', 'c.createdAt'])
+      .select(['c.id', 'c.name', 'c.createdBy', 'c.paymentStatus', 'c.status', 'c.organizerPaid', 'c.prizePoolPaid', 'c.financeHold', 'c.startDate', 'c.endDate', 'c.prize', 'c.platformFee', 'c.feeType', 'c.entryFeeAmount', 'c.endedAt', 'c.abandonedReason', 'c.createdAt', 'c.earlyEndRequest', 'c.largePrizeRequest'])
       .orderBy('c.createdAt', 'DESC').take(200).getMany();
     const ids = items.map(c => c.id);
     const owners = Array.from(new Set(items.map(c => c.createdBy)));
@@ -733,7 +1001,8 @@ export class LifecycleService implements OnModuleInit, OnModuleDestroy {
           if (terminal(c)) return;
           const now = Date.now();
           const expiry = Number(this.config.get('DRAFT_EXPIRY_HOURS', 24)) * 3600000;
-          if (c.paymentStatus === 'AWAITING_PLATFORM_FEE' && now - +new Date(c.createdAt) > expiry) {
+          const draftSince = +new Date(c.largePrizeRequest?.decidedAt || c.createdAt);
+          if (c.paymentStatus === 'AWAITING_PLATFORM_FEE' && now - draftSince > expiry) {
             const pending = await m.find(Transaction, { where: { competitionId: c.id } });
             if (pending.some(t => t.gatewayOrderId && !t.gatewayOrderId.startsWith('mock_'))) return;
             c.paymentStatus = 'EXPIRED'; c.status = 'cancelled';

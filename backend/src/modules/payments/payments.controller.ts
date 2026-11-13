@@ -1,6 +1,6 @@
 import { LifecycleService } from './lifecycle.service';
 import { Body, Controller, Get, Headers, Param, ParseUUIDPipe, Post, Query, Req, UseGuards } from '@nestjs/common';
-import { IsBoolean, IsIn, IsInt, IsNotEmpty, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/decorators/roles.guard';
@@ -10,6 +10,7 @@ import { PaymentsService } from './payments.service';
 
 class TransactionQuery {
   @Type(() => Number) @IsInt() @Min(1) @Max(100000) page: number = 1;
+  @IsOptional() @IsIn(['PLATFORM_FEE', 'PRIZE_POOL', 'REGISTRATION', 'REFUND', 'PAYOUT', 'REG_FEE_RELEASED', 'PRIZE_RETURN', 'CLAWBACK', 'PENALTY']) type?: string;
 }
 class MockPaymentDto {
   @IsIn(['success', 'failed']) outcome: 'success' | 'failed';
@@ -27,6 +28,15 @@ class TrustDto {
 class ReviewDto {
   @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
   @IsString() @IsNotEmpty() @MaxLength(2000) note: string;
+}
+class EarlyEndRequestDto {
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @IsString() @MinLength(20, { message: 'Explain in at least 20 characters why the competition must end early.' }) @MaxLength(2000) reason: string;
+}
+class FinanceDecisionDto {
+  @IsIn(['approve', 'reject']) decision: 'approve' | 'reject';
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @IsString() @MinLength(5, { message: 'Add a note of at least 5 characters for the organiser.' }) @MaxLength(2000) note: string;
 }
 @Controller('payments')
 export class PaymentsController {
@@ -46,7 +56,7 @@ export class PaymentsController {
 
   @Get('transactions') @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.FINANCE_MODERATOR, UserRole.ADMIN, UserRole.SUPER_ADMIN)
-  transactions(@Query() query: TransactionQuery) { return this.payments.transactions(query.page); }
+  transactions(@Query() query: TransactionQuery) { return this.payments.transactions(query.page, query.type); }
 
   @Post('transactions/:id/review') @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.FINANCE_MODERATOR, UserRole.ADMIN, UserRole.SUPER_ADMIN)
@@ -62,6 +72,24 @@ export class PaymentsController {
 
   @Post('competitions/:id/cancel') @UseGuards(JwtAuthGuard)
   cancel(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Body() dto: ReviewDto) { return this.lifecycle.cancel(id, req.user, dto.note); }
+
+  /** Organiser: ask finance to end a started competition before its fixtures finish. */
+  @Post('competitions/:id/early-end-request') @UseGuards(JwtAuthGuard)
+  requestEarlyEnd(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Body() dto: EarlyEndRequestDto) { return this.lifecycle.requestEarlyEnd(id, req.user, dto.reason); }
+
+  /** Finance: approve (refund players, 10% penalty) or reject an early-end request. */
+  @Post('competitions/:id/early-end-review') @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.FINANCE_MODERATOR, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  reviewEarlyEnd(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Body() dto: FinanceDecisionDto) { return this.lifecycle.reviewEarlyEnd(id, req.user, dto.decision === 'approve', dto.note); }
+
+  /** Finance: prize pools above ₹10,00,000 waiting for approval (with the organiser's contact details). */
+  @Get('large-prize-requests') @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.FINANCE_MODERATOR, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  largePrizeRequests(@Query('status') status?: string) { return this.payments.largePrizeRequests(status); }
+
+  @Post('competitions/:id/large-prize-review') @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.FINANCE_MODERATOR, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  reviewLargePrize(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Body() dto: FinanceDecisionDto) { return this.payments.reviewLargePrize(id, req.user, dto.decision === 'approve', dto.note); }
 
   @Post('competitions/:id/settle') @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.FINANCE_MODERATOR, UserRole.ADMIN, UserRole.SUPER_ADMIN)

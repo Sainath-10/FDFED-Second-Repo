@@ -4,15 +4,20 @@
  * The finance moderator is the neutral party between organizers and players:
  * they approve escrow releases after verified results, place holds on suspicious
  * competitions, force-cancel with full refunds, distribute forfeited prize pools
- * and reverse settlements when fraud is proven. Every action needs a reason and
- * lands in the admin audit log. All money movement is simulated in mock mode.
+ * and reverse settlements when fraud is proven. They also review two kinds of
+ * organiser requests: prize pools above ₹10,00,000 (before publishing, with the
+ * organiser's contact details) and ending a started competition early (players
+ * refunded, organiser penalised). Every action needs a reason and lands in the
+ * admin audit log. All money movement is simulated in mock mode.
  */
 import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import PaymentMailbox from '../../components/PaymentMailbox.jsx';
 import { ConfirmAction, EscrowStats, LifecycleSteps, MockBanner, Notice, PayoutPreview, Pill, TransactionTable } from '../../components/PaymentUI.jsx';
-import { paymentRequest, money, rupees, formatDateTime, competitionState, TERMINAL_STATES, TX_TYPES } from '../../services/payments.js';
+import { paymentRequest, money, rupees, formatDateTime, competitionState, TERMINAL_STATES, TX_TYPES, largePrizeRequests, reviewLargePrize, reviewEarlyEnd } from '../../services/payments.js';
 import { showToast } from '../../lib/toast.js';
+import { CompetitionsAPI, DisputesAPI } from '../../services/api.js';
+import { StaffDisputeCard } from './AdminDisputes.jsx';
 import '../../styles/pages/admin/dashboard.css';
 import '../../styles/pages/payments.css';
 
@@ -22,6 +27,7 @@ const LOW_TRUST = 60;
 function reasons(c) {
   const out = [];
   const closed = TERMINAL_STATES.includes(c.paymentStatus);
+  if (c.earlyEndRequest?.status === 'pending') out.push({ tone: 'bad', label: 'Early end requested' });
   if (c.paymentStatus === 'COMPLETED') {
     if (c.openDisputes > 0) out.push({ tone: 'bad', label: `${c.openDisputes} open dispute${c.openDisputes > 1 ? 's' : ''}` });
     else if (c.financeHold) out.push({ tone: 'warn', label: 'Completed · on hold' });
@@ -33,6 +39,104 @@ function reasons(c) {
   if (!closed && c.organizerPaid && !c.prizePoolPaid) out.push({ tone: 'warn', label: `Prize unfunded · due ${formatDateTime(c.prizeDeadline)}` });
   if (!closed && Number(c.organizerTrustScore) < LOW_TRUST) out.push({ tone: 'bad', label: `Low-trust organizer (${c.organizerTrustScore})` });
   return out;
+}
+
+/** Approve / reject with a note the organiser sees. */
+function Decision({ busy, approveLabel, rejectLabel, approveText, onDecide }) {
+  return (
+    <div className="pay-actions" style={{ alignItems: 'flex-start' }}>
+      <ConfirmAction label={approveLabel} busy={busy} requireReason description={approveText}
+        onConfirm={(note) => onDecide('approve', note)} />
+      <ConfirmAction label={rejectLabel} variant="danger" busy={busy} requireReason description="Tell the organiser why. They are notified with your note."
+        onConfirm={(note) => onDecide('reject', note)} />
+    </div>
+  );
+}
+
+/** Prize pools above ₹10,00,000 waiting for approval, with the organiser's contact details. */
+function LargePrizeRequests({ onChanged }) {
+  const [rows, setRows] = useState(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState('');
+  const load = useCallback(() => largePrizeRequests('pending').then((r) => { setRows(r); setError(''); }).catch((err) => setError(err.message)), []);
+  useEffect(() => { load(); }, [load]);
+
+  async function decide(id, decision, note) {
+    setBusy(id);
+    try {
+      await reviewLargePrize(id, decision, note);
+      showToast(decision === 'approve' ? 'Approved. The organiser can now pay the platform fee.' : 'Rejected. The organiser was told why.');
+      await load(); onChanged();
+      return true;
+    } catch (err) { showToast(err.message, 'error'); return false; }
+    finally { setBusy(''); }
+  }
+
+  return (
+    <section className="table-container-card" aria-labelledby="large-prize-title">
+      <div className="table-header-between"><h2 className="table-title-md" id="large-prize-title" style={{ margin: 0 }}>Prize pools above ₹10,00,000</h2></div>
+      <p className="pay-card-text" style={{ marginBottom: 14 }}>These competitions are unpublished until you approve them. Contact the organiser if anything about the funding is unclear.</p>
+      {error && <Notice tone="error">{error}</Notice>}
+      {!rows && !error && <div className="pay-empty">Loading requests…</div>}
+      {rows && rows.length === 0 && <div className="pay-empty">No prize pools are waiting for approval.</div>}
+      <div style={{ display: 'grid', gap: 14 }}>
+        {(rows || []).map((r) => {
+          const c = r.request?.contact || {};
+          return (
+            <article className="fin-request" key={r.id}>
+              <div className="fin-request-head">
+                <div>
+                  <h3>{r.name}</h3>
+                  <span className="pay-card-text">@{r.createdBy} · trust score {r.organizerTrustScore} · requested {formatDateTime(r.request?.requestedAt)}</span>
+                </div>
+                <Pill tone="warn">{rupees(r.prize)} prize pool</Pill>
+              </div>
+              <div className="fin-request-grid">
+                <div><span>Contact name</span><strong>{c.fullName || '—'}</strong></div>
+                <div><span>Phone</span><strong>{c.phone ? <a href={`tel:${c.phone.replace(/\s+/g, '')}`} style={{ color: '#60a5fa' }}>{c.phone}</a> : '—'}</strong></div>
+                <div><span>Email</span><strong>{c.email ? <a href={`mailto:${c.email}`} style={{ color: '#60a5fa' }}>{c.email}</a> : '—'}</strong></div>
+                <div><span>Organisation</span><strong>{c.organisation || '—'}</strong></div>
+                <div><span>Account email</span><strong>{r.accountEmail || '—'}</strong></div>
+                <div><span>Game</span><strong>{r.game || '—'}</strong></div>
+                <div><span>Dates</span><strong>{formatDateTime(r.startDate)} → {formatDateTime(r.endDate)}</strong></div>
+                <div><span>Platform fee</span><strong>{rupees(r.platformFee)}</strong></div>
+              </div>
+              {c.purpose && <p className="fin-request-quote">{c.purpose}</p>}
+              <Decision busy={busy === r.id} approveLabel="Approve prize pool" rejectLabel="Reject"
+                approveText="The organiser can then pay the platform fee and publish. Your note is sent to them."
+                onDecide={(decision, note) => decide(r.id, decision, note)} />
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+/** Started competitions whose organiser asked to end them before every fixture was played. */
+function EarlyEndRequests({ items, onOpen }) {
+  const pending = items.filter((c) => c.earlyEndRequest?.status === 'pending');
+  return (
+    <section className="table-container-card" aria-labelledby="early-end-title">
+      <div className="table-header-between"><h2 className="table-title-md" id="early-end-title" style={{ margin: 0 }}>Early end requests</h2></div>
+      <p className="pay-card-text" style={{ marginBottom: 14 }}>Approving refunds every player from escrow, keeps 10% of the deposited prize pool as the organiser&apos;s penalty and returns the rest to them.</p>
+      {pending.length === 0 && <div className="pay-empty">No early end requests.</div>}
+      <div style={{ display: 'grid', gap: 14 }}>
+        {pending.map((c) => (
+          <article className="fin-request" key={c.id}>
+            <div className="fin-request-head">
+              <div>
+                <h3>{c.name}</h3>
+                <span className="pay-card-text">@{c.createdBy} · requested {formatDateTime(c.earlyEndRequest.requestedAt)} · {c.earlyEndRequest.fixturesPlayed ?? 0} of {c.earlyEndRequest.fixturesTotal ?? 0} fixtures played</span>
+              </div>
+              <button type="button" className="pay-btn sm" onClick={() => onOpen(c.id)}>Review case</button>
+            </div>
+            <p className="fin-request-quote">{c.earlyEndRequest.reason}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
 }
 
 function NoteForm({ tx, onDone }) {
@@ -73,6 +177,54 @@ function TrustReview({ ledger, busy, act }) {
       <ConfirmAction label="Update trust score" requireReason minLength={10} busy={busy} disabled={!valid}
         description={`Changes @${ledger.organizer}'s score from ${current} to ${valid ? value : '…'}. They are notified with your reason.`}
         onConfirm={(reason) => act('organizer-trust', { score: value, reason }, `Trust score updated to ${value}.`)} />
+    </section>
+  );
+}
+
+/** Disputes that block settlement, with the staff resolve actions, right inside the case. */
+function CaseDisputes({ id, onChanged }) {
+  const [rows, setRows] = useState(null);
+  const [error, setError] = useState('');
+  const load = useCallback(async () => {
+    const res = await DisputesAPI.getByCompetition(id);
+    if (res.ok) { setRows(res.data || []); setError(''); } else setError(res.error || 'Disputes could not be loaded.');
+  }, [id]);
+  useEffect(() => { load(); }, [load]);
+  const open = (rows || []).filter((d) => d.status !== 'resolved');
+  return (
+    <section className="pay-card" id="case-disputes" style={{ gridColumn: '1 / -1' }}>
+      <h3 className="pay-card-title">Disputes ({open.length} open)</h3>
+      {error && <Notice tone="error">{error}</Notice>}
+      {rows === null && !error && <p className="pay-card-text">Loading disputes…</p>}
+      {rows && rows.length === 0 && <p className="pay-card-text">No disputes were raised in this competition.</p>}
+      <div style={{ display: 'grid', gap: 12 }}>
+        {(rows || []).map((d) => <StaffDisputeCard key={d.id} dispute={d} onChanged={() => { load(); onChanged(); }} />)}
+      </div>
+    </section>
+  );
+}
+
+/** Organizer contact and the registered teams, so finance can investigate without leaving the case. */
+function CaseContacts({ id, ledger }) {
+  const [contacts, setContacts] = useState(null);
+  useEffect(() => {
+    CompetitionsAPI.getParticipants(id).then((res) => setContacts(res.ok && Array.isArray(res.data) ? res.data : []));
+  }, [id]);
+  const teams = Object.entries((contacts || []).reduce((acc, c) => ({ ...acc, [c.teamName]: [...(acc[c.teamName] || []), c] }), {}));
+  return (
+    <section className="pay-card" style={{ gridColumn: '1 / -1' }}>
+      <h3 className="pay-card-title">Organizer and teams</h3>
+      <p className="pay-card-text">
+        Organizer @{ledger.organizer}{ledger.organizerEmail ? <> · <a href={`mailto:${ledger.organizerEmail}`} style={{ color: '#60a5fa' }}>{ledger.organizerEmail}</a></> : ''}
+        {ledger.coOrganizers?.length ? ` · co-organizers ${ledger.coOrganizers.map((o) => `@${o}`).join(', ')}` : ''}
+      </p>
+      {contacts === null && <p className="pay-card-text">Loading teams…</p>}
+      {contacts && teams.length === 0 && <p className="pay-card-text">No registered teams.</p>}
+      {teams.map(([team, members]) => (
+        <p className="pay-card-text" key={team}>
+          <strong style={{ color: 'var(--text-white)' }}>{team}</strong>: {members.map((m) => `@${m.username}${m.role === 'team_lead' ? ' (captain)' : ''}${m.email ? ` <${m.email}>` : ''}`).join(', ')}
+        </p>
+      ))}
     </section>
   );
 }
@@ -118,7 +270,7 @@ function FinanceCase({ id, onClose, onChanged }) {
     { ok: (completed || ledger.paymentStatus === 'PRIZE_RELEASED') && !windowOpen, label: windowOpen ? `Players can dispute until ${formatDateTime(ledger.disputeWindowEndsAt)}` : 'Dispute window closed' },
     { ok: ledger.prizePoolPaid, label: 'Prize pool deposited in escrow' },
     { ok: !ledger.financeHold, label: 'No finance hold' },
-    { ok: !ledger.openDisputes, label: ledger.openDisputes ? `${ledger.openDisputes} dispute(s) still open` : 'All disputes resolved' },
+    { ok: !ledger.openDisputes, label: ledger.openDisputes ? `${ledger.openDisputes} dispute(s) still open — resolve them below` : 'All disputes resolved', href: ledger.openDisputes ? '#case-disputes' : null },
   ];
   const ready = completed && checklist.every((item) => item.ok);
 
@@ -153,6 +305,35 @@ function FinanceCase({ id, onClose, onChanged }) {
       <LifecycleSteps ledger={ledger} />
       <EscrowStats ledger={ledger} />
 
+      {ledger.earlyEndRequest?.status === 'pending' && (
+        <section className="pay-card highlight" style={{ marginBottom: 20 }} aria-labelledby="early-end-case">
+          <div className="pay-card-head">
+            <h3 className="pay-card-title" id="early-end-case">Early end requested</h3>
+            <Pill tone="bad">Needs a decision</Pill>
+          </div>
+          <p className="pay-card-text">@{ledger.earlyEndRequest.requestedBy} asked on {formatDateTime(ledger.earlyEndRequest.requestedAt)} to end this competition with {ledger.earlyEndRequest.fixturesPlayed ?? 0} of {ledger.earlyEndRequest.fixturesTotal ?? 0} fixtures played.</p>
+          <p className="fin-request-quote">{ledger.earlyEndRequest.reason}</p>
+          <dl className="pay-dl">
+            <dt>Players refunded</dt><dd>every registration still in escrow</dd>
+            <dt>Penalty ({ledger.earlyEndPenaltyPercent ?? 10}%)</dt><dd>{money(Math.round((ledger.escrow?.prizeMinor || 0) * (ledger.earlyEndPenaltyPercent ?? 10) / 100))}</dd>
+            <dt>Returned to organiser</dt><dd>{money((ledger.escrow?.prizeMinor || 0) - Math.round((ledger.escrow?.prizeMinor || 0) * (ledger.earlyEndPenaltyPercent ?? 10) / 100))}</dd>
+          </dl>
+          <Decision busy={busy} approveLabel="Approve: refund players & apply penalty" rejectLabel="Reject request"
+            approveText="Ends the competition now. This cannot be undone. Your note is sent to the organiser."
+            onDecide={async (decision, note) => {
+              setBusy(true); setNotice(null);
+              try {
+                await reviewEarlyEnd(id, decision, note);
+                await load(); onChanged(); setMailKey((k) => k + 1);
+                const text = decision === 'approve' ? 'Competition ended early. Players were refunded and the penalty applied.' : 'Request rejected. The organiser was notified.';
+                setNotice({ tone: 'success', text }); showToast(text);
+                return true;
+              } catch (err) { setNotice({ tone: 'error', text: err.message }); showToast(err.message, 'error'); return false; }
+              finally { setBusy(false); }
+            }} />
+        </section>
+      )}
+
       <div className="pay-grid">
         {(completed || ledger.paymentStatus === 'PRIZE_RELEASED') && (
           <section className={`pay-card ${ready ? 'highlight' : ''}`}>
@@ -160,7 +341,7 @@ function FinanceCase({ id, onClose, onChanged }) {
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 6 }}>
               {checklist.map((item) => (
                 <li key={item.label} className="pay-card-text" style={{ color: item.ok ? 'var(--text-light)' : '#fbbf24' }}>
-                  <span aria-hidden="true">{item.ok ? '✓' : '•'}</span> {item.label}
+                  <span aria-hidden="true">{item.ok ? '✓' : '•'}</span> {item.href ? <a href={item.href} style={{ color: 'inherit', textDecoration: 'underline' }} onClick={(e) => { e.preventDefault(); document.getElementById('case-disputes')?.scrollIntoView({ behavior: 'smooth' }); }}>{item.label}</a> : item.label}
                 </li>
               ))}
             </ul>
@@ -202,6 +383,8 @@ function FinanceCase({ id, onClose, onChanged }) {
         )}
 
         <TrustReview ledger={ledger} busy={busy} act={act} />
+        <CaseDisputes id={id} onChanged={() => { load(); onChanged(); }} />
+        <CaseContacts id={id} ledger={ledger} />
 
         {ledger.escrow?.status === 'HELD' && (
           <section className="pay-card highlight">
@@ -343,7 +526,8 @@ export default function FinanceModerator() {
 
   const openCase = (id) => { setParams({ tab, id }); window.scrollTo({ top: 0, behavior: 'smooth' }); };
   const setTab = (next) => setParams(caseId ? { tab: next, id: caseId } : { tab: next });
-  const tabs = [['queue', 'Action queue', queue.length], ['competitions', 'Competitions', all.length], ['ledger', 'Ledger'], ['mail', 'Mailbox']];
+  const requestCount = all.filter((c) => c.earlyEndRequest?.status === 'pending' || c.largePrizeRequest?.status === 'pending').length;
+  const tabs = [['queue', 'Action queue', queue.length], ['requests', 'Organiser requests', requestCount], ['competitions', 'Competitions', all.length], ['ledger', 'Ledger'], ['mail', 'Mailbox']];
 
   return (
     <main className="admin-page pay-page">
@@ -388,6 +572,13 @@ export default function FinanceModerator() {
         </section>
       )}
 
+      {tab === 'requests' && (
+        <div role="tabpanel" style={{ display: 'grid', gap: 20 }}>
+          <LargePrizeRequests onChanged={() => setReload((v) => v + 1)} />
+          <EarlyEndRequests items={all} onOpen={openCase} />
+        </div>
+      )}
+
       {tab === 'competitions' && (
         <section className="table-container-card" role="tabpanel">
           <div className="table-header-between" style={{ flexWrap: 'wrap', gap: 12 }}>
@@ -398,7 +589,7 @@ export default function FinanceModerator() {
               <label className="sr-only" htmlFor="fin-status">Filter by status</label>
               <select id="fin-status" className="pay-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                 <option value="ALL">All statuses</option>
-                {['AWAITING_PLATFORM_FEE', 'OPEN_FOR_REGISTRATION', 'COMPLETED', ...TERMINAL_STATES].map((s) => <option key={s} value={s}>{competitionState(s).label}</option>)}
+                {['AWAITING_FINANCE_APPROVAL', 'AWAITING_PLATFORM_FEE', 'OPEN_FOR_REGISTRATION', 'COMPLETED', ...TERMINAL_STATES].map((s) => <option key={s} value={s}>{competitionState(s).label}</option>)}
               </select>
             </div>
           </div>

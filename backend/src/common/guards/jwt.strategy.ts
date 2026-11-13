@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserEntity } from '../../entities/user.entity';
+import { requireJwtSecret } from '../config/jwt-secret';
 
 export interface JwtPayload {
   sub: string;       // user UUID
@@ -25,7 +26,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: config.get<string>('JWT_SECRET', 'nexus_fallback_secret'),
+      secretOrKey: requireJwtSecret(config),
     });
   }
 

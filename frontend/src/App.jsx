@@ -6,15 +6,13 @@
  *
  * Wrapping order:
  * auth pages -> AuthLayout (back header + footer, no sidebar)
- * landing ('/') -> bare
+ * landing ('/') -> AppLayout without the content offset
  * other public -> AppLayout
  * everything else -> ProtectedRoute -> RoleGuard -> AppLayout -> page
  *
  * Routes without a registry entry render RoutePlaceholder.
  */
-import { useEffect } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { sweepDeadlines } from './services/local/reporting.js';
 import { AuthProvider } from './context/AuthContext.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import RoleGuard from './components/RoleGuard.jsx';
@@ -26,36 +24,20 @@ import AuthLayout from './layouts/AuthLayout.jsx';
 import { PAGE_COMPONENTS } from './pages/registry.js';
 import { ROUTES } from './routes.js';
 
-/** Routes whose page is full-bleed (no `.page-with-sidebar` wrapper). */
+/** Only the landing page is full-bleed; every other page shares the same sidebar, frame and footer. */
 const FULL_WIDTH_PATHS = new Set(['/']);
-/** Full-bleed pages that keep a plain `#footer-mount` (super-admin-style layout). */
-const BARE_PATHS = new Set([
-  '/pages/admin/users.html',
-  '/pages/super-admin/super-dashboard.html',
-  '/pages/super-admin/users.html',
-  '/pages/super-admin/admins.html',
-  '/pages/super-admin/add-admin.html',
-  '/pages/super-admin/revoke-admin.html',
-  '/pages/super-admin/profile.html',
-]);
 const AUTH_PATHS = new Set(['/pages/login.html', '/pages/signup.html']);
-/** Pages that deliberately render without the site footer (Community Moderator workspace). */
-const NO_FOOTER_PATHS = new Set([
-  '/pages/moderator/reports.html',
-  '/pages/moderator/activity.html',
-]);
 
 function renderRoute(route) {
   const Component = PAGE_COMPONENTS[route.path];
   const page = Component ? <Component /> : <RoutePlaceholder route={route} />;
 
-  const isBare = BARE_PATHS.has(route.path);
-  const isFull = FULL_WIDTH_PATHS.has(route.path) || isBare;
+  const isFull = FULL_WIDTH_PATHS.has(route.path);
 
   let shell;
   if (AUTH_PATHS.has(route.path)) shell = <AuthLayout>{page}</AuthLayout>;
   else shell = (
-    <AppLayout offset={!isFull} footerClassName={isBare ? '' : undefined} hideFooter={NO_FOOTER_PATHS.has(route.path)}>
+    <AppLayout offset={!isFull}>
       {page}
     </AppLayout>
   );
@@ -72,10 +54,6 @@ function renderRoute(route) {
 }
 
 export default function App() {
-  // Deadline reminders/escalation run from persisted data on load — never from
-  // a browser timer, and never duplicated thanks to the deadlines key.
-  useEffect(() => { sweepDeadlines(); }, []);
-
   return (
     <BrowserRouter>
       <AuthProvider>

@@ -6,12 +6,16 @@ import { AuthController } from './auth.controller';
 import { UserRepository } from './repositories/user.repository';
 import { JwtStrategy } from '../../common/guards/jwt.strategy';
 import { UserEntity } from '../../entities/user.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { AuditModule } from '../../common/audit/audit.module';
 
 @Global()
 @Module({
   imports: [
     TypeOrmModule.forFeature([UserEntity]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
+    NotificationsModule,
+    AuditModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, UserRepository, JwtStrategy],

@@ -3,7 +3,7 @@
  *
  * Thin client for the NEXUS backend API:
  * - identical endpoints, HTTP methods, bodies and query strings
- * - identical headers (JWT bearer + x-user-role / x-user-name / x-user-id)
+ * - JWT bearer auth (identity always comes from the token, never from headers)
  * - identical response shape: { ok, status, data } | { ok:false, error }
  * - identical localStorage keys (so existing sessions stay valid)
  * - identical role normalization
@@ -15,11 +15,10 @@
  * The object is also published as `window.NexusAPI` for code that expects that global.
  */
 
-export const API_URL = (import.meta.env?.VITE_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
+export const API_URL = (import.meta.env?.VITE_API_URL || 'http://localhost:3000').replace(/\/+$/, '');
 
 const TOKEN_KEY = 'nexus.auth.token';
 const USER_KEY = 'nexus.auth.user';
-const SESSION_KEY = 'nexus.auth.session';
 
 export function getToken() {
   try {
@@ -72,15 +71,6 @@ export function getUser() {
   }
 }
 
-function getStoredSession() {
-  try {
-    const raw = localStorage.getItem(SESSION_KEY);
-    return raw ? dropRetiredIdentityFields(JSON.parse(raw), SESSION_KEY) : null;
-  } catch (err) {
-    return null;
-  }
-}
-
 export function normalizeRole(role) {
   const value = String(role || '').trim().toLowerCase();
   if (value === 'super-admin') return 'super_admin';
@@ -123,26 +113,16 @@ export async function makeRequest(endpoint, options = {}) {
     config.headers.Authorization = `Bearer ${token}`;
   }
 
-  const user = getUser() || getStoredSession();
-  if (user && user.role && !config.headers['x-user-role']) {
-    config.headers['x-user-role'] = normalizeRole(user.role);
-  }
-  if (user && user.username && !config.headers['x-user-name']) {
-    config.headers['x-user-name'] = user.username;
-  }
-  if (user && user.id && !config.headers['x-user-id']) {
-    config.headers['x-user-id'] = user.id;
-  }
-
   try {
     const response = await fetch(url, config);
     const data = await response.json().catch(() => ({}));
 
     if (!response.ok) {
+      const message = Array.isArray(data.message) ? data.message.join(' ') : data.message;
       return {
         ok: false,
         status: response.status,
-        error: data.message || data.error || `Request failed (${response.status})`,
+        error: message || data.error || `Request failed (${response.status})`,
         data: data,
       };
     }
@@ -184,6 +164,12 @@ export const ChatAPI = {
 
 // ============ AUTH API ============
 export const AuthAPI = {
+  /** Username autocomplete. scope: 'players' (default) or 'all' (administrators only). */
+  async searchUsers(q, scope = 'players') {
+    const params = new URLSearchParams({ q: String(q || ''), scope });
+    return makeRequest(`/auth/users/search?${params}`, { method: 'GET' });
+  },
+
   async register(email, username, password) {
     return makeRequest('/auth/register', {
       method: 'POST',
@@ -218,12 +204,38 @@ export const AuthAPI = {
     return makeRequest(`/auth/users/exists?username=${encodeURIComponent(username)}`, { method: 'GET' });
   },
 
-  async banUser(idOrUsername) {
-    return makeRequest(`/auth/users/${idOrUsername}/ban`, { method: 'PATCH' });
+  async banUser(idOrUsername, reason) {
+    return makeRequest(`/auth/users/${encodeURIComponent(idOrUsername)}/ban`, { method: 'PATCH', body: JSON.stringify(reason ? { reason } : {}) });
   },
 
-  async warnUser(idOrUsername) {
-    return makeRequest(`/auth/users/${idOrUsername}/warn`, { method: 'PATCH' });
+  async unbanUser(idOrUsername) {
+    return makeRequest(`/auth/users/${encodeURIComponent(idOrUsername)}/unban`, { method: 'PATCH' });
+  },
+
+  async warnUser(idOrUsername, reason) {
+    return makeRequest(`/auth/users/${encodeURIComponent(idOrUsername)}/warn`, { method: 'PATCH', body: JSON.stringify(reason ? { reason } : {}) });
+  },
+
+  /** Admin issues a one-time password; the response holds it once. */
+  async resetPassword(idOrUsername) {
+    return makeRequest(`/auth/users/${encodeURIComponent(idOrUsername)}/reset-password`, { method: 'POST' });
+  },
+
+  /** Forgot Password: notifies administrators. Same answer whether or not the account exists. */
+  async requestPasswordReset(emailOrUsername) {
+    return makeRequest('/auth/password-reset-request', { method: 'POST', body: JSON.stringify({ emailOrUsername }) });
+  },
+
+  async addAdmin(username, adminType, email) {
+    return makeRequest('/auth/add-admin', { method: 'POST', body: JSON.stringify({ username, adminType, ...(email ? { email } : {}) }) });
+  },
+
+  async revokeAdmin(username, reason) {
+    return makeRequest('/auth/revoke-admin', { method: 'POST', body: JSON.stringify({ username, ...(reason ? { reason } : {}) }) });
+  },
+
+  async changeEmail(email, currentPassword) {
+    return makeRequest('/auth/email', { method: 'PATCH', body: JSON.stringify({ email, currentPassword }) });
   },
 
   async updateProfile(updates) {
@@ -315,8 +327,21 @@ export const CompetitionsAPI = {
     return makeRequest(`/competitions/${id}/end`, { method: 'PATCH' });
   },
 
+  /** Final placings and prizes once the competition has finished (`available: false` before). */
+  async results(id) {
+    return makeRequest(`/competitions/${id}/results`, { method: 'GET' });
+  },
+
   async delete(id) {
     return makeRequest(`/competitions/${id}`, { method: 'DELETE' });
+  },
+
+  async acceptOrganizerInvite(id) {
+    return makeRequest(`/competitions/${id}/organizer-invite/accept`, { method: 'POST' });
+  },
+
+  async declineOrganizerInvite(id) {
+    return makeRequest(`/competitions/${id}/organizer-invite/decline`, { method: 'POST' });
   },
 
   /** §2.4 — pre-join validation: public needs no code; private validates the code server-side. */
@@ -370,11 +395,16 @@ export const TeamsAPI = {
     });
   },
 
-  async setStatus(id, status) {
+  async setStatus(id, status, reason) {
     return makeRequest(`/teams/${id}/status`, {
       method: 'PATCH',
-      body: JSON.stringify({ status }),
+      body: JSON.stringify(reason ? { status, reason } : { status }),
     });
+  },
+
+  /** A player leaves their team before the competition starts (own fee refunded). */
+  async leave(id, reason) {
+    return makeRequest(`/teams/${id}/leave`, { method: 'POST', body: JSON.stringify(reason ? { reason } : {}) });
   },
 
   async addMember(id, memberId) {
@@ -412,29 +442,35 @@ export const TeamsAPI = {
     });
   },
 
-  async addWarning(id) {
-    return makeRequest(`/teams/${id}/warnings`, { method: 'POST' });
+  async addWarning(id, reason) {
+    return makeRequest(`/teams/${id}/warnings`, { method: 'POST', body: JSON.stringify(reason ? { reason } : {}) });
   },
 
-  async banTeam(id) {
-    return makeRequest(`/teams/${id}/ban`, { method: 'PATCH' });
+  async banTeam(id, reason) {
+    return makeRequest(`/teams/${id}/ban`, { method: 'PATCH', body: JSON.stringify(reason ? { reason } : {}) });
   },
 
-  async createJoinRequest(teamId, competitionId, fromUsername, message, joinCode) {
-    return makeRequest(`/teams/${teamId}/join-requests`, {
-      method: 'POST',
-      body: JSON.stringify({ competitionId, fromUsername, message, joinCode }),
-    });
+  async createJoinRequest(teamId, competitionId, _fromUsername, message, joinCode) {
+    const body = {};
+    if (competitionId) body.competitionId = competitionId;
+    if (message) body.message = message;
+    if (joinCode) body.joinCode = joinCode;
+    return makeRequest(`/teams/${teamId}/join-requests`, { method: 'POST', body: JSON.stringify(body) });
+  },
+
+  /** The signed-in player's own join requests. */
+  async myJoinRequests() {
+    return makeRequest('/teams/join-requests/mine', { method: 'GET' });
   },
 
   async getJoinRequests(teamId) {
     return makeRequest(`/teams/${teamId}/join-requests`, { method: 'GET' });
   },
 
-  async updateJoinRequest(reqId, status, reviewedBy, feeAlreadyPaid = false) {
+  async updateJoinRequest(reqId, status, _reviewedBy, feeAlreadyPaid = false) {
     return makeRequest(`/teams/join-requests/${reqId}`, {
       method: 'PATCH',
-      body: JSON.stringify({ status, reviewedBy, feeAlreadyPaid }),
+      body: JSON.stringify({ status, feeAlreadyPaid: !!feeAlreadyPaid }),
     });
   },
 
@@ -442,15 +478,14 @@ export const TeamsAPI = {
     return makeRequest(`/teams/join-requests/${reqId}/pay`, { method: 'POST' });
   },
 
-  async createInvite(teamId, competitionId, toUsername, fromUsername) {
-    return makeRequest(`/teams/${teamId}/invites`, {
-      method: 'POST',
-      body: JSON.stringify({ competitionId, toUsername, fromUsername }),
-    });
+  async createInvite(teamId, competitionId, toUsername) {
+    const body = { toUsername };
+    if (competitionId) body.competitionId = competitionId;
+    return makeRequest(`/teams/${teamId}/invites`, { method: 'POST', body: JSON.stringify(body) });
   },
 
   async getInvites(username) {
-    return makeRequest(`/teams/invites/${username}`, { method: 'GET' });
+    return makeRequest(`/teams/invites/${encodeURIComponent(username)}`, { method: 'GET' });
   },
 
   async getTeamInvites(teamId) {
@@ -491,6 +526,11 @@ export const DisputesAPI = {
     return makeRequest('/disputes/admin-queue', { method: 'GET' });
   },
 
+  /** Disputes the signed-in player raised or that involve their teams. */
+  async mine() {
+    return makeRequest('/disputes/mine', { method: 'GET' });
+  },
+
   async getByCompetition(competitionId) {
     return makeRequest(`/disputes/competition/${competitionId}`, { method: 'GET' });
   },
@@ -506,22 +546,65 @@ export const DisputesAPI = {
     });
   },
 
+  /** action: 'resolve' | 'escalate_to_admin' */
   async organizerReview(id, action, notes, requestBan = false) {
     return makeRequest(`/disputes/${id}/organizer-review`, {
-      method: 'PATCH',
-      body: JSON.stringify({ action, notes, requestBan }),
+      method: 'POST',
+      body: JSON.stringify({ action, notes, requestBan: !!requestBan }),
     });
   },
 
+  /** action: 'resolve' | 'resolve_and_ban' */
   async adminResolve(id, action, resolutionNotes, targetUsernameToBan) {
-    return makeRequest(`/disputes/${id}/admin-resolve`, {
-      method: 'PATCH',
-      body: JSON.stringify({ action, resolutionNotes, targetUsernameToBan }),
-    });
+    const body = { action, resolutionNotes };
+    if (targetUsernameToBan) body.targetUsernameToBan = targetUsernameToBan;
+    return makeRequest(`/disputes/${id}/admin-resolve`, { method: 'POST', body: JSON.stringify(body) });
+  },
+
+  /** The player who raised a dispute sends it to platform staff. */
+  async escalate(id, reason) {
+    return makeRequest(`/disputes/${id}/escalate`, { method: 'POST', body: JSON.stringify({ reason }) });
   },
 
   async delete(id) {
     return makeRequest(`/disputes/${id}`, { method: 'DELETE' });
+  },
+};
+
+// ============ UPLOADS ============
+export const UploadAPI = {
+  /** Uploads one file (PNG, JPEG, WEBP, GIF, PDF or TXT, up to 5 MB). Resolves to { ok, data: { url, filename } }. */
+  async upload(file) {
+    const form = new FormData();
+    form.append('file', file);
+    try {
+      const response = await fetch(`${API_URL}/upload/file`, {
+        method: 'POST',
+        headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {},
+        body: form,
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) return { ok: false, status: response.status, error: data.message || 'Upload failed.' };
+      return { ok: true, status: response.status, data };
+    } catch (err) {
+      return { ok: false, status: 0, error: 'Unable to reach the server to upload the file.' };
+    }
+  },
+
+  /** Opens an uploaded file in a new tab (uploads need the sign-in token, so a plain link cannot load them). */
+  async open(url) {
+    const tab = window.open('', '_blank');
+    try {
+      const response = await fetch(`${API_URL}${url}`, { headers: { Authorization: `Bearer ${getToken()}` } });
+      if (!response.ok) throw new Error('not found');
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      if (tab) tab.location.href = objectUrl; else window.location.href = objectUrl;
+      return true;
+    } catch (err) {
+      if (tab) tab.close();
+      return false;
+    }
   },
 };
 
@@ -535,11 +618,11 @@ export const NotificationsAPI = {
   },
 
   async getForUser(username) {
-    return makeRequest(`/notifications/${username}`, { method: 'GET' });
+    return makeRequest(`/notifications/${encodeURIComponent(username)}`, { method: 'GET' });
   },
 
   async getUnreadCount(username) {
-    return makeRequest(`/notifications/${username}/unread-count`, { method: 'GET' });
+    return makeRequest(`/notifications/${encodeURIComponent(username)}/unread-count`, { method: 'GET' });
   },
 
   async markRead(id) {
@@ -547,7 +630,12 @@ export const NotificationsAPI = {
   },
 
   async markAllRead(username) {
-    return makeRequest(`/notifications/read-all/${username}`, { method: 'PATCH' });
+    return makeRequest(`/notifications/read-all/${encodeURIComponent(username)}`, { method: 'PATCH' });
+  },
+
+  /** Records how the user answered an actionable notification (approved | rejected | info). */
+  async setStatus(id, status) {
+    return makeRequest(`/notifications/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
   },
 
   async delete(id) {
@@ -657,11 +745,24 @@ export const AdminAPI = {
     const q = adminUsername ? `?adminUsername=${encodeURIComponent(adminUsername)}` : '';
     return makeRequest(`/admin/activity${q}`, { method: 'GET' });
   },
-  async logActivity(adminUsername, actionType, details, metadata) {
+  async logActivity(_adminUsername, actionType, details, metadata) {
     return makeRequest('/admin/activity', {
       method: 'POST',
-      body: JSON.stringify({ adminUsername, actionType, details, metadata }),
+      body: JSON.stringify({ actionType, details, ...(metadata ? { metadata } : {}) }),
     });
+  },
+  async getSettings() {
+    return makeRequest('/admin/settings', { method: 'GET' });
+  },
+  async saveSettings(settings) {
+    return makeRequest('/admin/settings', { method: 'PUT', body: JSON.stringify(settings) });
+  },
+};
+
+/** Public platform switches (formats and team limit) used by the create form. */
+export const PlatformAPI = {
+  async settings() {
+    return makeRequest('/platform/settings', { method: 'GET' });
   },
 };
 
@@ -673,8 +774,13 @@ export const RevenueAPI = {
   async saveConfig(config) {
     return makeRequest('/revenue/config', {
       method: 'POST',
-      body: JSON.stringify(config),
+      body: JSON.stringify({ percentage: Number(config.percentage), minCost: Number(config.minCost) }),
     });
+  },
+
+  async transactions(params = {}) {
+    const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== '' && v !== null)).toString();
+    return makeRequest(`/revenue/transactions${q ? `?${q}` : ''}`, { method: 'GET' });
   },
 };
 
@@ -751,6 +857,29 @@ export const ReportsAPI = {
   async escalate() {
     return makeRequest('/reports/maintenance/escalate', { method: 'POST', body: JSON.stringify({}) });
   },
+  /** Every report in one competition (its organisers and moderators). */
+  async forCompetition(competitionId) {
+    return makeRequest(`/reports/competition/${encodeURIComponent(competitionId)}`, { method: 'GET' });
+  },
+  async removalStatus(competitionId) {
+    return makeRequest(`/reports/removal/${encodeURIComponent(competitionId)}`, { method: 'GET' });
+  },
+  async moderatorActivity(username) {
+    const q = username ? `?username=${encodeURIComponent(username)}` : '';
+    return makeRequest(`/reports/moderator-activity${q}`, { method: 'GET' });
+  },
+  async appeal(id) {
+    return makeRequest(`/reports/${id}/appeal`, { method: 'POST', body: JSON.stringify({}) });
+  },
+  async uplift(id, payload = {}) {
+    return makeRequest(`/reports/${id}/uplift`, { method: 'POST', body: JSON.stringify(payload) });
+  },
+  async appealRoom(id) {
+    return makeRequest(`/reports/${id}/appeal-room`, { method: 'POST', body: JSON.stringify({}) });
+  },
+  async organiserAppealRoom(id) {
+    return makeRequest(`/reports/${id}/organiser-appeal-room`, { method: 'POST', body: JSON.stringify({}) });
+  },
 };
 
 // ============ REPUTATION API ============
@@ -766,6 +895,16 @@ export const ReputationAPI = {
   },
   async profile(username) {
     return makeRequest(`/reputation/user/${encodeURIComponent(username)}`, { method: 'GET' });
+  },
+  /** Public reputation context for an organiser. */
+  async publicOverview(username) {
+    return makeRequest(`/reputation/user/${encodeURIComponent(username)}/public`, { method: 'GET' });
+  },
+  /** Own overview, or another account's for moderators and admins. */
+  async overview(username) {
+    return username
+      ? makeRequest(`/reputation/user/${encodeURIComponent(username)}/overview`, { method: 'GET' })
+      : makeRequest('/reputation/me/overview', { method: 'GET' });
   },
   async history(username) {
     return makeRequest(`/reputation/user/${encodeURIComponent(username)}/history`, { method: 'GET' });
@@ -817,6 +956,7 @@ const NexusAPI = {
   Matches: MatchesAPI,
   Admin: AdminAPI,
   Revenue: RevenueAPI,
+  Platform: PlatformAPI,
   Chat: ChatAPI,
   Reports: ReportsAPI,
   Reputation: ReputationAPI,

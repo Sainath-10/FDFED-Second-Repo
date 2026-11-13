@@ -112,10 +112,10 @@ async function middlewareTests() {
 async function competitionRuleTests() {
   console.log('\nCompetition rules');
 
-  await test('platform prize pool ceiling is ₹3,00,000', () => {
-    assert.equal(MAX_PRIZE_POOL, 300_000);
-    assert.equal(validatePrizePool(300_000), null);
-    assert.match(String(validatePrizePool(300_001)), /cannot exceed/i);
+  await test('platform prize pool ceiling is ₹1,00,00,000', () => {
+    assert.equal(MAX_PRIZE_POOL, 10_000_000);
+    assert.equal(validatePrizePool(10_000_000), null);
+    assert.match(String(validatePrizePool(10_000_001)), /cannot exceed/i);
     assert.match(String(validatePrizePool(-1)), /negative/i);
     assert.match(String(validatePrizePool('abc')), /valid number/i);
   });
@@ -130,7 +130,7 @@ async function competitionRuleTests() {
     assert.equal(prizeDistributionTotal(distribution), 300_000);
     assert.equal(validatePrizeDistribution(distribution), null);
 
-    const tooLarge = [...distribution, { amount: 1 }];
+    const tooLarge = [{ amount: 9_000_000 }, { amount: 1_000_000 }, { amount: 1 }];
     assert.match(String(validatePrizeDistribution(tooLarge)), /cannot exceed/i);
     assert.match(String(validatePrizeDistribution([{ amount: 'abc' }])), /valid number/i);
     assert.match(String(validatePrizeDistribution([{ amount: -1 }])), /negative/i);
@@ -161,13 +161,19 @@ async function competitionRuleTests() {
     }), []);
 
     // end before start is rejected
-    assert.match(validateDateWindow({ startDate: end, endDate: start }).map((e) => e.message).join(' '), /End Date must be strictly after/i);
+    assert.match(validateDateWindow({ startDate: end, endDate: start }).map((e) => e.message).join(' '), /cannot end before it starts/i);
+
+    // registration must close before the competition starts
+    assert.match(validateDateWindow({ registrationCloseAt: end, startDate: start }).map((e) => e.message).join(' '), /close before the competition starts/i);
+
+    // a one-day event (end later the same day) is allowed
+    assert.deepEqual(validateDateWindow({ startDate: start, endDate: new Date(start.getTime() + 12 * 3600_000) }), []);
 
     // registration close before open is rejected
     assert.match(validateDateWindow({
       registrationOpenAt: new Date('2026-02-01T10:00:00Z'),
       registrationCloseAt: new Date('2026-01-01T10:00:00Z'),
-    }).map((e) => e.message).join(' '), /Registration Close/i);
+    }).map((e) => e.message).join(' '), /Registration must close on or after/i);
   });
 
   await test('registration closure does not count as competition start', () => {
@@ -333,6 +339,10 @@ async function competitionServiceTests() {
           ? (() => { throw new BadRequestException(`Prize pool cannot exceed ₹300,000`); })()
           : { level: 'blue', levelLimit: 300000, globalMax: 300000, limit: 300000, exceptionId: null }
       ),
+      assertWithinCeiling: async (amount: number) => {
+        if (amount > 10_000_000) throw new BadRequestException('The platform-wide maximum prize pool is ₹1,00,00,000.');
+        return { exceptionId: null };
+      },
       consumeException: async () => undefined,
     };
     // Participation revocations live in their own table; no removals here.
@@ -352,6 +362,7 @@ async function competitionServiceTests() {
       noopAudit as any,
       { getConfig: async () => ({ percentage: 7, minCost: 50 }) } as any,
       reputation as any,
+      { getPlatformSettings: async () => ({ allowKnockout: true, allowRoundRobin: true, maxTeams: 256 }) } as any,
     );
   }
 
@@ -395,16 +406,21 @@ async function competitionServiceTests() {
     assert.equal((await service.getCompetitionsByOrganizer('alice', 'bob')).length, 0);
     assert.equal((await service.getCompetitionsByOrganizer('alice', 'alice')).length, 1);
     await assert.rejects(() => service.getCompetitionById('c1'), /not published/);
+    comp.paymentStatus = 'AWAITING_FINANCE_APPROVAL';
+    assert.equal((await service.getAllCompetitions()).length, 0, 'a draft waiting for finance is private too');
+    await assert.rejects(() => service.getCompetitionById('c1'), /not published/);
+    comp.paymentStatus = 'AWAITING_PLATFORM_FEE';
     await expectThrow(() => service.updateCompetition('c1', { status: 'active' } as any, 'alice', 'participant'), BadRequestException, 'cannot be changed');
-    await expectThrow(() => service.participate('c1', undefined, { id: 'u1', username: 'alice' }), ForbiddenException, 'payment is pending');
+    await expectThrow(() => service.participate('c1', undefined, { id: 'u1', username: 'alice' }), ForbiddenException, 'not published');
     await expectThrow(() => service.endCompetition('c1', 'alice', 'participant'), BadRequestException, 'settlement');
     await expectThrow(() => service.deleteCompetition('c1', 'alice', 'super_admin'), BadRequestException, 'retained');
   });
 
-  await test('valid co-organizer usernames are accepted and notified', async () => {
+  await test('valid co-organizers are invited, and gain no rights until they accept', async () => {
     const service = makeService(null);
     const comp: any = await service.createCompetition({ ...validDto, coOrganizers: ['bob'] }, 'alice', 'u1');
-    assert.deepEqual(comp.organizers, ['alice', 'bob']);
+    assert.deepEqual(comp.organizers, ['alice']);
+    assert.deepEqual(comp.pendingOrganizers, ['bob']);
     assert.equal(comp.approvalStatus, 'approved');
   });
 
@@ -415,11 +431,11 @@ async function competitionServiceTests() {
 
   await test('prize pool above ₹10 lakh and negative values are rejected', async () => {
     const service = makeService(null);
-    await expectThrow(() => service.createCompetition({ ...validDto, prize: 300_001 }, 'alice', 'u1'), BadRequestException, 'cannot exceed');
+    await expectThrow(() => service.createCompetition({ ...validDto, prize: 10_000_001 }, 'alice', 'u1'), BadRequestException, 'cannot exceed');
     await expectThrow(() => service.createCompetition({ ...validDto, prize: -50 }, 'alice', 'u1'), BadRequestException, 'negative');
   });
 
-  await test('backend rejects a distribution above the cap even when prize is small', async () => {
+  await test('a distribution above ₹10 lakh needs finance approval even when prize is small', async () => {
     const service = makeService(null);
     await expectThrow(
       () => service.createCompetition({
@@ -428,8 +444,21 @@ async function competitionServiceTests() {
         prizes: [{ place: '1st Place', amount: '₹9,00,000' }, { place: '2nd Place', amount: '₹2,00,000' }],
       }, 'alice', 'u1'),
       BadRequestException,
-      'cannot exceed',
+      'finance moderator',
     );
+  });
+
+  await test('a prize pool above ₹10 lakh with contact details waits for finance approval', async () => {
+    const service = makeService(null);
+    const comp: any = await service.createCompetition({
+      ...validDto,
+      prize: 1_200_000,
+      prizes: [{ place: '1st Place', amount: 800_000 }, { place: '2nd Place', amount: 400_000 }],
+      contactDetails: { fullName: 'Alice Rao', phone: '+91 98765 43210', email: 'Alice@Example.com', purpose: 'Sponsored by a hardware brand; funds are already in our account.' },
+    } as any, 'alice', 'u1');
+    assert.equal(comp.paymentStatus, 'AWAITING_FINANCE_APPROVAL');
+    assert.equal(comp.largePrizeRequest.status, 'pending');
+    assert.equal(comp.largePrizeRequest.contact.email, 'alice@example.com');
   });
 
   await test('backend accepts a distribution totalling exactly ₹3,00,000', async () => {
@@ -557,7 +586,7 @@ async function competitionServiceTests() {
     await expectThrow(
       () => service.updateCompetition('c1', { endDate: new Date(future.getTime() - 86_400_000).toISOString() } as any, 'alice', 'team_lead'),
       BadRequestException,
-      'End Date must be strictly after',
+      'cannot end before it starts',
     );
   });
 
@@ -879,7 +908,7 @@ async function teamServiceTests() {
   await test('a new registration automatically validates and rebuilds an existing bracket', async () => {
     const calls: string[] = [];
     const matchesService = {
-      assertRosterCanChange: async (id: string) => calls.push(`guard:${id}`),
+      assertCanRegisterTeam: async (id: string) => calls.push(`guard:${id}`),
       syncRosterAfterRegistration: async (id: string) => { calls.push(`sync:${id}`); return { rebuilt: true, created: 7 }; },
     };
     const { service } = makeService({ matchesService });
@@ -888,7 +917,7 @@ async function teamServiceTests() {
   });
 
   await test('team registration is rejected before its write when bracket play has started', async () => {
-    const matchesService = { assertRosterCanChange: async () => { throw new BadRequestException('bracket has already started'); } };
+    const matchesService = { assertCanRegisterTeam: async () => { throw new BadRequestException('bracket has already started'); } };
     const { service, mutations } = makeService({ matchesService });
     await expectThrow(() => service.createTeam({ name: 'Bravo', competitionId: 'c1' } as any, { id: 'u1', username: 'alice' }), BadRequestException, 'already started');
     assert.equal(mutations.some((mutation) => mutation.op === 'create'), false);
@@ -1350,11 +1379,14 @@ async function matchServiceTests() {
     await expectThrow(() => controller.update('m', { scheduledAt: '2026-02-10T10:00:00Z' }, { user: { username: 'stranger', role: 'team_lead' } }), ForbiddenException, 'Only an organizer');
   });
 
-  await test('completed draws are immutable and a winner must agree with the score', async () => {
-    const draw = { id: 'draw', competitionId: 'c1', team1Id: 'tA', team2Id: 'tB', team1Name: 'A', team2Name: 'B', status: 'completed', score: '1-1' };
+  await test('a saved draw can be corrected, but a winner must agree with the score', async () => {
+    const draw: any = { id: 'draw', competitionId: 'c1', team1Id: 'tA', team2Id: 'tB', team1Name: 'A', team2Name: 'B', status: 'completed', score: '1-1' };
     const pending = { ...draw, id: 'pending', status: 'scheduled' };
     const { service } = makeService({ matches: [draw, pending] });
-    await expectThrow(() => service.recordResult('draw', '', '', '2-2', 'organizer'), BadRequestException, 'Duplicate submissions');
+    await service.recordResult('draw', '', '', '2-2', 'organizer');
+    assert.equal(draw.score, '2-2');
+    assert.equal(draw.winnerId, null);
+    await expectThrow(() => service.recordResult('draw', 'tA', 'A', '0-3', 'organizer'), BadRequestException, 'Winner must match');
     await expectThrow(() => service.updateSchedule('draw', { scheduledAt: new Date('2026-02-10') }, 'organizer'), ForbiddenException, 'cannot be modified');
     await expectThrow(() => service.recordResult('pending', 'tA', 'A', '0-2', 'organizer'), BadRequestException, 'Winner must match');
     await expectThrow(() => service.recordResult('pending', 'tA', 'A', '-1-0', 'organizer'), BadRequestException, 'non-negative');
@@ -1384,8 +1416,27 @@ async function matchServiceTests() {
       status: 'completed', winnerId: 'tA', winnerName: 'A', score: '2-0', round: 'Round 1',
     };
     const { service } = makeService({ matches: [match] });
-    await expectThrow(() => service.recordResult('m1', 'tA', 'A', '2-0', 'organizer'), BadRequestException, 'Duplicate submissions');
+    await service.recordResult('m1', 'tA', 'A', '3-0', 'organizer');
+    assert.equal(match.score, '3-0', 'resubmitting a saved result corrects it');
     await expectThrow(() => service.updateSchedule('m1', { scheduledAt: new Date('2026-02-12T10:00:00Z') }, 'organizer'), ForbiddenException, 'cannot be modified');
+  });
+
+  await test('a corrected knockout winner replaces the old one in the next round, until that round is played', async () => {
+    const teams = ['A', 'B', 'C', 'D'].map((name) => ({ id: `t${name}`, name, status: 'approved' }));
+    const competition: any = { id: 'c1', name: 'Cup', type: 'tournament', format: 'Single Elimination', status: 'active', paymentStatus: 'LEGACY', createdBy: 'organizer', startDate: new Date('2026-02-01'), endDate: new Date('2026-02-28') };
+    const { service, matches } = makeService({ teams, competition });
+    await service.completeBracket('c1', 'organizer');
+    const [semiA, semiB] = matches.filter((m) => m.round === 'Semifinal');
+    const final = matches.find((m) => m.round === 'Final');
+    await service.recordResult(semiA.id, semiA.team1Id, semiA.team1Name, '2-0', 'organizer');
+    const slot = semiA.bracket.nextSlot;
+    assert.equal(final[`team${slot}Id`], semiA.team1Id);
+    await service.recordResult(semiA.id, semiA.team2Id, semiA.team2Name, '1-2', 'organizer');
+    assert.equal(semiA.winnerId, semiA.team2Id);
+    assert.equal(final[`team${slot}Id`], semiA.team2Id, 'the corrected winner takes the final slot');
+    await service.recordResult(semiB.id, semiB.team1Id, semiB.team1Name, '2-0', 'organizer');
+    await service.recordResult(final.id, final.team1Id, final.team1Name, '3-1', 'organizer');
+    await expectThrow(() => service.recordResult(semiA.id, semiA.team1Id, semiA.team1Name, '2-0', 'organizer'), BadRequestException, 'has ended');
   });
 
   await test('only a participating team can be declared winner', async () => {

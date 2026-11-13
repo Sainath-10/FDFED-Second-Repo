@@ -7,20 +7,6 @@ import { UserRole } from '../../../common/interfaces';
 
 export type UserWithPasswordHash = UserEntity & { passwordHash: string };
 
-export interface RawUserRow {
-  id: string;
-  email: string;
-  username: string;
-  password_hash: string;
-  role: UserRole;
-  banned: boolean;
-  warningCount: number;
-  profilePicUrl?: string;
-  bio?: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
 @Injectable()
 export class UserRepository {
   constructor(
@@ -38,15 +24,23 @@ export class UserRepository {
     adminType: string | null = null,
   ): Promise<UserEntity> {
     const user = this.repo.create({
-      email,
-      username,
+      email: String(email).trim().toLowerCase(),
+      username: String(username).trim(),
       passwordHash,
       role,
       adminType: adminType || (role === UserRole.SUPER_ADMIN ? 'super_admin' : null),
       banned: false,
       warningCount: 0,
     });
-    return this.repo.save(user);
+    const saved = await this.repo.save(user);
+    return UserRepository.withoutSecrets(saved);
+  }
+
+  /** Never hand a password hash back to a caller that might serialise it. */
+  static withoutSecrets<T extends Partial<UserEntity>>(user: T): T {
+    if (!user) return user;
+    const { passwordHash: _hash, ...rest } = user as any;
+    return rest as T;
   }
 
   async createWithPassword(
@@ -66,38 +60,44 @@ export class UserRepository {
     return this.repo.findOne({ where: { id } });
   }
 
-  async findByEmail(email: string): Promise<UserEntity | null> {
-    return this.repo.findOne({ where: { email } });
-  }
-
-  async findByUsername(username: string): Promise<UserEntity | null> {
-    return this.repo.findOne({ where: { username } });
-  }
-
-  async findByEmailOrUsername(emailOrUsername: string): Promise<UserEntity | null> {
-    return this.repo.findOne({
-      where: [{ email: emailOrUsername }, { username: emailOrUsername }],
-    });
-  }
-
-  async findWithPasswordByEmailOrUsername(emailOrUsername: string): Promise<UserWithPasswordHash | null> {
+  async findWithPasswordById(id: string): Promise<UserWithPasswordHash | null> {
     return this.repo
       .createQueryBuilder('user')
       .addSelect('user.passwordHash')
-      .where('user.email = :emailOrUsername OR user.username = :emailOrUsername', { emailOrUsername })
+      .where('user.id = :id', { id })
       .getOne() as Promise<UserWithPasswordHash | null>;
   }
 
-  async findRawByEmailOrUsername(emailOrUsername: string): Promise<RawUserRow | null> {
-    const rows = await this.repo.query(
-      `SELECT id, email, username, password_hash, role, banned,
-              "warningCount", "profilePicUrl", bio, "createdAt", "updatedAt"
-       FROM users
-       WHERE email = $1 OR username = $1
-       LIMIT 1`,
-      [emailOrUsername],
-    );
-    return rows[0] ?? null;
+  /** Emails and usernames are compared case-insensitively everywhere. */
+  async findByEmail(email: string): Promise<UserEntity | null> {
+    return this.repo
+      .createQueryBuilder('user')
+      .where('lower(user.email) = lower(:email)', { email: String(email || '').trim() })
+      .getOne();
+  }
+
+  async findByUsername(username: string): Promise<UserEntity | null> {
+    return this.repo
+      .createQueryBuilder('user')
+      .where('lower(user.username) = lower(:username)', { username: String(username || '').trim() })
+      .getOne();
+  }
+
+  async findByEmailOrUsername(emailOrUsername: string): Promise<UserEntity | null> {
+    const value = String(emailOrUsername || '').trim();
+    return this.repo
+      .createQueryBuilder('user')
+      .where('lower(user.email) = lower(:value) OR lower(user.username) = lower(:value)', { value })
+      .getOne();
+  }
+
+  async findWithPasswordByEmailOrUsername(emailOrUsername: string): Promise<UserWithPasswordHash | null> {
+    const value = String(emailOrUsername || '').trim();
+    return this.repo
+      .createQueryBuilder('user')
+      .addSelect('user.passwordHash')
+      .where('lower(user.email) = lower(:value) OR lower(user.username) = lower(:value)', { value })
+      .getOne() as Promise<UserWithPasswordHash | null>;
   }
 
   async findAll(): Promise<UserEntity[]> {
@@ -107,11 +107,11 @@ export class UserRepository {
   // ─── Existence Checks ──────────────────────────────────────────────────────
 
   async emailExists(email: string): Promise<boolean> {
-    return this.repo.exists({ where: { email } });
+    return !!(await this.findByEmail(email));
   }
 
   async usernameExists(username: string): Promise<boolean> {
-    return this.repo.exists({ where: { username } });
+    return !!(await this.findByUsername(username));
   }
 
   // ─── Updates ───────────────────────────────────────────────────────────────
@@ -119,6 +119,10 @@ export class UserRepository {
   async update(id: string, updates: Partial<UserEntity>): Promise<UserEntity> {
     await this.repo.update(id, updates);
     return this.repo.findOne({ where: { id } });
+  }
+
+  async setBanned(id: string, banned: boolean): Promise<void> {
+    await this.repo.update(id, banned ? { banned: true } : { banned: false, warningCount: 0 });
   }
 
   async updatePassword(id: string, newPasswordHash: string): Promise<void> {
@@ -202,6 +206,7 @@ export class UserRepository {
       { email: 'superadmin1@nexus.gg', username: 'superadmin1', password, role: UserRole.SUPER_ADMIN, adminType: 'super_admin' },
       { email: 'superadmin2@nexus.gg', username: 'superadmin2', password, role: UserRole.SUPER_ADMIN, adminType: 'super_admin' },
       { email: 'communitymod@nexus.gg', username: 'communitymod', password, role: UserRole.COMMUNITY_MODERATOR, adminType: 'community_moderator' },
+      { email: 'finance@nexus.gg', username: 'finance', password, role: UserRole.FINANCE_MODERATOR, adminType: 'finance_moderator' },
       { email: 'regular1@nexus.gg', username: 'regular1', password, role: UserRole.PARTICIPANT, adminType: null },
       { email: 'regular2@nexus.gg', username: 'regular2', password, role: UserRole.PARTICIPANT, adminType: null },
       { email: 'regular3@nexus.gg', username: 'regular3', password, role: UserRole.PARTICIPANT, adminType: null },

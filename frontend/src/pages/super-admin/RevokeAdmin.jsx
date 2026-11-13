@@ -1,84 +1,70 @@
 ﻿/**
- * NEXUS ESPORTS — Super Admin · Revoke Administrator
+ * NEXUS ESPORTS — Super Admin · Revoke administrator
  *
- * demotes an administrator through the local account directory
- * (`nexus.auth.accounts`).
+ * Returns a staff account to a normal player account, with a reason they see
+ * at their next login. The backend refuses self-revocation and removing the
+ * last Super Admin.
  */
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { revokeAdministrator } from '../../services/auth.js';
+import { AuthAPI } from '../../services/api.js';
+import { Notice, PageHeader } from '../../components/ui.jsx';
 import { showToast } from '../../lib/toast.js';
-import '../../styles/pages/super-admin/super-dashboard.css';
-import '../../styles/pages/super-admin/users.css';
+
+const STAFF = ['super_admin', 'admin', 'finance_moderator', 'community_moderator'];
 
 export default function RevokeAdmin() {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
   const { session } = useAuth();
-  const [username, setUsername] = useState('');
+  const [staff, setStaff] = useState([]);
+  const [username, setUsername] = useState(params.get('username') || '');
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  async function onSubmit(e) {
-    e.preventDefault();
-    setError('');
-    const uname = username.trim();
-    const why = reason.trim();
-    if (!uname || !why) {
-      setError('Please enter both username and reason');
-      showToast('Please enter both username and reason', 'error');
-      return;
-    }
+  useEffect(() => {
+    AuthAPI.getAllUsers().then((res) => {
+      if (res.ok) setStaff((res.data || []).filter((u) => (STAFF.includes(u.role) || u.adminType) && u.username !== session?.username));
+    });
+  }, [session?.username]);
 
+  async function onSubmit(event) {
+    event.preventDefault();
+    setError('');
+    if (!username.trim() || reason.trim().length < 5) { setError('Choose an administrator and give a reason (at least 5 characters).'); return; }
     setSubmitting(true);
-    const result = revokeAdministrator(uname, { actor: session?.username, reason: why });
+    const res = await AuthAPI.revokeAdmin(username.trim(), reason.trim());
     setSubmitting(false);
-    if (!result.ok) {
-      setError(result.error);
-      showToast(result.error, 'error');
-      return;
-    }
-    showToast(`Revoked admin privileges for ${result.account.username}.`, 'success');
-    setTimeout(() => navigate('/pages/super-admin/admins.html'), 600);
+    if (!res.ok) { setError(res.error || 'Access was not revoked.'); return; }
+    showToast(`@${username.trim()} no longer has staff access.`);
+    navigate('/pages/super-admin/admins.html');
   }
 
   return (
-    <main className="sa-main-v2">
-      <header className="sa-header-v2" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div className="sa-header-left">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
-            <Link to="/pages/super-admin/admins.html" style={{ color: '#ef4444', textDecoration: 'none', fontSize: 13, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>← Back to Admins Roster</Link>
-          </div>
-          <h1 className="sa-title">Revoke <span className="accent-text" style={{ color: '#ef4444' }}>Admin Privileges</span></h1>
-          <p className="sa-desc">Demote an administrator to participant status and record the revocation reason. Your own account cannot be revoked.</p>
+    <main className="main-content">
+      <Link to="/pages/super-admin/admins.html" className="back-btn-alt">← Back to admins</Link>
+      <PageHeader title="Revoke administrator" subtitle="The account becomes a normal player account. You cannot revoke yourself." />
+      <form className="ui-card" style={{ maxWidth: 640 }} onSubmit={onSubmit}>
+        <div className="ui-field">
+          <label htmlFor="revoke-user">Administrator *</label>
+          <select id="revoke-user" className="form-input" value={username} onChange={(e) => setUsername(e.target.value)}>
+            <option value="">Choose…</option>
+            {staff.map((u) => <option key={u.id} value={u.username}>@{u.username} — {(u.adminType || u.role).replace(/_/g, ' ')}</option>)}
+          </select>
         </div>
-      </header>
-
-      <section className="sa-users-card" style={{ maxWidth: 640, marginTop: 24, padding: 32, border: '1px solid rgba(239,68,68,0.3)' }}>
-        <form id="revoke-admin-page-form" style={{ display: 'flex', flexDirection: 'column', gap: 20 }} onSubmit={onSubmit}>
-          {error && (
-            <div id="revoke-admin-error-box" style={{ padding: '12px 16px', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 10, color: '#ef4444', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}><span>⚠️</span> <span>{error}</span></div>
-          )}
-
-          <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#cbd5e1', marginBottom: 8 }}>Admin Username or Email *</label>
-            <input type="text" id="page-revoke-username" className="form-input" placeholder="e.g. communitylead@nexus.gg" required value={username} onChange={(e) => setUsername(e.target.value)} style={{ width: '100%', padding: '12px 16px', background: '#0f172a', border: '1px solid #334155', borderRadius: 10, color: '#fff', fontSize: 14 }} />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#cbd5e1', marginBottom: 8 }}>Reason for Revocation *</label>
-            <textarea id="page-revoke-reason" className="form-input" placeholder="e.g. Policy violation / Security audit demotion..." required rows="4" value={reason} onChange={(e) => setReason(e.target.value)} style={{ width: '100%', padding: '12px 16px', background: '#0f172a', border: '1px solid #334155', borderRadius: 10, color: '#fff', fontSize: 14, resize: 'vertical' }} />
-          </div>
-
-          <div style={{ display: 'flex', gap: 14, marginTop: 12 }}>
-            <Link to="/pages/super-admin/admins.html" style={{ flex: 1, padding: 12, textAlign: 'center', background: 'none', border: '1px solid #334155', color: '#94a3b8', borderRadius: 10, textDecoration: 'none', fontWeight: 600, fontSize: 14 }}>Cancel</Link>
-            <button type="submit" id="revoke-admin-submit-btn" disabled={submitting} style={{ flex: 2, padding: 12, background: '#ef4444', border: 'none', color: '#fff', borderRadius: 10, cursor: 'pointer', fontWeight: 800, fontSize: 14, boxShadow: '0 0 16px rgba(239,68,68,0.3)' }}>Confirm &amp; Revoke Access</button>
-          </div>
-        </form>
-      </section>
+        <div className="ui-field">
+          <label htmlFor="revoke-reason">Reason *</label>
+          <textarea id="revoke-reason" className="form-input" rows={3} maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} />
+          <span className="ui-field-help">They see this reason the next time they log in.</span>
+        </div>
+        {error && <Notice tone="danger">{error}</Notice>}
+        <div className="ui-dialog-actions">
+          <Link className="btn-cancel" to="/pages/super-admin/admins.html">Cancel</Link>
+          <button type="submit" className="btn-danger" disabled={submitting}>{submitting ? 'Revoking…' : 'Revoke access'}</button>
+        </div>
+      </form>
     </main>
   );
 }
-
-

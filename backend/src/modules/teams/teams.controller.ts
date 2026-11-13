@@ -13,7 +13,11 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { TeamsService } from './teams.service';
-import { CreateTeamDto, UpdateTeamDto, AddTeamMemberDto, TeamResponseDto, DisbandTeamDto, RemoveMemberDto } from './dto/team.dto';
+import {
+  CreateTeamDto, UpdateTeamDto, AddTeamMemberDto, TeamResponseDto, DisbandTeamDto, RemoveMemberDto,
+  LeaveTeamDto, TeamStatusDto, TeamReasonDto, JoinRequestDto, JoinRequestDecisionDto, CreateInviteDto,
+  InviteDecisionDto, RefundDecisionDto,
+} from './dto/team.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../../common/guards/optional-jwt-auth.guard';
 import { RolesGuard } from '../../common/decorators/roles.guard';
@@ -88,6 +92,37 @@ export class TeamsController {
     return this.teamsService.getTeamsByCompetition(competitionId, user);
   }
 
+  @Get('join-requests/mine')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'My own join requests (pending, awaiting payment and decided)' })
+  async myJoinRequests(@CurrentUser() user?: any) {
+    return this.teamsService.getMyJoinRequests(user);
+  }
+
+  @Get('refund-requests')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.FINANCE_MODERATOR)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List refund requests (support workflow). Filter with ?status=pending' })
+  async refundRequests(@Query('status') status?: string) {
+    return this.teamsService.getRefundRequests(status);
+  }
+
+  @Patch('refund-requests/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.FINANCE_MODERATOR)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Resolve a refund request (support workflow). Never auto-claims a provider refund was completed.' })
+  async resolveRefundRequest(
+    @Param('id') id: string,
+    @Body() body: RefundDecisionDto,
+    @CurrentUser() user?: any,
+  ) {
+    const resolvedBy = user?.username || user?.id || 'admin';
+    return this.teamsService.resolveRefundRequest(id, body.status, resolvedBy, body.note);
+  }
+
   @Get(':id')
   @ApiOperation({
     summary: 'Get team by ID',
@@ -149,29 +184,6 @@ export class TeamsController {
     return this.teamsService.disbandTeam(id, dto.reason, user, dto.memberUsernames);
   }
 
-  @Get('refund-requests')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.ADMIN)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'List refund requests (support workflow). Filter with ?status=pending' })
-  async refundRequests(@Query('status') status?: string) {
-    return this.teamsService.getRefundRequests(status);
-  }
-
-  @Patch('refund-requests/:id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.ADMIN)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Resolve a refund request (support workflow). Never auto-claims a provider refund was completed.' })
-  async resolveRefundRequest(
-    @Param('id') id: string,
-    @Body() body: { status: 'completed' | 'failed' | 'cancelled'; note?: string },
-    @CurrentUser() user?: any,
-  ) {
-    const resolvedBy = user?.username || user?.id || 'admin';
-    return this.teamsService.resolveRefundRequest(id, body.status, resolvedBy, body.note);
-  }
-
   @Post(':id/members')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN, UserRole.SUPER_ADMIN)
@@ -231,27 +243,34 @@ export class TeamsController {
   @ApiOperation({ summary: 'Update team registration status (Approve / Reject) — competition organizers / admins' })
   async setStatus(
     @Param('id') id: string,
-    @Body() body: { status: string; reason?: string },
+    @Body() body: TeamStatusDto,
     @CurrentUser() user?: any,
   ) {
     return this.teamsService.setStatus(id, body.status, user, body.reason?.trim() || undefined);
   }
 
   @Post(':id/warnings')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Issue warning to team' })
-  async addWarning(@Param('id') id: string, @CurrentUser() user?: any) {
-    const issuer = user?.username || user?.id || 'organizer';
-    return this.teamsService.addWarning(id, issuer);
+  @ApiOperation({ summary: 'Issue a warning to a team (organizers of that competition, or admins)' })
+  async addWarning(@Param('id') id: string, @Body() body: TeamReasonDto, @CurrentUser() user?: any) {
+    return this.teamsService.addWarning(id, user, body?.reason?.trim() || undefined);
+  }
+
+  @Post(':id/leave')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Unregister from a team. Before the start your own fee is refunded; after the start nothing is refunded.' })
+  async leaveTeam(@Param('id') id: string, @Body() body: LeaveTeamDto, @CurrentUser() user?: any) {
+    return this.teamsService.leaveTeam(id, user, body?.reason);
   }
 
   @Patch(':id/ban')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Ban a team from tournament — competition organizers / admins' })
-  async banTeam(@Param('id') id: string, @Body() body: { reason?: string } = {}, @CurrentUser() user?: any) {
+  async banTeam(@Param('id') id: string, @Body() body: TeamReasonDto, @CurrentUser() user?: any) {
     return this.teamsService.banTeam(id, user, body?.reason?.trim() || undefined);
   }
 
@@ -261,7 +280,7 @@ export class TeamsController {
   @ApiOperation({ summary: 'Player requests to join a team' })
   async createJoinRequest(
     @Param('id') teamId: string,
-    @Body() body: { competitionId?: string; fromUsername?: string; message?: string; joinCode?: string },
+    @Body() body: JoinRequestDto,
     @CurrentUser() user?: any,
   ) {
     // identity is derived from the JWT — the client-supplied username is only a hint
@@ -283,7 +302,7 @@ export class TeamsController {
   @ApiOperation({ summary: 'Accept or reject join request' })
   async updateJoinRequest(
     @Param('reqId') reqId: string,
-    @Body() body: { status: string; reviewedBy?: string; feeAlreadyPaid?: boolean },
+    @Body() body: JoinRequestDecisionDto,
     @CurrentUser() user?: any,
   ) {
     return this.teamsService.updateJoinRequest(reqId, body.status, user, body.feeAlreadyPaid === true);
@@ -335,10 +354,10 @@ export class TeamsController {
   @ApiOperation({ summary: 'Invite player to team' })
   async createInvite(
     @Param('id') teamId: string,
-    @Body() body: { competitionId?: string; toUsername: string; fromUsername?: string },
+    @Body() body: CreateInviteDto,
     @CurrentUser() user?: any,
   ) {
-    const fromUsername = user?.username || body.fromUsername || 'system';
+    const fromUsername = user?.username;
     return this.teamsService.createInvite(teamId, body.competitionId || '', body.toUsername, fromUsername, user);
   }
 
@@ -356,7 +375,7 @@ export class TeamsController {
   @ApiOperation({ summary: 'Accept or decline team invite' })
   async updateInvite(
     @Param('inviteId') inviteId: string,
-    @Body() body: { status: string },
+    @Body() body: InviteDecisionDto,
     @CurrentUser() user?: any,
   ) {
     return this.teamsService.updateInvite(inviteId, body.status, user);

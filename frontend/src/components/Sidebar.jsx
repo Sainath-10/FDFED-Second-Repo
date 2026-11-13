@@ -5,11 +5,10 @@
  * injected into `#sidebar-mount`, using the role-based nav config. Active state
  * comes from NavLink instead of a passed-in `activePage` string.
  */
-import { useEffect } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { getSidebarNav } from '../config/nav.js';
-import { LoginIcon } from './icons.jsx';
+import { LoginIcon, LogoutIcon } from './icons.jsx';
 import logo from '../assets/f03e2b11537e425d8544ee3ca732bf73af5137c0.png';
 
 function NavItem({ item }) {
@@ -27,16 +26,14 @@ function NavItem({ item }) {
 }
 
 export default function Sidebar() {
-  const { session } = useAuth();
-  const { variant, top, bottom, showLogin } = getSidebarNav(session);
+  const { session, logout } = useAuth();
+  const navigate = useNavigate();
+  const { top, bottom, showLogin } = getSidebarNav(session);
 
- // Super-admin pages rely on this body class for their footer styling.
-  useEffect(() => {
-    const cls = 'super-admin-classic-shell';
-    if (variant === 'super-admin') document.body.classList.add(cls);
-    else document.body.classList.remove(cls);
-    return () => document.body.classList.remove(cls);
-  }, [variant]);
+  function handleLogout() {
+    logout();
+    navigate('/pages/login.html', { replace: true });
+  }
 
   return (
     <aside className="sidebar">
@@ -63,6 +60,17 @@ export default function Sidebar() {
             <LoginIcon />
             <span style={{ color: '#c6ff33' }}>Login</span>
           </NavLink>
+        )}
+        {session && (
+          <button
+            type="button"
+            className="nav-item"
+            onClick={handleLogout}
+            style={{ background: 'none', border: 'none', font: 'inherit' }}
+          >
+            <LogoutIcon />
+            <span>Log out</span>
+          </button>
         )}
       </div>
     </aside>

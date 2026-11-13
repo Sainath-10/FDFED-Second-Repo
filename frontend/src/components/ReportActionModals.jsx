@@ -14,7 +14,7 @@ import {
   ORGANISER_ACTIONS,
   capitalise,
 } from '../lib/reporting.js';
-import { LocalReportsAPI as ReportsAPI, LocalReputationAPI as ReputationAPI } from '../services/local/reporting.js';
+import { ReportsAPI, ReputationAPI } from '../services/api.js';
 
 function Backdrop({ children, onClose }) {
   return (
@@ -147,6 +147,7 @@ export function ModeratorDecisionModal({ report, onClose, onDone }) {
       setError('An unsubstantiated finding cannot justify a punitive action.');
       return;
     }
+    if (action === 'competition_termination' && !window.confirm('End this competition now? Every player is refunded, the organiser forfeits 10% of the prize pool, and this cannot be undone or uplifted.')) return;
     setBusy(true);
     const payload = { finding, action, conclusion: conclusion.trim() };
     if (needsLevel) payload.level = level;
@@ -178,6 +179,14 @@ export function ModeratorDecisionModal({ report, onClose, onDone }) {
           <span className="hint" style={{ display: 'block', marginTop: 6, color: '#fb923c' }}>
             Competition Suspension terminates this competition because of the recorded misconduct. It is not a
             temporary suspension, so no duration is recorded and it is never restored automatically.
+          </span>
+        )}
+        {action === 'competition_termination' && (
+          <span className="hint" style={{ display: 'block', marginTop: 6, color: '#f87171' }}>
+            Ends the competition immediately: every registration fee still in escrow is refunded to the players, the
+            organiser forfeits 10% of the deposited prize pool as a penalty (the rest is returned to them) and their
+            trust score drops. Money cannot be un-refunded, so this decision cannot be appealed or uplifted. Not possible
+            once prizes have been paid out — use a finance reversal for that.
           </span>
         )}
       </div>

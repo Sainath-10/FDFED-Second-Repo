@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import NexusData from '../services/data.js';
+import { mapCompetition, isOrganizerOf } from '../services/competitions.js';
+import { copyText } from '../components/ui.jsx';
+import { showToast } from '../lib/toast.js';
 import { CompetitionsAPI, MatchesAPI, TeamsAPI } from '../services/api.js';
-import { assetUrl } from '../lib/assets.js';
+import { competitionBanner } from '../lib/assets.js';
 import { groupFixtures, isFixtureWinner, normalizeFixture } from '../lib/fixtures.mjs';
 import { competitionOutcome } from '../lib/competitionOutcome.mjs';
 import CompetitionOutcome from '../components/CompetitionOutcome.jsx';
+import CompetitionResults from '../components/CompetitionResults.jsx';
 import FixtureEditor from '../components/FixtureEditor.jsx';
 import PlayoffBracket from '../components/PlayoffBracket.jsx';
 import FixtureBracket from '../components/FixtureBracket.jsx';
@@ -53,8 +56,9 @@ export default function CompetitionDetail() {
   const id = params.get('id') || '';
   const { session } = useAuth();
   const [revision, setRevision] = useState(0);
-  const cached = useMemo(() => NexusData.getCompetitionById?.(id), [id, revision]);
-  const apiId = cached?.dbId || id;
+  const cached = null;
+  const apiId = id;
+  const [joinCode, setJoinCode] = useState(null);
   const [remote, setRemote] = useState({ id: '', competition: null, matches: null, teams: null, errors: [], loading: true });
   const [stage, setStage] = useState('league');
   const [view, setView] = useState('board');
@@ -100,7 +104,7 @@ export default function CompetitionDetail() {
 
   useEffect(() => { setSelectedId(params.get('matchId')); setQuery(''); setStatus('all'); }, [id]);
   const current = remote.id === apiId ? remote : { loading: true, errors: [] };
-  const comp = current.competition ? { ...cached, ...current.competition } : cached;
+  const comp = current.competition ? mapCompetition(current.competition) : null;
   // A successful empty API response is authoritative too; never resurrect cached matches.
   const matches = useMemo(() => (current.matches ?? cached?.matches ?? []).map(normalizeFixture), [current.matches, cached]);
   const teams = current.teams ?? cached?.teams ?? [];
@@ -120,8 +124,8 @@ export default function CompetitionDetail() {
   const isLeague = /league|robin/i.test(`${comp?.type} ${comp?.format}`);
   const creator = comp?.createdBy || comp?.organizerId;
   const organizers = [...new Set([creator, ...(comp?.organizers || [])].filter(Boolean))];
-  const canManage = organizers.includes(session?.username) || ['admin', 'admin', 'super-admin', 'super_admin'].includes(session?.role);
-  const eligibleTeams = teams.filter((team) => team.status === 'approved');
+  const canManage = isOrganizerOf(comp, session?.username) || ['admin', 'super-admin', 'super_admin'].includes(session?.role);
+  const eligibleTeams = teams.filter((team) => !['rejected', 'banned', 'disbanded'].includes(String(team.status || '').toLowerCase()));
   const availableTabs = canManage ? ['fixtures', 'teams', 'overview', 'standings', 'organizers', 'disputes'] : ['fixtures', 'teams', 'overview', 'standings'];
   const activeTab = availableTabs.includes(params.get('tab')) ? params.get('tab') : 'fixtures';
   const singleElimination = !isLeague && !/double/i.test(comp?.format || '');
@@ -157,11 +161,16 @@ export default function CompetitionDetail() {
   }
 
   useEffect(() => { if (comp?.name) document.title = `NEXUS ESPORTS — ${comp.name}`; }, [comp?.name]);
+  // The private join code is shown only to this competition's organizers.
+  useEffect(() => {
+    if (!canManage || comp?.visibility !== 'private' || !apiId) { setJoinCode(null); return; }
+    CompetitionsAPI.getJoinCode(apiId).then((res) => { if (res.ok) setJoinCode(res.data?.joinCode || null); });
+  }, [canManage, comp?.visibility, apiId]);
   useEffect(() => { if (selectedId) detailRef.current?.focus({ preventScroll: true }); }, [selectedId]);
 
   if (!comp) return <main className="cd-page"><div className="cd-empty" role="status"><Icon name="bracket" size={36} /><h1>{current.loading ? 'Loading competition…' : 'Competition unavailable'}</h1><p>{current.errors.join(' ')}</p><Link className="cd-button" to="/pages/my-activity.html">Back to My Activity</Link></div></main>;
 
-  const banner = assetUrl(comp.img || 'c4f97eccde97e10ac89b61ec5fb36fdce0ab2477.png');
+  const banner = competitionBanner(comp);
   return <main className="cd-page">
     <div className="cd-breadcrumb"><Link to="/pages/my-activity.html">My activity</Link><span>/</span><span>Competition center</span></div>
     <header className="cd-hero" style={{ '--cover': `url("${banner}")` }}>
@@ -176,13 +185,15 @@ export default function CompetitionDetail() {
       {canManage && <><Link to={`/pages/competition-payment.html?id=${encodeURIComponent(apiId)}`}>Payments &amp; prize pool</Link>{comp.feeType && comp.feeType !== 'free' && <Link to={route('organizer-revenue')}>Transactions</Link>}{!ended && <Link to={route('edit-competition')}>Settings</Link>}</>}
     </nav>
 
+    {canManage && joinCode && <div className="cd-notice" role="status"><div><p><strong>Private join code:</strong> <code style={{ letterSpacing: 2, color: '#c6ff33', fontSize: 16 }}>{joinCode}</code> — share it only with the teams you want to register.</p></div><button type="button" className="cd-button" onClick={async () => showToast((await copyText(joinCode)) ? 'Join code copied.' : 'Copy failed — select the code and copy it.')}>Copy code</button></div>}
     {cancelledComp && <div className="cd-notice" role="status"><div><p><strong>This competition has been cancelled.</strong> {comp.abandonedReason ? `Reason: ${comp.abandonedReason}. ` : ''}{comp.organizerPaid ? 'All registration fees were refunded in full.' : 'Nothing was charged.'}</p></div></div>}
     {!!current.errors.length && <div className="cd-notice" role="alert"><div>{current.errors.map((error) => <p key={error}>{error}</p>)}{matches.length > 0 && <small>Showing the last available fixtures until refresh succeeds.</small>}</div><button className="cd-button" onClick={() => setRevision((v) => v + 1)} disabled={current.loading}>Retry</button></div>}
 
     {activeTab === 'fixtures' && <section className="cd-fixtures" aria-labelledby="cd-fixture-title">
-      <div className="cd-section-heading"><div><h2 id="cd-fixture-title">{outcome ? 'Winner and runner-up' : 'Fixtures'}</h2></div>
+      <div className="cd-section-heading"><div><h2 id="cd-fixture-title">{ended && !cancelledComp ? 'Final results' : outcome ? 'Winner and runner-up' : 'Fixtures'}</h2></div>
       </div>
-      <CompetitionOutcome outcome={outcome} />
+      <CompetitionResults competitionId={apiId} refreshKey={revision} />
+      {!ended && <CompetitionOutcome outcome={outcome} />}
       {building && <p className="cd-fixture-message" role="status">Building the full bracket and reserving match times…</p>}
       {buildError && <div className="cd-notice" role="alert"><p>{buildError}</p><button className="cd-button" disabled={building} onClick={() => buildFixtures(matches.length > 0 && singleElimination)}>Retry</button></div>}
       {playoffMatches.length > 0 && <div className="cd-segment" role="tablist" aria-label="Competition stage" style={{ marginBottom: 18 }}>
@@ -212,15 +223,15 @@ export default function CompetitionDetail() {
                 </div><div className="cd-board-caption"><span><i className="cd-legend-line" />Rounds shown in competition order</span><span>Scroll to explore · Click a match for details</span></div>
               </> : <div className="cd-schedule">{rounds.map((round) => <section key={round.name}><h3>{round.name}<span>{round.matches.length} matches</span></h3><div className="cd-schedule-grid">{round.matches.map((match) => <MatchCard key={match.id} match={match} selected={match.id === selectedId} number={numbers.get(match.id)} onSelect={selectMatch} />)}</div></section>)}</div>}
             </div>
-            {selected && <aside className="cd-detail" ref={detailRef} tabIndex={-1} aria-label="Selected match details" onKeyDown={(e) => { if (e.key === 'Escape') setSelectedId(null); }}><div className="cd-detail-heading"><span className="cd-eyebrow">MATCH {String(numbers.get(selected.id)).padStart(2, '0')}</span><button aria-label="Close match details" onClick={() => setSelectedId(null)}>×</button></div><h3>{selected.round}</h3><Status value={selected.status} /><div className="cd-detail-versus"><div><Avatar name={selected.team1} /><strong>{selected.team1}</strong></div><span>{selected.status === 'completed' ? `${selected.score1 ?? '—'} : ${selected.score2 ?? '—'}` : 'VS'}</span><div><Avatar name={selected.team2} /><strong>{selected.team2}</strong></div></div><dl><div><dt>Date</dt><dd>{selected.date}</dd></div><div><dt>Time</dt><dd>{selected.time || 'To be confirmed'}</dd></div><div><dt>Format</dt><dd>{comp.format || comp.type}</dd></div>{selected.winnerName && <div><dt>Winner</dt><dd>{selected.winnerName}</dd></div>}</dl>{selected.notes && <p className="cd-detail-notes">{selected.notes}</p>}{canManage && !ended && !['completed', 'bye'].includes(selected.status) && <FixtureEditor key={selected.id} match={selected} matches={matches} competition={comp} isLeague={isLeague && selected.bracket?.kind !== 'ipl'} onSaved={savedMatch} />}{selected.resultDetails?.hostWinnerId && <p className="cd-detail-hint">Host's offline choice: {selected.winnerName}</p>}{selected.status === 'bye' && <p className="cd-detail-hint">This team advances automatically. No match is played.</p>}<p className="cd-detail-hint">Times are shown in your local time zone.</p></aside>}
+            {selected && <aside className="cd-detail" ref={detailRef} tabIndex={-1} aria-label="Selected match details" onKeyDown={(e) => { if (e.key === 'Escape') setSelectedId(null); }}><div className="cd-detail-heading"><span className="cd-eyebrow">MATCH {String(numbers.get(selected.id)).padStart(2, '0')}</span><button aria-label="Close match details" onClick={() => setSelectedId(null)}>×</button></div><h3>{selected.round}</h3><Status value={selected.status} /><div className="cd-detail-versus"><div><Avatar name={selected.team1} /><strong>{selected.team1}</strong></div><span>{selected.status === 'completed' ? `${selected.score1 ?? '—'} : ${selected.score2 ?? '—'}` : 'VS'}</span><div><Avatar name={selected.team2} /><strong>{selected.team2}</strong></div></div><dl><div><dt>Date</dt><dd>{selected.date}</dd></div><div><dt>Time</dt><dd>{selected.time || 'To be confirmed'}</dd></div><div><dt>Format</dt><dd>{comp.format || comp.type}</dd></div>{selected.winnerName && <div><dt>Winner</dt><dd>{selected.winnerName}</dd></div>}</dl>{selected.notes && <p className="cd-detail-notes">{selected.notes}</p>}{canManage && !ended && selected.status !== 'bye' && <FixtureEditor key={`${selected.id}:${selected.score || ''}`} match={selected} matches={matches} competition={comp} isLeague={isLeague && selected.bracket?.kind !== 'ipl'} onSaved={savedMatch} />}{selected.resultDetails?.hostWinnerId && <p className="cd-detail-hint">Host's offline choice: {selected.winnerName}</p>}{selected.status === 'bye' && <p className="cd-detail-hint">This team advances automatically. No match is played.</p>}<p className="cd-detail-hint">Times are shown in your local time zone.</p></aside>}
           </div>}
       <div className="cd-progress"><span>{completed} of {playedCount} matches completed</span><div role="progressbar" aria-label="Competition progress" aria-valuenow={playedCount ? Math.round(completed / playedCount * 100) : 0} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${playedCount ? completed / playedCount * 100 : 0}%` }} /></div><strong>{playedCount ? Math.round(completed / playedCount * 100) : 0}%</strong></div>
     </section>}
 
     {activeTab === 'teams' && <section className="cd-content-panel"><div className="cd-section-heading"><div><h2>Registered teams</h2><p>{teams.length} teams in this competition</p></div>{canManage && !ended && <Link className="cd-button" to={route('comp-manage-teams')}>Manage teams <Icon name="arrow" size={15} /></Link>}</div>{canManage && singleElimination && <FixtureSeeds key={`${apiId}:${seedOrder.join(',')}`} teams={eligibleTeams} initialOrder={seedOrder} error={buildError} locked={ended || matches.some((match) => ['completed', 'live'].includes(match.status))} busy={building} onApply={(order) => buildFixtures(matches.length > 0, order)} />}<div className="cd-team-grid">{teams.map((team) => <Link className="cd-team-tile" key={team.id || team.name} to={`/pages/team/team-roster.html?${new URLSearchParams({ compId: apiId, teamId: team.dbId || team.id })}`}><Avatar name={team.name} /><div><h3>{team.name}</h3><p>{team.memberUsernames?.length ?? team.members?.length ?? team.players ?? 0} players · {team.status || 'Registered'}</p></div><Icon name="arrow" size={16} /></Link>)}</div>{!teams.length && <div className="cd-empty"><h3>No teams registered yet</h3><p>Teams will appear here after registration.</p></div>}</section>}
-    {activeTab === 'overview' && <section className="cd-content-panel"><div className="cd-section-heading"><div><h2>About the competition</h2><p>{comp.description || 'Competition details and organizers.'}</p></div></div><dl className="cd-overview-grid">{[['Game', comp.game], ['Format', comp.format || comp.type], ['Starts', comp.startDate ? new Date(comp.startDate).toLocaleDateString() : comp.dates], ['Ends', comp.endDate ? new Date(comp.endDate).toLocaleDateString() : null], ['Prize pool', comp.prizePool || (comp.prize ? `₹${Number(comp.prize).toLocaleString('en-IN')}` : 'No prize pool')], ['Entry', comp.entryFee || (comp.entryFeeAmount ? `₹${comp.entryFeeAmount}` : 'Free')], ['Team capacity', comp.maxTeams], ['Organizers', organizers.map((name) => `@${name}`).join(', ')]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value || 'Not specified'}</dd></div>)}</dl></section>}
+    {activeTab === 'overview' && <section className="cd-content-panel"><div className="cd-section-heading"><div><h2>About the competition</h2><p>{comp.description || 'Competition details and organizers.'}</p></div></div><dl className="cd-overview-grid">{[['Game', comp.game], ['Format', comp.format || comp.type], ['Starts', comp.startDate ? new Date(comp.startDate).toLocaleDateString() : comp.dates], ['Ends', comp.endDate ? new Date(comp.endDate).toLocaleDateString() : null], ['Prize pool', comp.prizePool || (comp.prize ? `₹${Number(comp.prize).toLocaleString('en-IN')}` : 'No prize pool')], ['Entry', comp.entryFee || (comp.entryFeeAmount ? `₹${comp.entryFeeAmount}` : 'Free')], ['Team capacity', comp.maxTeams], ['Players per team', comp.maxPlayersPerTeam], ['Registration', comp.registration?.label], ['Visibility', comp.visibility === 'private' ? 'Private (join code required)' : 'Public'], ['Organizers', organizers.map((name) => `@${name}`).join(', ')]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value || 'Not specified'}</dd></div>)}</dl></section>}
     {activeTab === 'standings' && <StandingsSection competitionId={apiId} teams={teams} matches={matches} outcome={outcome} />}
     {activeTab === 'organizers' && canManage && <OrganizersSection competition={{ ...comp, id: apiId }} onChanged={() => setRevision((value) => value + 1)} />}
-    {activeTab === 'disputes' && canManage && <DisputesSection competitionId={apiId} />}
+    {activeTab === 'disputes' && canManage && <DisputesSection competitionId={apiId} competition={comp} />}
   </main>;
 }

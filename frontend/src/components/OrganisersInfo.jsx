@@ -7,7 +7,7 @@
  * notes, report descriptions and evidence are never included.
  */
 import { useEffect, useState } from 'react';
-import { LocalReputationAPI as ReputationAPI } from '../services/local/reporting.js';
+import { ReputationAPI } from '../services/api.js';
 import { LEVEL_META, formatINR, capitalise } from '../lib/reporting.js';
 import ReputationBadge from './ReputationBadge.jsx';
 import ReportButton from './ReportButton.jsx';

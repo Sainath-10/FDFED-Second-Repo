@@ -100,6 +100,39 @@ export class ReportEntity {
   @Column({ type: 'text', nullable: true, default: null })
   originalDecision: string | null;
 
+  /** null | submitted | resolved — an organiser decision can be appealed once. */
+  @Column({ type: 'varchar', nullable: true, default: null })
+  appealStatus: string | null;
+
+  @Column({ default: 0 })
+  appealCount: number;
+
+  @Column({ type: 'timestamptz', nullable: true, default: null })
+  appealedAt: Date | null;
+
+  @Column({ type: 'varchar', nullable: true, default: null })
+  appealDiscussionId: string | null;
+
+  @Column({ default: false })
+  uplifted: boolean;
+
+  @Column({ type: 'text', nullable: true, default: null })
+  upliftReason: string | null;
+
+  @Column({ type: 'varchar', nullable: true, default: null })
+  upliftedBy: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true, default: null })
+  upliftedAt: Date | null;
+
+  /** After uplifting a suspension: reopen | remain_terminated. */
+  @Column({ type: 'varchar', nullable: true, default: null })
+  competitionDisposition: string | null;
+
+  /** Every decision recorded on this report, oldest first; the last one is current. */
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  decisionHistory: Array<Record<string, any>>;
+
   @CreateDateColumn()
   createdAt: Date;
 

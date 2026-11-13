@@ -4,10 +4,10 @@ export class PaymentFoundation1793750400000 implements MigrationInterface {
   name = 'PaymentFoundation1793750400000';
   async up(runner: QueryRunner): Promise<void> {
     // Existing competitions need reconciliation; do not invent historical payments.
-    await runner.query(`ALTER TABLE competitions ADD COLUMN "paymentStatus" varchar NOT NULL DEFAULT 'LEGACY'`);
+    await runner.query(`ALTER TABLE competitions ADD COLUMN IF NOT EXISTS "paymentStatus" varchar NOT NULL DEFAULT 'LEGACY'`);
     await runner.query(`ALTER TABLE competitions ALTER COLUMN "paymentStatus" SET DEFAULT 'AWAITING_PLATFORM_FEE'`);
-    await runner.query(`ALTER TABLE competitions ADD COLUMN "platformFeeTransactionId" uuid`);
-    await runner.query(`CREATE TABLE payment_transactions (
+    await runner.query(`ALTER TABLE competitions ADD COLUMN IF NOT EXISTS "platformFeeTransactionId" uuid`);
+    await runner.query(`CREATE TABLE IF NOT EXISTS payment_transactions (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       "competitionId" uuid NOT NULL REFERENCES competitions(id) ON DELETE RESTRICT,
       "userUsername" varchar NOT NULL,
@@ -23,7 +23,17 @@ export class PaymentFoundation1793750400000 implements MigrationInterface {
       "updatedAt" timestamptz NOT NULL DEFAULT now(),
       UNIQUE ("competitionId", type)
     )`);
-    await runner.query(`ALTER TABLE competitions ADD CONSTRAINT competition_platform_transaction_fk FOREIGN KEY ("platformFeeTransactionId") REFERENCES payment_transactions(id)`);
+    // A synchronized schema may already hold this foreign key under a generated name.
+    await runner.query(`DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'competitions'::regclass AND contype = 'f'
+          AND pg_get_constraintdef(oid) LIKE '%platformFeeTransactionId%'
+      ) THEN
+        ALTER TABLE competitions ADD CONSTRAINT competition_platform_transaction_fk
+          FOREIGN KEY ("platformFeeTransactionId") REFERENCES payment_transactions(id);
+      END IF;
+    END $$`);
   }
   async down(runner: QueryRunner): Promise<void> {
     await runner.query(`ALTER TABLE competitions DROP CONSTRAINT competition_platform_transaction_fk`);

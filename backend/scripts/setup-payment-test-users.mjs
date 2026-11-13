@@ -7,8 +7,8 @@
  *   API_URL=http://localhost:3100 node backend/scripts/setup-payment-test-users.mjs
  *
  * Every account uses the password `test1234`. Uses only public API endpoints
- * (register, login, the simulated Aadhaar check, and Super Admin "add admin"),
- * so it needs the backend running with the seeded `superadmin1` / `nexus` account.
+ * (register, login and Super Admin "add admin"), so it needs the backend
+ * running with the seeded `superadmin1` / `nexus` account.
  */
 const API = (process.env.API_URL || 'http://localhost:3000').replace(/\/+$/, '');
 const PASSWORD = 'test1234';
@@ -65,14 +65,6 @@ async function ensureAccount(username, adminToken) {
   }
 }
 
-async function ensureVerified(token) {
-  const status = await call('GET', '/verification/status', null, token);
-  if (status.verificationStatus === 'verified') return 'already verified';
-  await call('POST', '/verification/aadhaar/request-otp', { aadhaarNumber: '123412341234' }, token);
-  await call('POST', '/verification/aadhaar/verify', { otp: '000000' }, token);
-  return 'verified';
-}
-
 async function main() {
   console.log(`Setting up payment test users on ${API}\n`);
   const admin = await login('superadmin1', 'nexus').catch(() => {
@@ -81,19 +73,17 @@ async function main() {
 
   for (const user of USERS) {
     const account = await ensureAccount(user.username, admin);
-    let token = await login(user.username);
-    // Players and organizers need the simulated Aadhaar check before creating or joining competitions.
-    const verification = await ensureVerified(token);
+    await login(user.username); // confirms the password works
     let role = '';
     if (user.finance) {
       try {
         await call('POST', '/auth/add-admin', { username: user.username, adminType: 'finance_moderator' }, admin);
         role = 'finance_moderator';
       } catch (error) {
-        role = /already an admin/i.test(error.message) ? 'finance_moderator (already)' : `role not set: ${error.message}`;
+        role = /already has a staff role/i.test(error.message) ? 'finance_moderator (already)' : `role not set: ${error.message}`;
       }
     }
-    console.log(`  ${user.username.padEnd(11)} ${account.padEnd(8)} ${verification.padEnd(17)} ${role.padEnd(28)} ${user.role}`);
+    console.log(`  ${user.username.padEnd(11)} ${account.padEnd(8)} ${role.padEnd(28)} ${user.role}`);
   }
 
   console.log(`\nAll passwords: ${PASSWORD}`);

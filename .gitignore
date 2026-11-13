@@ -53,3 +53,8 @@ coverage/
 
 # Migration log / local planning notes
 project.md
+
+# Generated change logs and local notes
+changes_*.txt
+project-history.md
+untracked-files.txt

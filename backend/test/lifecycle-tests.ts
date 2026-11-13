@@ -47,10 +47,13 @@ function memoryDb() {
     find: async (E: Function, options: any) => table(E).filter(r => matches(r, options?.where)).map(copy),
   };
   const db: any = {
+    manager,
     transaction: (work: any) => work(manager),
-    getRepository: (E: Function) => ({
+    getRepository: (E: any) => ({
       findOneBy: (where: any) => manager.findOneBy(E, where),
       find: (options: any) => manager.find(E, options),
+      create: (values: any) => manager.create(E, values),
+      save: (value: any) => manager.save(value),
     }),
   };
   return { db, table, insert: (E: any, values: any) => manager.save(manager.create(E, values)) };
@@ -112,7 +115,7 @@ async function run() {
   const beforeTransactions = table(Transaction).length;
   await rejects(() => service.registerTeam({ competitionId: comp.id, name: 'Blocked' }, { username: 'removed' }), /removed/);
   await rejects(() => service.registerTeam({ competitionId: comp.id, name: 'Blocked', members: ['removed'] }, p1), /removed/);
-  await rejects(() => service.registerTeam({ competitionId: comp.id, name: 'Blocked' }, { username: 'reviewer' }), /Staff accounts/);
+  await rejects(() => service.registerTeam({ competitionId: comp.id, name: 'Blocked' }, { username: 'reviewer' }), /staff account/);
   const invite = await insert(Invite, { competitionId: comp.id, toUsername: 'removed', status: 'pending' });
   const request = await insert(JoinRequest, { competitionId: comp.id, fromUsername: 'removed', status: 'awaiting_payment' });
   await rejects(() => service.join(invite.id, { username: 'removed' }, true), /removed/);
@@ -125,7 +128,7 @@ async function run() {
   assert.equal((await service.registerTeam({ competitionId: comp.id, name: 'Alpha' }, p1)).id, alpha.id);
   const bravo: any = await service.registerTeam({ competitionId: comp.id, name: 'Bravo' }, p2);
   const charlie: any = await service.registerTeam({ competitionId: comp.id, name: 'Charlie' }, p3);
-  await rejects(() => service.registerTeam({ competitionId: comp.id, name: 'Org team' }, org), /Organizers cannot register/);
+  await rejects(() => service.registerTeam({ competitionId: comp.id, name: 'Org team' }, org), /organises this competition/);
   await rejects(() => service.registerTeam({ competitionId: comp.id, name: 'Twice' }, { username: 'p4', role: 'participant' }), /already in a team/);
   const escrow = table(Escrow)[0];
   assert.equal(escrow.registrationsMinor, 30000);
@@ -272,6 +275,13 @@ async function run() {
     });
   assert.deepEqual(knockout.payouts, [['p1', 50000], ['p2', 30000], ['p3', 10000], ['p4', 10000]]);
 
+  // Final results: places in order, tied semi-final losers share 3rd, each with their prize.
+  const results: any = await service.results(knockout.c.id);
+  assert.equal(results.available, true);
+  assert.deepEqual(results.places.map((p: any) => [p.position, p.teams.map((t: any) => t.name).sort(), p.teams.map((t: any) => t.prizeMinor)]),
+    [[1, ['Kings'], [50000]], [2, ['Queens'], [30000]], [3, ['Pawns', 'Rooks'], [10000, 10000]]]);
+  assert.equal(results.places[2].tied, true);
+
   // Cancelling an unpaid draft forfeits nothing and does not penalise the organizer.
   const draft: any = await insert(Competition, { name: 'Draft', createdBy: 'org', organizers: ['org'], paymentStatus: 'AWAITING_PLATFORM_FEE', organizerPaid: false, startDate: new Date(Date.now() + 5 * day) });
   await service.cancel(draft.id, org, 'No longer needed');
@@ -315,9 +325,86 @@ async function run() {
   assert.equal((await service.mockStartNow(later.id, org)).duplicate, true);
   await rejects(() => service.mockStartNow(draft.id, org), /published, active/);
 
+  // ── Rosters, unregistering, early end with a penalty, moderator termination ──
+  for (const username of ['q1', 'q2', 'q3', 'q4']) await insert(User, { username, role: 'participant', banned: false, organizerTrustScore: 100 });
+  await insert(User, { username: 'fin', role: 'finance_moderator', banned: false });
+  const early: any = await insert(Competition, {
+    name: 'Early Cup', createdBy: 'org', organizers: ['org'], pendingOrganizers: ['q4'], paymentStatus: 'OPEN_FOR_REGISTRATION', status: 'active',
+    organizerPaid: true, prizePoolPaid: false, prize: 1000, feeType: 'per_player', entryFeeAmount: 20, visibility: 'public',
+    maxTeams: 0, maxPlayersPerTeam: 4, prizeDistributionMinor: [100000], startDate: new Date(Date.now() + 2 * day), endDate: new Date(Date.now() + 5 * day), financeHold: false,
+  });
+  const foxtrot: any = await service.registerTeam({ competitionId: early.id, name: 'Foxtrot' }, { username: 'q1', role: 'participant' });
+  // An invited co-organiser can never be put on a roster, even through an invitation.
+  const orgInvite: any = await insert(Invite, { teamId: foxtrot.id, competitionId: early.id, toUsername: 'q4', status: 'pending' });
+  await rejects(() => service.join(orgInvite.id, { username: 'q4' }, true), /organises this competition/);
+  for (const name of ['q2', 'q3']) {
+    const invite: any = await insert(Invite, { teamId: foxtrot.id, competitionId: early.id, toUsername: name, status: 'pending' });
+    await service.join(invite.id, { username: name }, true);
+  }
+  await service.prize(early.id, org);
+  // Before the start, unregistering refunds the player's own fee.
+  await service.releaseMember(foxtrot.id, 'q3', { username: 'q3' }, 'Exams that week', true);
+  assert.deepEqual(tx({ competitionId: early.id, type: 'REFUND' }).map(t => [t.userUsername, t.amountMinor]), [['q3', 2000]]);
+  await service.mockStartNow(early.id, org);
+  // After the start, unregistering is still possible but refunds nothing.
+  await rejects(() => service.releaseMember(foxtrot.id, 'q2', { username: 'q2' }, 'Busy'), /rosters are locked/);
+  await service.releaseMember(foxtrot.id, 'q2', { username: 'q2' }, 'Busy', true);
+  assert.equal(tx({ competitionId: early.id, type: 'REFUND' }).length, 1, 'no refund after the start');
+  assert(table(Notification).some(n => n.toUsername === 'q2' && n.type === 'unregistered-no-refund'));
+  assert.deepEqual(table(Team).find(t => t.id === foxtrot.id).memberUsernames, ['q1']);
+  // A started competition: the organiser cannot cancel it outright or end it with fixtures left.
+  await rejects(() => service.cancel(early.id, org, 'Changed my mind about this'), /has started/);
+  await insert(Match, { competitionId: early.id, status: 'scheduled', round: 'Round 1', team1Id: foxtrot.id, team2Id: randomUUID() });
+  await rejects(() => service.end(early.id, org), /still to be played/);
+  // The early-end request needs a reason and goes to finance; nothing changes yet.
+  await rejects(() => service.requestEarlyEnd(early.id, p1, 'A long enough reason for the request.'), /Only this competition/);
+  await rejects(() => service.requestEarlyEnd(early.id, org, 'Too short'), /at least 20/);
+  await service.requestEarlyEnd(early.id, org, 'Our sponsor withdrew and the venue closed down.');
+  assert.equal(early.earlyEndRequest.status, 'pending');
+  assert.equal(early.status, 'active');
+  assert(table(Notification).some(n => n.toUsername === 'fin' && n.type === 'early-end-request' && n.meta?.compId === early.id));
+  await rejects(() => service.requestEarlyEnd(early.id, org, 'Our sponsor withdrew and the venue closed down.'), /already waiting/);
+  await rejects(() => service.reviewEarlyEnd(early.id, p1, true, 'Looks fine'), /Finance moderator access/);
+  await rejects(() => service.reviewEarlyEnd(early.id, { username: 'q1', role: 'finance_moderator' }, true, 'Looks fine'), /Conflict of interest/);
+  // Approval: players refunded, 10% of the prize pool kept as a penalty, the rest returned.
+  const trustBefore = user('org').organizerTrustScore;
+  const ended: any = await service.reviewEarlyEnd(early.id, finance, true, 'Confirmed with the organiser by phone.');
+  assert.equal(ended.penaltyMinor, 10000);
+  assert.equal(ended.returnedMinor, 90000);
+  assert.equal(early.paymentStatus, 'REFUND_ISSUED');
+  assert.equal(early.status, 'cancelled');
+  assert.equal(early.earlyEndRequest.status, 'approved');
+  // q2 left after the start without a refund, but the competition never finished, so their escrowed fee goes back too.
+  assert.deepEqual(tx({ competitionId: early.id, type: 'REFUND' }).map(t => t.userUsername).sort(), ['q1', 'q2', 'q3'], 'every fee still in escrow is refunded');
+  assert.equal(tx({ competitionId: early.id, type: 'PENALTY' })[0].amountMinor, 10000);
+  assert.equal(tx({ competitionId: early.id, type: 'PRIZE_RETURN' })[0].amountMinor, 90000);
+  const earlyEscrow = table(Escrow).find(e => e.competitionId === early.id);
+  assert.equal(earlyEscrow.status, 'REFUNDED');
+  assert.equal(user('org').organizerTrustScore, trustBefore - 10);
+  assert(table(Notification).some(n => n.toUsername === 'org' && n.type === 'competition-ended-early' && /Penalty: ₹100/.test(n.body)));
+  assert.equal((await service.results(early.id) as any).reason, 'cancelled');
+
+  // A rejected request leaves the competition running.
+  const kept: any = await insert(Competition, {
+    name: 'Kept Cup', createdBy: 'org', organizers: ['org'], paymentStatus: 'OPEN_FOR_REGISTRATION', status: 'active',
+    organizerPaid: true, prizePoolPaid: true, prize: 0, feeType: 'free', entryFeeAmount: 0, visibility: 'public', maxTeams: 0, maxPlayersPerTeam: 0,
+    startDate: new Date(Date.now() - day), endDate: new Date(Date.now() + day), financeHold: false,
+  });
+  await service.requestEarlyEnd(kept.id, org, 'Half of the teams stopped turning up.');
+  await service.reviewEarlyEnd(kept.id, finance, false, 'Finish the remaining matches first.');
+  assert.equal(kept.earlyEndRequest.status, 'rejected');
+  assert.equal(kept.status, 'active');
+  assert(table(Notification).some(n => n.toUsername === 'org' && n.type === 'early-end-rejected'));
+  // A Community Moderator can end it outright after a substantiated report.
+  await rejects(() => service.terminateForMisconduct(kept.id, org, 'self'), /Conflict of interest/);
+  await service.terminateForMisconduct(kept.id, { username: 'reviewer', role: 'community_moderator' }, 'Organiser abandoned the event.');
+  assert.equal(kept.status, 'cancelled');
+  assert.equal(kept.paymentStatus, 'REFUND_ISSUED');
+  await rejects(() => service.terminateForMisconduct(kept.id, { username: 'reviewer', role: 'community_moderator' }, 'again'), /already ended/);
+
   // Mock lifecycle refuses to run in production.
   await rejects(() => new LifecycleService(db, config({ NODE_ENV: 'production' })).prize(soon.id, org), /mock payment mode/);
 
-  console.log('Lifecycle tests passed: escrow, prize funding, 402 end gate, dispute window, neutrality, holds, fixture integrity, team removal refunds, member prize split, league standings, ties, unfilled places, knockout places, settlement, fraud reversal, trust review, refunds, deadlines.');
+  console.log('Lifecycle tests passed: escrow, prize funding, 402 end gate, dispute window, neutrality, holds, fixture integrity, team removal refunds, member prize split, league standings, ties, unfilled places, knockout places, settlement, fraud reversal, trust review, refunds, deadlines, unregistering, early end with penalty, moderator termination, results.');
 }
 run().catch(error => { console.error(error); process.exitCode = 1; });

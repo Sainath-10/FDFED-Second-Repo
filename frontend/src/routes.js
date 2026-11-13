@@ -56,7 +56,7 @@ export const PUBLIC_ROUTES = [
   route('/pages/competitions.html', 'Competitions', 'public'),
   route('/pages/competition-detail.html', 'Competition detail', 'public'),
   route('/pages/comp-info.html', 'Competition info', 'public'),
-  route('/pages/watch-live.html', 'Watch live', 'public'),
+  route('/pages/watch-live.html', 'Live now', 'public'),
 ];
 
 export const PROTECTED_ROUTES = [
@@ -70,6 +70,7 @@ export const PROTECTED_ROUTES = [
   route('/pages/join-teams.html', 'Join teams', 'participant'),
   route('/pages/team/team-roster.html', 'Team roster', 'participant'),
   route('/pages/team/team-chat.html', 'Team chat', 'participant'),
+  route('/pages/team/team-matches.html', 'Team matches', 'participant'),
   route('/pages/team/add-players.html', 'Add players', 'participant'),
   route('/pages/team/invite-player.html', 'Invite player', 'participant'),
   route('/pages/team/invitations-sent.html', 'Invitations sent', 'participant'),
@@ -100,13 +101,13 @@ export const PROTECTED_ROUTES = [
   route('/pages/admin/finance.html', 'Finance moderation', 'admin', ['finance_moderator', 'admin', 'super-admin']),
   route('/pages/admin/dashboard.html', 'Admin dashboard', 'admin', ADMIN_ROLES),
   route('/pages/admin/users.html', 'Users', 'admin', ADMIN_ROLES),
-  route('/pages/admin/disputes.html', 'Disputes', 'admin', ADMIN_ROLES),
-  route('/pages/admin/dispute-review.html', 'Dispute review', 'admin', ADMIN_ROLES),
+  route('/pages/admin/disputes.html', 'Disputes', 'admin', [...ADMIN_ROLES, 'finance_moderator']),
+  route('/pages/admin/dispute-review.html', 'Dispute review', 'admin', [...ADMIN_ROLES, 'finance_moderator']),
   route('/pages/admin/competition-detail.html', 'Competition detail', 'admin', ADMIN_ROLES),
   route('/pages/admin/admin-activity.html', 'Admin activity', 'admin', [...ADMIN_ROLES, ...SUPER_ADMIN_ROLES, 'finance_moderator']),
-  route('/pages/admin/admin-profile.html', 'Admin profile', 'admin', ADMIN_ROLES),
-  route('/pages/admin/revenue-config.html', 'Revenue config', 'admin', ADMIN_ROLES),
-  route('/pages/admin/revenue-transactions.html', 'Revenue transactions', 'admin', ADMIN_ROLES),
+  route('/pages/admin/admin-profile.html', 'Admin profile', 'admin', [...ADMIN_ROLES, 'finance_moderator']),
+  route('/pages/admin/revenue-config.html', 'Revenue config', 'admin', [...ADMIN_ROLES, ...SUPER_ADMIN_ROLES]),
+  route('/pages/admin/revenue-transactions.html', 'Revenue transactions', 'admin', [...ADMIN_ROLES, ...SUPER_ADMIN_ROLES, 'finance_moderator']),
 
  // Super admin
   route('/pages/super-admin/super-dashboard.html', 'Super admin dashboard', 'super-admin', SUPER_ADMIN_ROLES),

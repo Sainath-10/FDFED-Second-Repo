@@ -5,6 +5,8 @@ import App from './App.jsx';
 // Base resets first, then the shared stylesheet so its rules win.
 import './index.css';
 import './styles/styles.css';
+// Canonical shared components last, so they win over per-page copies.
+import './styles/system.css';
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>

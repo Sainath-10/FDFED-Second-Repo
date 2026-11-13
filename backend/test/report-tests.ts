@@ -160,12 +160,12 @@ async function main() {
   console.log('\nOrganiser reputation levels');
   const { service, rep, settings, exceptions, sanctions } = makeService();
 
-  await test('new organisers start Blue with the ₹3,00,000 platform ceiling', async () => {
+  await test('new organisers start Blue with a ₹10,00,000 limit under the ₹1,00,00,000 ceiling', async () => {
     const profile = await service.getProfile('neworganiser');
     assert.equal(profile.level, 'blue');
-    assert.equal(profile.levelLimit, 300000);
-    assert.equal(profile.limit, 300000);
-    assert.equal(MAX_PRIZE_POOL, 300000);
+    assert.equal(profile.levelLimit, 1000000);
+    assert.equal(profile.limit, 1000000);
+    assert.equal(MAX_PRIZE_POOL, 10000000);
     assert.equal(REPUTATION_LEVEL_LIMITS.orange, 20000);
     assert.equal(REPUTATION_LEVEL_LIMITS.red, 10000);
   });
@@ -244,8 +244,9 @@ async function main() {
 
   console.log('\nPrize-pool enforcement');
 
-  await test('Blue and Green are limited by the ₹3,00,000 ceiling, Orange and Red by their own limit', async () => {
-    assert.equal((await service.authorizePrizePool(300000, 'neworganiser')).limit, 300000);
+  await test('Blue and Green are limited to ₹10,00,000, Orange and Red by their own limit', async () => {
+    assert.equal((await service.authorizePrizePool(1000000, 'neworganiser')).limit, 1000000);
+    await assert.rejects(() => service.authorizePrizePool(1000001, 'neworganiser'), /₹10,00,000/);
     await service.evaluate('orangeguy', { overduePayments: 2 }, 'communitymod');
     await assert.rejects(() => service.authorizePrizePool(50000, 'orangeguy'), /₹20,000/);
     await assert.rejects(() => service.authorizePrizePool(10001, 'fraudster'), /₹10,000/);
@@ -253,15 +254,17 @@ async function main() {
   });
 
   await test('No organiser can exceed the platform ceiling, even with an approved exception', async () => {
-    await assert.rejects(() => service.authorizePrizePool(300001, 'neworganiser'), /platform-wide maximum/i);
-    await assert.rejects(() => service.requestException('neworganiser', 300001, 'Test exception above the ceiling.'), /never exceed/i);
+    await assert.rejects(() => service.authorizePrizePool(10000001, 'neworganiser'), /platform-wide maximum/i);
+    await assert.rejects(() => service.assertWithinCeiling(10000001), /platform-wide maximum/i);
+    assert.equal((await service.assertWithinCeiling(5000000)).exceptionId, null);
+    await assert.rejects(() => service.requestException('neworganiser', 10000001, 'Test exception above the ceiling.'), /never exceed/i);
   });
 
   await test('A configurable ceiling is enforced centrally', async () => {
     await service.setGlobalMax(100000, 'superadmin1');
     assert.equal(await service.getGlobalMax(), 100000);
     await assert.rejects(() => service.authorizePrizePool(150000, 'neworganiser'), /platform-wide maximum/i);
-    await service.setGlobalMax(300000, 'superadmin1');
+    await service.setGlobalMax(10000000, 'superadmin1');
   });
 
   await test('An approved exception applies to one competition and disappears when consumed', async () => {

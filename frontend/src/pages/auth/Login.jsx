@@ -5,7 +5,8 @@
  * same role-based redirect (ROLE_ROUTES), and the same revoked-admin notice.
  */
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
+import { AuthAPI } from '../../services/api.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_ROUTES, FALLBACK_PATH } from '../../routes.js';
 import AuthCard from './AuthCard.jsx';
@@ -22,15 +23,37 @@ const REVOKED_STYLE = {
   fontWeight: 600,
 };
 
+/** Only same-site paths are honoured, so a crafted link cannot send users elsewhere. */
+function safeRedirect(value) {
+  const v = String(value || '');
+  return v.startsWith('/') && !v.startsWith('//') ? v : '';
+}
+
 export default function Login() {
-  const { login } = useAuth();
+  const { login, session } = useAuth();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const redirect = safeRedirect(params.get('redirect'));
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetIdentity, setResetIdentity] = useState('');
+  const [resetMessage, setResetMessage] = useState('');
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPwd, setShowPwd] = useState(false);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState(null);
+
+  if (session && !feedback) {
+    return <Navigate to={redirect || ROLE_ROUTES[session.role] || FALLBACK_PATH} replace />;
+  }
+
+  async function requestReset(event) {
+    event.preventDefault();
+    if (resetIdentity.trim().length < 3) { setResetMessage('Enter your username or email.'); return; }
+    const res = await AuthAPI.requestPasswordReset(resetIdentity.trim());
+    setResetMessage(res.ok ? res.data.message : (res.error || 'The request could not be sent.'));
+  }
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -62,19 +85,18 @@ export default function Login() {
         success: false,
         revoked: true,
       });
-      setTimeout(() => navigate(result.redirectPath || '/pages/profile.html'), 4000);
+      setTimeout(() => navigate(redirect || result.redirectPath || '/pages/profile.html'), 4000);
       return;
     }
 
     setFeedback({ text: 'Login successful. Redirecting...', success: true });
-    navigate(result.redirectPath || FALLBACK_PATH, { replace: true });
+    navigate(redirect || result.redirectPath || FALLBACK_PATH, { replace: true });
   }
 
   return (
     <AuthCard
       title="Login"
       subtitle="Enter your credentials to access the arena"
-      googleLabel="Log in with Google"
       switchPrompt="Don't have an account?"
       switchTo="/pages/signup.html"
       switchLabel="Sign Up Now"
@@ -88,7 +110,7 @@ export default function Login() {
               type="text"
               id="username"
               name="username"
-              placeholder="regular@nexus.gg"
+              placeholder="Username or email"
               autoComplete="username"
               required
               value={username}
@@ -137,8 +159,20 @@ export default function Login() {
       </form>
 
       <p className="auth-demo-note">
-        Demo accounts: regular@nexus.gg / regular123, admin@nexus.gg / admin123, superadmin@nexus.gg / super123
+        <button type="button" className="pwd-reset-link" onClick={() => setResetOpen((v) => !v)} style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', padding: 0, fontSize: 13 }}>
+          Forgot your password?
+        </button>
       </p>
+      {resetOpen && (
+        <form className="auth-form" onSubmit={requestReset} style={{ marginTop: 8 }}>
+          <p style={{ color: 'var(--text-muted)', fontSize: 13, lineHeight: 1.5 }}>
+            Enter your username or email. An administrator is notified and will give you a temporary password, which you can change from your profile.
+          </p>
+          <input className="form-input" type="text" aria-label="Username or email for password reset" placeholder="Username or email" value={resetIdentity} onChange={(e) => setResetIdentity(e.target.value)} />
+          <button type="submit" className="btn-auth-submit">Request a password reset</button>
+          {resetMessage && <p className="auth-feedback success" aria-live="polite">{resetMessage}</p>}
+        </form>
+      )}
     </AuthCard>
   );
 }

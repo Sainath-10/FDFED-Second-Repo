@@ -5,7 +5,10 @@ import { CompetitionEntity } from '../../entities/competition.entity';
 import { DisputeEntity } from '../../entities/dispute.entity';
 import { AdminActivityLogEntity } from '../../entities/admin-activity-log.entity';
 import { AdminService } from './admin.service';
-import { AdminController } from './admin.controller';
+import { AdminController, PlatformController } from './admin.controller';
+import { TeamEntity } from '../../entities/team.entity';
+import { AuditLogEntity } from '../../entities/audit-log.entity';
+import { PlatformSettingEntity } from '../../entities/platform-setting.entity';
 
 @Module({
   imports: [
@@ -14,9 +17,12 @@ import { AdminController } from './admin.controller';
       CompetitionEntity,
       DisputeEntity,
       AdminActivityLogEntity,
+      TeamEntity,
+      AuditLogEntity,
+      PlatformSettingEntity,
     ]),
   ],
-  controllers: [AdminController],
+  controllers: [AdminController, PlatformController],
   providers: [AdminService],
   exports: [AdminService],
 })

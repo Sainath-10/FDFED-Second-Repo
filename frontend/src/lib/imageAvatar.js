@@ -1,8 +1,8 @@
 /**
  * NEXUS ESPORTS — uploaded image → small avatar
  *
- * Team records live in localStorage, so an uploaded logo is center-cropped and
- * re-encoded to a small data URL. SVG is not accepted: logos stored as SVG markup
+ * An uploaded picture is center-cropped and re-encoded to a small data URL so
+ * it can be stored on the account and shown anywhere without another request. SVG is not accepted: logos stored as SVG markup
  * are rendered as raw HTML.
  */
 const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];

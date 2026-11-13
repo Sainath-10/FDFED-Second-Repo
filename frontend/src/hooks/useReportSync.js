@@ -1,16 +1,26 @@
 /**
- * NEXUS ESPORTS — report-system sync hook.
+ * NEXUS ESPORTS — live refresh hook.
  *
- * Re-runs the caller's loader whenever this tab or another tab writes to the
- * local report/reputation store. Pass a stable loader (useCallback) so the
- * subscription is not recreated on every render.
+ * Data lives on the server, so other people's changes (a new report, a
+ * moderator decision, a message) only appear after a fresh request. This hook
+ * re-runs the caller's loader when the tab regains focus and every 20 seconds
+ * while the tab is visible. Pass a stable loader (useCallback).
  */
 import { useEffect } from 'react';
-import { subscribe } from '../services/local/storage.js';
 
-export default function useReportSync(handler) {
+export default function useReportSync(handler, intervalMs = 20000) {
   useEffect(() => {
     if (typeof handler !== 'function') return undefined;
-    return subscribe(() => handler());
-  }, [handler]);
+    const run = () => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') handler();
+    };
+    window.addEventListener('focus', run);
+    document.addEventListener('visibilitychange', run);
+    const timer = window.setInterval(run, intervalMs);
+    return () => {
+      window.removeEventListener('focus', run);
+      document.removeEventListener('visibilitychange', run);
+      window.clearInterval(timer);
+    };
+  }, [handler, intervalMs]);
 }

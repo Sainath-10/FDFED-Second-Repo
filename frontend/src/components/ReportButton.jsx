@@ -7,8 +7,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { LocalReportsAPI as ReportsAPI } from '../services/local/reporting.js';
-import { subscribe } from '../services/local/storage.js';
+import { ReportsAPI } from '../services/api.js';
 
 export function reportHref({ compId, against, targetRole = 'player', matchId, teamId, source = 'page' }) {
   const params = new URLSearchParams();
@@ -50,8 +49,7 @@ export default function ReportButton({
         .finally(() => { if (alive) setChecking(false); });
     };
     check();
-    const unsubscribe = subscribe(check);
-    return () => { alive = false; unsubscribe(); };
+    return () => { alive = false; };
   }, [compId]);
 
   if (restricted) {

@@ -1,4 +1,4 @@
-import { IsArray, IsIn, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { IsArray, IsIn, IsOptional, IsString, MaxLength, MinLength, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import {
   DISCARD_REASONS,
@@ -129,4 +129,15 @@ export class ModeratorDecisionDto {
   @IsOptional()
   @Type(() => Number)
   days?: number;
+}
+
+export class UpliftDto {
+  @IsString()
+  @MinLength(15)
+  @MaxLength(2000)
+  reason: string;
+
+  @IsOptional()
+  @IsIn(['reopen', 'remain_terminated'])
+  competitionDisposition?: string;
 }

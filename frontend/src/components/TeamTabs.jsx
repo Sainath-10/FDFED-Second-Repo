@@ -1,27 +1,20 @@
 /**
  * NEXUS ESPORTS — team tabs
  *
- * The shared team-tab nav. Carries the comp/team context in the query string
- * (the `appendContextToTeamTabs` behaviour). Administrative tabs hide for
- * non-captains and when the competition has ended (`applyPermissions` /
- * `lockEndedRosterUI`). Brackets and Standings live in the same row as the
- * team tabs and are available to every member, not just the captain.
+ * The tab bar under the team header. Every member sees Roster, Matches and
+ * Chat; the captain also sees the roster-management tabs until the competition
+ * ends. The comp/team context travels in the query string.
  */
 import { Link } from 'react-router-dom';
 
 const TABS = [
   { id: 'roster', label: 'Roster', file: 'team-roster.html' },
-  { id: 'chat', label: 'Team chat', file: 'team-chat.html' },
-  { id: 'add-players', label: 'Add Players', file: 'add-players.html' },
-  { id: 'join-requests', label: 'Join Requests', file: 'join-requests.html', badge: true },
-  { id: 'invitations', label: 'Invitations Sent', file: 'invitations-sent.html' },
-  { id: 'settings', label: 'Settings', file: 'team-settings.html' },
-];
-
-/** Competition pages opened from the team dashboard keep the same competition. */
-const COMPETITION_TABS = [
-  { id: 'brackets', label: 'Brackets', tab: 'bracket' },
-  { id: 'standings', label: 'Standings', tab: 'standings' },
+  { id: 'matches', label: 'Matches & standings', file: 'team-matches.html' },
+  { id: 'chat', label: 'Team chat', file: 'team-chat.html', member: true },
+  { id: 'add-players', label: 'Add players', file: 'add-players.html', captain: true },
+  { id: 'join-requests', label: 'Join requests', file: 'join-requests.html', captain: true, badge: true },
+  { id: 'invitations', label: 'Invitations', file: 'invitations-sent.html', captain: true },
+  { id: 'settings', label: 'Settings', file: 'team-settings.html', captain: true },
 ];
 
 export function withTeamContext(path, context) {
@@ -42,36 +35,29 @@ export default function TeamTabs({
   rosterTo,
 }) {
   const hideAdmin = !canManage || isEnded;
-  const competitionId = context && context.compId ? context.compId : '';
-
   return (
-    <nav className="team-tabs-nav" aria-label="Team pages">
+    <nav className="td-tabs" aria-label="Team pages">
       {TABS.map((t) => {
-        if (t.id === 'chat' && !canChat) return null;
-        if (hideAdmin && t.id !== 'roster' && t.id !== 'chat') return null;
+        if (t.member && !canChat) return null;
+        if (t.captain && hideAdmin) return null;
         const href = t.id === 'roster' && rosterTo ? rosterTo : withTeamContext(`/pages/team/${t.file}`, context);
         return (
           <Link
             key={t.id}
             to={href}
-            className={`team-tab${active === t.id ? ' active' : ''}`}
+            className={`td-tab${active === t.id ? ' is-active' : ''}`}
             aria-current={active === t.id ? 'page' : undefined}
           >
             {t.label}
-            {t.badge && joinRequestCount ? <span className="notif-badge-sm">{joinRequestCount}</span> : null}
+            {t.badge && joinRequestCount ? <span className="td-tab-badge">{joinRequestCount}</span> : null}
           </Link>
         );
       })}
-      {competitionId && COMPETITION_TABS.map((t) => (
-        <Link
-          key={t.id}
-          to={`/pages/comp-info.html?id=${encodeURIComponent(competitionId)}&tab=${t.tab}`}
-          className={`team-tab${active === t.id ? ' active' : ''}`}
-          aria-current={active === t.id ? 'page' : undefined}
-        >
-          {t.label}
+      {context?.compId && (
+        <Link className="td-tab td-tab-external" to={`/pages/comp-info.html?id=${encodeURIComponent(context.compId)}`}>
+          Competition page ↗
         </Link>
-      ))}
+      )}
     </nav>
   );
 }

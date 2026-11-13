@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { LocalReportsAPI as ReportsAPI } from '../services/local/reporting.js';
+import { ReportsAPI } from '../services/api.js';
 import useReportSync from '../hooks/useReportSync.js';
 import ReportCard from '../components/ReportCard.jsx';
 import { DiscardModal, PlayerDecisionModal } from '../components/ReportActionModals.jsx';

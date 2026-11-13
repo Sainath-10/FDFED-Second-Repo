@@ -3,10 +3,11 @@
  *
  * hero, purpose, key features,
  * scope + animated counters, overview, team, platform policies (from the
- * localStorage policy store, with the defaults) and the CTA.
+ * policies API, with built-in defaults) and the CTA.
  */
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { PoliciesAPI } from '../services/api.js';
 import '../styles/pages/about.css';
 
 const DEFAULT_POLICIES = [
@@ -68,22 +69,6 @@ const STATS = [
   { target: 'Real-Time', initial: '—', label: 'Updates' },
 ];
 
-function loadPolicies() {
-  let policies = [];
-  try {
-    const raw = localStorage.getItem('nexus_policies') || localStorage.getItem('nexus.policies');
-    if (raw) {
-      try { policies = JSON.parse(raw); } catch (e) { /* ignore */ }
-    }
-  } catch (e) { /* ignore */ }
-
-  if (!Array.isArray(policies) || policies.length === 0) {
-    policies = DEFAULT_POLICIES;
-    try { localStorage.setItem('nexus_policies', JSON.stringify(policies)); } catch (e) { /* ignore */ }
-  }
-  return policies;
-}
-
 function animateCounter(el) {
   const raw = el.dataset.target;
   const suffix = raw.replace(/[\d.]/g, '');
@@ -108,7 +93,13 @@ function animateCounter(el) {
 
 export default function About() {
   const rootRef = useRef(null);
-  const [policies] = useState(loadPolicies);
+  const [policies, setPolicies] = useState(DEFAULT_POLICIES);
+  // Published policies come from the server; the defaults show until it answers or if it has none.
+  useEffect(() => {
+    PoliciesAPI.getAll(true).then((res) => {
+      if (res.ok && Array.isArray(res.data) && res.data.length) setPolicies(res.data.map((p) => ({ ...p, status: p.active === false ? 'archived' : 'active' })));
+    });
+  }, []);
   const activePolicies = policies.filter((p) => !p.status || p.status === 'active');
 
   useEffect(() => {

@@ -10,7 +10,7 @@
  * returned by login() — otherwise a successful signup would appear to hang.
  */
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_ROUTES, FALLBACK_PATH, LOGIN_PATH } from '../../routes.js';
 import { showToast } from '../../lib/toast.js';
@@ -19,9 +19,11 @@ import { EyeIcon, EyeOffIcon } from '../../components/icons.jsx';
 import '../../styles/pages/signup.css';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+/** Same rule as the backend: 3–30 letters, numbers, underscores, dots or hyphens. */
+const USERNAME_RE = /^[A-Za-z0-9_.-]{3,30}$/;
 
 export default function Signup() {
-  const { signup, login } = useAuth();
+  const { signup, login, session } = useAuth();
   const navigate = useNavigate();
 
   const [username, setUsername] = useState('');
@@ -32,8 +34,19 @@ export default function Signup() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  if (session && !busy) return <Navigate to={ROLE_ROUTES[session.role] || FALLBACK_PATH} replace />;
+
   async function handleSubmit(event) {
     event.preventDefault();
+
+    if (username && !USERNAME_RE.test(username.trim())) {
+      showToast('Username must be 3–30 characters: letters, numbers, underscores, dots or hyphens.', 'error');
+      return;
+    }
+    if (password && password.length < 6) {
+      showToast('Password must be at least 6 characters.', 'error');
+      return;
+    }
 
     if (!username || !email || !password || !confirm) {
       showToast('Please fill all required fields.', 'error');
@@ -51,7 +64,7 @@ export default function Signup() {
     }
 
     setBusy(true);
-    const result = await signup({ username, email, password });
+    const result = await signup({ username: username.trim(), email: email.trim(), password });
     if (!result.ok) {
       setBusy(false);
       showToast(result.error || 'Unable to create account.', 'error');
@@ -61,7 +74,7 @@ export default function Signup() {
     showToast('Account created successfully! Logging you in...');
 
     const loginResult = await login({
-      username,
+      username: username.trim(),
       password,
       roleRoutes: ROLE_ROUTES,
       fallbackPath: FALLBACK_PATH,
@@ -81,7 +94,6 @@ export default function Signup() {
     <AuthCard
       title="Create Account"
       subtitle="Join the platform to manage competitions"
-      googleLabel="Sign up with Google"
       switchPrompt="Already have an account?"
       switchTo="/pages/login.html"
       switchLabel="Log In"

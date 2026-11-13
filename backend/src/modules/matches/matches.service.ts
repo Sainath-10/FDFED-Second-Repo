@@ -43,7 +43,7 @@ export class MatchesService {
     if (!competition) throw new NotFoundException('Competition not found');
     const username = String(actor || '').toLowerCase();
     const organizer = [competition.createdBy, ...(competition.organizers || [])].some((name) => String(name || '').toLowerCase() === username);
-    if (!organizer && !['admin', 'super_admin', 'admin'].includes(role)) {
+    if (!organizer && !['admin', 'super_admin'].includes(role)) {
       throw new ForbiddenException('Only an organizer of this competition (or a competition admin) can edit fixtures.');
     }
     if (competition.status === 'completed') throw new BadRequestException('This competition has already ended.');
@@ -54,6 +54,23 @@ export class MatchesService {
     const matches = await this.findByCompetition(competitionId);
     if (matches.some((match) => ['completed', 'ongoing', 'live'].includes(match.status))) {
       throw new BadRequestException('Team registration is locked because this bracket has already started.');
+    }
+  }
+
+  /**
+   * Called before a new team is registered (and before any fee is taken).
+   * Single-elimination brackets are rebuilt automatically when a team joins;
+   * every other format would silently leave the new team out of the fixtures,
+   * so registration closes once fixtures exist until the organizer clears them.
+   */
+  async assertCanRegisterTeam(competitionId: string): Promise<void> {
+    const existing = await this.repo.find({ where: { competitionId } });
+    if (!existing.length) return;
+    await this.assertRosterCanChange(competitionId);
+    const competition = await this.competitionRepository.findById(competitionId);
+    const autoRebuilds = competition && this.resolveFormat(competition) === 'elimination' && !/double/i.test(competition.format || '');
+    if (!autoRebuilds) {
+      throw new BadRequestException('Registration is closed because the organizer has already published the fixtures for this competition.');
     }
   }
 
@@ -311,7 +328,7 @@ export class MatchesService {
     const normalizedActor = String(actor || '').toLowerCase();
     const isOrganizer = String(competition.createdBy || '').toLowerCase() === normalizedActor
       || (competition.organizers || []).some((name) => String(name).toLowerCase() === normalizedActor);
-    const isAdmin = ['admin', 'super_admin', 'admin'].includes(String(actorRole || '').toLowerCase());
+    const isAdmin = ['admin', 'super_admin'].includes(String(actorRole || '').toLowerCase());
     if (!isOrganizer && !isAdmin) {
       throw new ForbiddenException('Only an organizer of this competition (or a competition admin) can generate fixtures.');
     }
@@ -472,7 +489,9 @@ export class MatchesService {
   async recordResult(id: string, winnerId: string, winnerName: string, score: string, actor: string): Promise<MatchEntity> {
     const match = await this.findById(id);
     if (!this.locked && this.repo.manager) return this.lockedWrite(match.competitionId, (service) => service.recordResult(id, winnerId, winnerName, score, actor));
-    if (match.status === 'completed' || (match as any).winnerId) {
+    // A saved result is corrected through the edit path, which protects later rounds.
+    if (match.status === 'completed') return this.editResult(match, winnerId, winnerName, score, actor);
+    if ((match as any).winnerId) {
       throw new BadRequestException('A verified result already exists for this match. Duplicate submissions are rejected.');
     }
     if (!match.team1Id || !match.team2Id) throw new BadRequestException('Both participating teams must be decided before entering a result.');
@@ -482,6 +501,9 @@ export class MatchesService {
 
     // §10 — draws are valid in league formats; knockout matches must have a winner.
     const competition = await this.competitionRepository.findById(match.competitionId);
+    if (competition && +new Date(competition.startDate) > Date.now()) {
+      throw new BadRequestException(`Results can be recorded once the competition starts (${new Date(competition.startDate).toUTCString()}).`);
+    }
     if (competition?.paymentStatus && competition.paymentStatus !== 'LEGACY' && (!competition.prizePoolPaid || TERMINAL_PAYMENT_STATES.includes(competition.paymentStatus))) throw new BadRequestException('Prize pool must be funded and competition open before recording results.');
     const isLeague = competition ? this.resolveFormat(competition) !== 'elimination' && !isPlayoff(match) : false;
     if (isPlayoff(match) && this.resolveFormat(competition) !== 'elimination') {
@@ -539,6 +561,81 @@ export class MatchesService {
         ? `Result confirmed: ${updated.team1Name} vs ${updated.team2Name} — draw (${score}).`
         : `Result confirmed: ${updated.team1Name} vs ${updated.team2Name} — winner ${resolvedName} (${score}).`,
     );
+    return updated;
+  }
+
+  /**
+   * Corrects a saved result while the competition is still running. A changed
+   * winner is allowed only while nothing downstream has been played: the next
+   * bracket match (knockout), the later playoff stages (playoffs), or any playoff
+   * at all (league stage). The new winner then takes the old winner's place.
+   */
+  private async editResult(match: MatchEntity, winnerId: string, winnerName: string, score: string, actor: string): Promise<MatchEntity> {
+    const competition = await this.competitionRepository.findById(match.competitionId);
+    if (!competition) throw new NotFoundException('Competition not found');
+    const finished = ['completed', 'cancelled'].includes(String(competition.status))
+      || ['COMPLETED', ...TERMINAL_PAYMENT_STATES].includes(String(competition.paymentStatus));
+    if (finished) throw new BadRequestException('This competition has ended, so its results are final. Raise a dispute instead.');
+    if (!match.team1Id || !match.team2Id) throw new BadRequestException('Both participating teams must be decided before entering a result.');
+    const scores = /^(\d+)\s*[-:]\s*(\d+)$/.exec(String(score || '').trim());
+    if (!scores || !scores.slice(1).every((value) => Number.isSafeInteger(Number(value)))) throw new BadRequestException('Scores must be non-negative whole numbers, for example 2-1.');
+
+    const knockout = this.resolveFormat(competition) === 'elimination';
+    const isLeague = !knockout && !isPlayoff(match);
+    const noWinner = !String(winnerId || '').trim() && !String(winnerName || '').trim();
+    if (noWinner && !isLeague) throw new BadRequestException('Knockout matches require a winner; draws are only valid in league formats.');
+    if (!noWinner && winnerId !== match.team1Id && winnerId !== match.team2Id) throw new BadRequestException('Only a participating team of this match can be declared the winner.');
+    const side = Number(scores[1]) > Number(scores[2]) ? 1 : Number(scores[2]) > Number(scores[1]) ? 2 : 0;
+    if ((!side && !noWinner && isLeague) || (side && winnerId !== match[`team${side}Id`])) throw new BadRequestException('Winner must match the submitted scores and participating team.');
+
+    const newWinnerId = noWinner ? null : winnerId;
+    const newWinnerName = noWinner ? null : (winnerId === match.team1Id ? match.team1Name : match.team2Name);
+    const winnerChanged = (match.winnerId || null) !== newWinnerId;
+    const all = await this.repo.find({ where: { competitionId: match.competitionId } });
+    const played = (m?: MatchEntity) => !!m && ['completed', 'live', 'ongoing'].includes(m.status);
+
+    if (winnerChanged) {
+      if (knockout) {
+        const next = all.find((m) => m.id === match.bracket?.nextMatchId);
+        if (played(next)) throw new BadRequestException(`${match.winnerName} has already played the next round (${next.round}). Correct that result first.`);
+      } else if (isLeague) {
+        if (all.some((m) => isPlayoff(m) && played(m))) throw new BadRequestException('The playoffs have started, so league results can no longer change the winner.');
+      } else {
+        const downstream = all.filter((m) => m.id !== match.id && (m.bracket?.source1 === match.id || m.bracket?.source2 === match.id));
+        const blocker = downstream.find(played);
+        if (blocker) throw new BadRequestException(`${blocker.round} has already been played with these teams. Correct that result first.`);
+      }
+    }
+
+    const before = `${match.score}${match.winnerName ? ` (winner ${match.winnerName})` : ' (draw)'}`;
+    await this.repo.update(match.id, {
+      winnerId: newWinnerId,
+      winnerName: newWinnerName,
+      score: String(score).trim(),
+      resultDetails: !side && !noWinner ? { rule: 'standard', hostWinnerId: winnerId } : null,
+    });
+    const updated = await this.findById(match.id);
+
+    if (winnerChanged && knockout && match.bracket?.nextMatchId) {
+      const next = await this.findById(match.bracket.nextMatchId);
+      const slot = match.bracket.nextSlot;
+      if ([1, 2].includes(slot) && next.bracket?.slots?.[slot - 1]?.sourceMatchId === match.id) {
+        const winningSlot = match.bracket.slots.find((s) => s.teamId === newWinnerId);
+        const slots = next.bracket.slots.map((s, index) => index === slot - 1 ? { ...s, teamId: newWinnerId, seed: winningSlot?.seed ?? s.seed } : { ...s }) as MatchEntity['bracket']['slots'];
+        await this.repo.update(next.id, { [`team${slot}Id`]: newWinnerId, [`team${slot}Name`]: newWinnerName, bracket: { ...next.bracket, slots } });
+      }
+    }
+    if (!knockout) await this.syncPlayoffs(match.competitionId);
+
+    const after = `${updated.score}${updated.winnerName ? ` (winner ${updated.winnerName})` : ' (draw)'}`;
+    await this.auditLog.record('MATCH_RESULT_EDITED', {
+      actor,
+      entityType: 'match',
+      entityId: match.id,
+      details: `Result corrected: ${updated.team1Name} vs ${updated.team2Name} — ${before} → ${after}.`,
+      metadata: { competitionId: match.competitionId, before: match.score, after: updated.score, winnerChanged },
+    });
+    await this.notifyTeams(updated, '✏️ Match result corrected', `The organiser corrected ${updated.team1Name} vs ${updated.team2Name}: ${before} → ${after}.`);
     return updated;
   }
 

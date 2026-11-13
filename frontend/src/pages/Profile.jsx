@@ -1,634 +1,128 @@
 /**
  * NEXUS ESPORTS — Profile
  *
- * header + bio, 5 tabs (match history,
- * stats, sessions, account, preferences), the live my-teams / upcoming-matches
- * sidebar computed from competition data, and the edit-profile / email /
- * password modals.
+ * The signed-in player's profile from the backend: their teams and upcoming
+ * matches, their organiser reputation, and account settings.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import NexusData from '../services/data.js';
-import { showToast } from '../lib/toast.js';
-import { assetUrl } from '../lib/assets.js';
+import { MatchesAPI, ReputationAPI } from '../services/api.js';
+import { fetchAllTeams, fetchCompetitions } from '../services/competitions.js';
+import AccountSettings from '../components/AccountSettings.jsx';
+import ReputationOverview from '../components/ReputationOverview.jsx';
 import ReputationBadge from '../components/ReputationBadge.jsx';
-import { LocalReputationAPI } from '../services/local/reporting.js';
-import { LEVEL_META, formatINR, capitalise } from '../lib/reporting.js';
-import '../styles/pages/reports.css';
-import '../styles/pages/profile.css';
+import { EmptyState, LoadingState, formatDate } from '../components/ui.jsx';
 
-const PTABS = [
-  { id: 'history', label: 'Match History' },
-  { id: 'stats', label: 'Statistics' },
-  { id: 'sessions', label: 'Active Sessions' },
-  { id: 'account', label: 'Account Settings' },
-  { id: 'preferences', label: 'Preferences' },
+const TABS = [
+  { id: 'overview', label: 'Teams and matches' },
+  { id: 'reputation', label: 'Organiser reputation' },
+  { id: 'account', label: 'Account settings' },
 ];
 
-const ROLE_MAP = {
-  regular: 'User', participant: 'User', team_lead: 'Team Lead', admin: 'Admin',
-  finance_moderator: 'Finance Moderator',
-  'super-admin': 'Super Admin', super_admin: 'Super Admin',
-};
-
-const normalize = (v) => String(v || '').trim().toLowerCase();
-const formatRole = (role) => ROLE_MAP[normalize(role)] || 'User';
-
-function formatDate(value) {
-  if (!value) return '—';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-
-const LEVEL_ORDER = ['blue', 'green', 'orange', 'red'];
-
-/**
- * Organiser Reputation & History.
- *
- * Every figure comes from a stored record: level transitions, sanctions and
- * reports. A report against an organiser is an allegation — only a
- * substantiated finding is counted as a violation.
- */
-function ReputationOverview({ overview }) {
-  if (!overview) {
-    return (
-      <div className="profile-section panel-section-wrapper">
-        <p className="empty-state-text" style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>
-          Loading your organiser record…
-        </p>
-      </div>
-    );
-  }
-
-  const meta = LEVEL_META[overview.level] || LEVEL_META.blue;
-  const warnings = overview.warningSummary || { total: 0 };
-  const reports = overview.reports || { total: 0, substantiated: 0, unsubstantiated: 0, discarded: 0, underReview: 0 };
-  const levelCounts = overview.levelCounts || {};
-  const levelHistory = overview.levelHistory || [];
-  const warningTotal = Number(warnings.total) || 0;
-
-  return (
-    <div className="rep-dashboard">
-      <section className="rep-panel" id="rep-current">
-        <header className="rep-panel-head">
-          <h3>Current Reputation</h3>
-          <p>The level that applies to this organiser account right now.</p>
-        </header>
-        <div className="rep-current">
-          <ReputationBadge level={overview.level} limit={overview.limit} />
-          {overview.lifetimeBan && <span className="rep-alert">Lifetime organising ban</span>}
-          {!overview.lifetimeBan && overview.bannedUntil && (
-            <span className="rep-alert">Organising restricted until {formatDate(overview.bannedUntil)}</span>
-          )}
-        </div>
-        <p className="rep-explain">{meta.description}</p>
-        <dl className="rep-facts">
-          <div><dt>Prize-pool limit</dt><dd>{formatINR(overview.limit)}</dd></div>
-          <div><dt>Platform maximum</dt><dd>{formatINR(overview.globalMax)}</dd></div>
-          <div><dt>At this level since</dt><dd>{overview.levelEnteredAt ? formatDate(overview.levelEnteredAt) : 'No recorded transition'}</dd></div>
-        </dl>
-      </section>
-
-      <section className="rep-panel" id="rep-warnings">
-        <header className="rep-panel-head">
-          <h3>Warning Statistics</h3>
-          <p>Warnings recorded by a Community Moderator.</p>
-        </header>
-        {warningTotal > 0 ? (
-          <div className="rep-stat-row">
-            <div>
-              <span className="n">{warningTotal}</span>
-              <span className="l">{warningTotal === 1 ? 'Total warning' : 'Total warnings'}</span>
-            </div>
-          </div>
-        ) : (
-          <p className="rep-empty">No warnings have been recorded on this account.</p>
-        )}
-      </section>
-
-      <section className="rep-panel" id="rep-reports">
-        <header className="rep-panel-head">
-          <h3>Reports Filed Against You</h3>
-          <p>Calculated from stored reports and their recorded findings.</p>
-        </header>
-        <div className="rep-stat-row rep-stat-row-wrap">
-          <div><span className="n">{reports.total}</span><span className="l">Total</span></div>
-          <div><span className="n">{reports.substantiated}</span><span className="l">Substantiated</span></div>
-          <div><span className="n">{reports.unsubstantiated}</span><span className="l">Unsubstantiated</span></div>
-          <div><span className="n">{reports.discarded}</span><span className="l">Discarded</span></div>
-          <div><span className="n">{reports.underReview}</span><span className="l">Under review</span></div>
-        </div>
-        <p className="rep-footnote">A submitted report is an allegation. Only a substantiated finding counts as a violation.</p>
-      </section>
-
-      <section className="rep-panel" id="rep-levels">
-        <header className="rep-panel-head">
-          <h3>Reputation Level History</h3>
-          <p>How many times this account has entered each reputation level.</p>
-        </header>
-        <div className="rep-level-grid">
-          {LEVEL_ORDER.map((level) => {
-            const levelMeta = LEVEL_META[level];
-            return (
-              <div className="rep-level-tile" key={level}>
-                <span className="dot" style={{ background: levelMeta.color }} />
-                <span className="rep-level-name" style={{ color: levelMeta.color }}>{levelMeta.label}</span>
-                <strong>{levelCounts[level] ?? 0}</strong>
-                <small>times entered</small>
-              </div>
-            );
-          })}
-        </div>
-        <p className="rep-footnote">Counts come from recorded transitions; the initial level is not a transition.</p>
-      </section>
-
-      <section className="rep-panel" id="rep-transitions">
-        <header className="rep-panel-head">
-          <h3>Level Transition History</h3>
-          <p>Every recorded change between reputation levels.</p>
-        </header>
-        {levelHistory.length ? (
-          <ol className="rep-timeline">
-            {levelHistory.map((entry) => (
-              <li key={entry.id}>
-                <span className="rep-timeline-dot" style={{ background: (LEVEL_META[entry.toLevel] || meta).color }} />
-                <span className="rep-transition">
-                  {capitalise(entry.fromLevel || 'blue')} <span className="rep-arrow">→</span> {capitalise(entry.toLevel)}
-                </span>
-                <time>{formatDate(entry.createdAt)}</time>
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <p className="rep-empty">No reputation level changes have been recorded for this account yet.</p>
-        )}
-      </section>
-
-      <p className="rep-privacy">Report descriptions, evidence and moderator-only notes are never shown in this section.</p>
-    </div>
-  );
-}
+const ROLE_LABEL = { participant: 'Player', regular: 'Player', team_lead: 'Team lead', admin: 'Admin', finance_moderator: 'Finance moderator', 'super-admin': 'Super Admin', community_moderator: 'Community moderator' };
 
 export default function Profile() {
-  const { session, logout } = useAuth();
-  const navigate = useNavigate();
-
-  const [tab, setTab] = useState('history');
-  const [editOpen, setEditOpen] = useState(false);
-  const [emailOpen, setEmailOpen] = useState(false);
-  const [passwordOpen, setPasswordOpen] = useState(false);
-
-  const username = session ? session.username : '';
-  const displayName = session
-    ? (session.displayName || (session.firstName && session.lastName ? `${session.firstName} ${session.lastName}` : session.username))
-    : '—';
-
-  const bioKey = `nexus.profile.bio.${normalize(username)}`;
-  const [bio, setBio] = useState(() => {
-    try { return localStorage.getItem(bioKey) || ''; } catch (e) { return ''; }
-  });
-  const [bioInput, setBioInput] = useState(bio);
-  const [email, setEmail] = useState(session ? (session.email || session.emailAddress || '') : '');
-  const [emailInput, setEmailInput] = useState(session ? (session.email || '') : '');
-  const [pwd, setPwd] = useState({ current: '', next: '', confirm: '' });
-  const [organiserProfile, setOrganiserProfile] = useState(null);
-  const [reputationOverview, setReputationOverview] = useState(null);
-  const autoReputationTab = useRef(false);
+  const { session } = useAuth();
+  const [tab, setTab] = useState('overview');
+  const [data, setData] = useState(null);
+  const [reputation, setReputation] = useState(null);
+  const [overview, setOverview] = useState(null);
 
   useEffect(() => {
     let alive = true;
-    if (!session) return () => { alive = false; };
-    LocalReputationAPI.me()
-      .then((res) => { if (alive && res.ok && res.data) setOrganiserProfile(res.data); })
-      .catch(() => undefined);
-    LocalReputationAPI.overview()
-      .then((res) => { if (alive && res.ok && res.data) setReputationOverview(res.data); })
-      .catch(() => undefined);
+    (async () => {
+      const [comps, teams] = await Promise.all([fetchCompetitions(), fetchAllTeams()]);
+      const me = String(session?.username || '').toLowerCase();
+      const byId = new Map((comps.data || []).map((c) => [c.id, c]));
+      const mine = teams
+        .filter((t) => !['rejected', 'disbanded', 'banned'].includes(t.status) && t.members.some((m) => m.username.toLowerCase() === me))
+        .map((team) => ({ team, comp: byId.get(team.competitionId) }))
+        .filter((x) => x.comp);
+      const matchLists = await Promise.all(mine.map(({ comp }) => MatchesAPI.getByCompetition(comp.id)));
+      const upcoming = [];
+      mine.forEach(({ team, comp }, i) => {
+        const list = matchLists[i].ok ? matchLists[i].data : [];
+        list.filter((m) => [m.team1Id, m.team2Id].includes(team.id) && !['completed', 'bye'].includes(m.status))
+          .forEach((m) => upcoming.push({ ...m, compName: comp.name, compId: comp.id }));
+      });
+      upcoming.sort((a, b) => new Date(a.scheduledAt || 8.64e15) - new Date(b.scheduledAt || 8.64e15));
+      if (alive) setData({ mine, upcoming });
+    })();
+    ReputationAPI.me().then((res) => { if (alive && res.ok) setReputation(res.data); });
+    ReputationAPI.overview().then((res) => { if (alive && res.ok) setOverview(res.data); });
     return () => { alive = false; };
   }, [session?.username]);
 
-  // Every profile carries the Organiser Info tab. The record only counts as a
-  // real organiser history when a stored competition/transition/warning/report
-  // exists — a team-lead role alone is not organiser history.
-  const hasOrganiserHistory = !!reputationOverview && (
-    Number(reputationOverview.organisedCompetitions) > 0
-    || (reputationOverview.levelHistory || []).length > 0
-  );
-  const tabs = [...PTABS, { id: 'organiser', label: 'Organiser Info' }];
-
-  // Actual organisers land on their reputation record; other profiles keep Match History.
-  useEffect(() => {
-    if (hasOrganiserHistory && !autoReputationTab.current) {
-      autoReputationTab.current = true;
-      setTab('organiser');
-    }
-  }, [hasOrganiserHistory]);
-
-
-  const derived = useMemo(() => {
-    const myTeams = [];
-    const upcoming = [];
-    const history = [];
-    let wins = 0;
-    let losses = 0;
-    const userKey = normalize(username);
-    if (!NexusData || typeof NexusData.loadCompetitions !== 'function' || !userKey) {
-      return { myTeams, upcoming, history, wins, losses };
-    }
-    (NexusData.loadCompetitions() || []).forEach((comp) => {
-      if (!Array.isArray(comp.teams)) return;
-      comp.teams.forEach((team) => {
-        const isLeader = normalize(team.createdBy) === userKey;
-        const isMember = Array.isArray(team.members) && team.members.some((m) => normalize(m.username) === userKey);
-        if (!isLeader && !isMember) return;
-        myTeams.push({ name: team.name, game: comp.game, role: isLeader ? 'Captain' : 'Player', icon: isLeader ? '⚡' : '🎮' });
-        if (Array.isArray(comp.matches)) {
-          comp.matches.forEach((m) => {
-            const inMatch = normalize(m.team1) === normalize(team.name) || normalize(m.team2) === normalize(team.name);
-            if (!inMatch) return;
-            if (m.status === 'scheduled' || m.status === 'live') {
-              upcoming.push({ game: comp.game, event: `${m.team1} vs ${m.team2}${m.round ? ` — ${m.round}` : ''}`, dateTime: `${m.date}${m.time ? ` • ${m.time}` : ''}` });
-            }
-            if (m.status === 'completed') {
-              const t1won = Number(m.score1) > Number(m.score2);
-              const t2won = Number(m.score2) > Number(m.score1);
-              const isT1 = normalize(m.team1) === normalize(team.name);
-              const won = (isT1 && t1won) || (!isT1 && t2won);
-              history.push({ game: comp.game, event: `${m.round ? `${m.round} — ` : ''}${m.team1} vs ${m.team2}`, date: m.date || '', result: won ? 'WIN' : 'LOSS' });
-              if (won) wins += 1; else losses += 1;
-            }
-          });
-        }
-      });
-    });
-    return { myTeams, upcoming, history, wins, losses };
-  }, [username]);
-
-  function handleLogout() {
-    logout();
-    navigate('/pages/login.html', { replace: true });
-  }
-
-  function saveProfile() {
-    const next = bioInput.trim();
-    setBio(next);
-    try { localStorage.setItem(bioKey, next); } catch (e) { /* ignore */ }
-    setEditOpen(false);
-    showToast('Profile updated successfully!');
-  }
-
-  function updateEmail() {
-    const newEmail = emailInput.trim();
-    if (!EMAIL_RE.test(newEmail)) { showToast('Please enter a valid email address.', 'error'); return; }
-    try {
-      const accounts = JSON.parse(localStorage.getItem('nexus.auth.accounts') || '[]');
-      const idx = accounts.findIndex((a) => normalize(a.username) === normalize(username));
-      if (idx !== -1) {
-        accounts[idx].email = newEmail;
-        localStorage.setItem('nexus.auth.accounts', JSON.stringify(accounts));
-        const nextSession = { ...session, email: newEmail };
-        localStorage.setItem('nexus.auth.session', JSON.stringify(nextSession));
-        setEmail(newEmail);
-        setEmailOpen(false);
-        showToast('Email address updated successfully!');
-      }
-    } catch (err) {
-      console.error('Failed to update email:', err);
-    }
-  }
-
-  function updatePassword() {
-    if (!pwd.current || !pwd.next || !pwd.confirm) { showToast('Please fill all password fields.', 'error'); return; }
-    if (pwd.next !== pwd.confirm) { showToast('New passwords do not match.', 'error'); return; }
-    if (pwd.next.length < 6) { showToast('Password must be at least 6 characters.', 'error'); return; }
-    try {
-      const accounts = JSON.parse(localStorage.getItem('nexus.auth.accounts') || '[]');
-      const idx = accounts.findIndex((a) => normalize(a.username) === normalize(username));
-      if (idx !== -1) {
-        if (accounts[idx].password !== pwd.current) { showToast('Current password is incorrect.', 'error'); return; }
-        accounts[idx].password = pwd.next;
-        localStorage.setItem('nexus.auth.accounts', JSON.stringify(accounts));
-        setPasswordOpen(false);
-        setPwd({ current: '', next: '', confirm: '' });
-        showToast('Password updated successfully!');
-      }
-    } catch (err) {
-      console.error('Failed to update password:', err);
-    }
-  }
-
-  const total = derived.wins + derived.losses;
-  const winRate = total ? Math.round((derived.wins / total) * 100) : 0;
+  const initial = String(session?.username || '?').charAt(0).toUpperCase();
+  const role = ROLE_LABEL[session?.role] || 'Player';
+  const visibleTabs = useMemo(() => TABS, []);
 
   return (
-    <>
-      <main className="profile-page">
-        <div className="profile-header">
-          <div className="profile-avatar-wrap">
-            <img
-              className="profile-avatar"
-              src={assetUrl('88bb61dd411e2e781af6284e0036a9672ba8ef32.png')}
-              alt="Avatar"
-              onError={(e) => { e.currentTarget.src = 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22120%22 height=%22120%22><rect width=%22120%22 height=%22120%22 rx=%2260%22 fill=%22%23222%22/><text x=%2260%22 y=%2274%22 text-anchor=%22middle%22 fill=%22%23c6ff33%22 font-size=%2248%22>A</text></svg>'; }}
-            />
-            <div className="profile-online"></div>
-          </div>
-
-          <div className="profile-info">
-            <div className="profile-header-meta">
-              <h1 id="profile-displayName">{displayName || '—'}</h1>
-              <div className="rank-badge" id="profile-rank-badge" style={{ display: 'none' }}></div>
-            </div>
-            <div className="username" id="profile-username">@{username || '—'}</div>
-            {organiserProfile && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', margin: '10px 0 2px' }}>
-                <ReputationBadge level={organiserProfile.level} limit={organiserProfile.limit} />
-                {organiserProfile.lifetimeBan && (
-                  <span style={{ color: '#f87171', fontSize: 12, fontWeight: 700 }}>Lifetime organising ban</span>
-                )}
-                {!organiserProfile.lifetimeBan && organiserProfile.bannedUntil && (
-                  <span style={{ color: '#f87171', fontSize: 12, fontWeight: 700 }}>
-                    Organising restricted until {formatDate(organiserProfile.bannedUntil)}
-                  </span>
-                )}
-              </div>
-            )}
-            <p className="bio" id="profile-bio">{bio}</p>
-            <div className="profile-badges" id="profile-badges-container"></div>
-            <div className="profile-stats-row">
-              <div className="profile-stat"><div className="l">USER - ID</div><div className="n" id="profile-user-id">{username || '—'}</div></div>
-              <div className="profile-stat"><div className="l">LAST LOGIN</div><div className="n" id="profile-last-login">{formatDate(session && (session.lastLoginAt || session.loggedInAt))}</div></div>
-              <div className="profile-stat"><div className="l">JOINED DATE</div><div className="n" id="profile-joined-date">{formatDate(session && session.joinedAt)}</div></div>
-              <div className="profile-stat"><div className="l">MAX PRIVILEGE</div><div className="n stat-val-accent" id="profile-max-priv">{formatRole(session && session.role)}</div></div>
-            </div>
-          </div>
-
-          <div className="header-actions-col">
-            <button className="edit-profile-btn" onClick={() => { setBioInput(bio); setEditOpen(true); }}>Edit Profile</button>
-            <button className="btn-primary header-btn-primary btn-logout" onClick={handleLogout}>Logout</button>
-          </div>
+    <main className="main-content">
+      <div className="ui-card" style={{ display: 'flex', gap: 18, alignItems: 'center', flexWrap: 'wrap', marginBottom: 24 }}>
+        {session?.profilePicUrl
+          ? <img src={session.profilePicUrl} alt="" style={{ width: 72, height: 72, borderRadius: '50%', objectFit: 'cover' }} />
+          : <span className="ui-avatar" style={{ width: 72, height: 72, fontSize: 28 }}>{initial}</span>}
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <h1 className="page-title" style={{ marginBottom: 2 }}>@{session?.username}</h1>
+          <div className="ui-row-meta">{role} · {session?.email}</div>
+          {session?.bio && <p className="ui-row-meta" style={{ marginTop: 8, color: 'var(--text-light)' }}>{session.bio}</p>}
         </div>
+        {reputation && <ReputationBadge level={reputation.level} limit={reputation.limit} />}
+      </div>
 
-        <div className="profile-body">
-          <div className="profile-main">
-            <div className="profile-tabs">
-              {tabs.map((t) => (
-                <button key={t.id} className={`ptab${tab === t.id ? ' active' : ''}`} data-ptab={t.id} onClick={() => setTab(t.id)}>{t.label}</button>
-              ))}
-            </div>
+      <div className="ui-tabs">
+        {visibleTabs.map((t) => <button type="button" key={t.id} className={`ui-tab${tab === t.id ? ' active' : ''}`} onClick={() => setTab(t.id)}>{t.label}</button>)}
+      </div>
 
-            <div className={`ptab-panel${tab === 'history' ? ' active' : ''}`} id="ptab-history">
-              <div className="profile-section panel-section-wrapper">
-                <div className="match-history" id="match-history-list">
-                  {derived.history.length === 0 ? (
-                    <p className="empty-state-text" style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>No match history yet. Join a competition to get started!</p>
-                  ) : (
-                    derived.history.map((m, i) => (
-                      <div className="match-item" key={i}>
-                        <div>
-                          <div className="game">{m.game}</div>
-                          <div className="event">{m.event}</div>
-                          <div className="date match-date-alt">{m.date}</div>
-                        </div>
-                        <div className={m.result === 'WIN' ? 'result-win' : 'result-loss'}>{m.result}</div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className={`ptab-panel${tab === 'stats' ? ' active' : ''}`} id="ptab-stats">
-              <div className="profile-section panel-section-wrapper">
-                <div className="stat-bars" id="stat-bars">
-                  {total === 0 ? (
-                    <p className="empty-state-text" style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>No statistics yet. Complete matches to build your stats.</p>
-                  ) : (
-                    <>
-                      <div className="stat-bar-item">
-                        <div className="stat-bar-label"><span className="name">Win Rate</span><span className="val">{winRate}%</span></div>
-                        <div className="stat-bar-track"><div className="stat-bar-fill" data-w={winRate} style={{ width: `${winRate}%` }}></div></div>
-                      </div>
-                      <div className="stat-bar-item">
-                        <div className="stat-bar-label"><span className="name">Matches Played</span><span className="val">{total}</span></div>
-                        <div className="stat-bar-track"><div className="stat-bar-fill" data-w={Math.min(100, total * 10)} style={{ width: `${Math.min(100, total * 10)}%` }}></div></div>
-                      </div>
-                      <div className="stat-bar-item">
-                        <div className="stat-bar-label"><span className="name">Wins</span><span className="val">{derived.wins}</span></div>
-                        <div className="stat-bar-track"><div className="stat-bar-fill" data-w={Math.min(100, derived.wins * 12)} style={{ width: `${Math.min(100, derived.wins * 12)}%` }}></div></div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className={`ptab-panel${tab === 'sessions' ? ' active' : ''}`} id="ptab-sessions">
-              <div className="profile-section panel-section-wrapper">
-                <div className="active-sessions-list">
-                  <div className="session-item">
-                    <div className="session-device-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg></div>
-                    <div className="session-info"><div className="session-name">Laptop • Sricity, India</div><div className="session-status current">Current Session</div></div>
-                  </div>
-                  <div className="session-item">
-                    <div className="session-device-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg></div>
-                    <div className="session-info"><div className="session-name">iPhone 15 Pro • Chennai, India</div><div className="session-status">Logged Out</div></div>
-                  </div>
-                  <div className="session-item">
-                    <div className="session-device-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg></div>
-                    <div className="session-info"><div className="session-name">Desktop • Bangalore, India</div><div className="session-status">Logged Out</div></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className={`ptab-panel${tab === 'account' ? ' active' : ''}`} id="ptab-account">
-              <div className="profile-section panel-section-wrapper">
-                <div className="settings-full-card">
-                  <div className="settings-header">
-                    <div className="settings-title">
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-                      Account Settings
-                    </div>
-                  </div>
-                  <div className="settings-content">
-                    <div className="settings-item-row">
-                      <div className="settings-label-info">
-                        <h3>Email Address</h3>
-                        <p>The email address associated with your account.</p>
-                      </div>
-                      <div className="settings-action-input-wrap">
-                        <div className="input-display-pill">
-                          <span id="account-email-display">{email || '—'}</span>
-                          <button className="btn-change-inline" onClick={() => { setEmailInput(email); setEmailOpen(true); }}>Change</button>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="settings-divider"></div>
-                    <div className="settings-item-row">
-                      <div className="settings-label-info">
-                        <h3>Password</h3>
-                        <p>Last changed 3 months ago. Strong password recommended.</p>
-                      </div>
-                      <div className="settings-action-input-wrap">
-                        <button className="btn-update-pill" onClick={() => { setPwd({ current: '', next: '', confirm: '' }); setPasswordOpen(true); }}>Update Password</button>
-                      </div>
-                    </div>
-                    <div className="settings-divider"></div>
-                    <div className="settings-item-row">
-                      <div className="settings-label-info">
-                        <h3>Two factor Authentication</h3>
-                        <p>Secure your account with 2FA using Google Authenticator</p>
-                      </div>
-                      <div className="settings-action-input-wrap">
-                        <div className="toggle-control-group">
-                          <label className="nexus-switch"><input type="checkbox" defaultChecked /><span className="nexus-slider round"></span></label>
-                          <span className="status-label">Enabled</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className={`ptab-panel${tab === 'preferences' ? ' active' : ''}`} id="ptab-preferences">
-              <div className="profile-section panel-section-wrapper">
-                <div className="settings-full-card pref-card">
-                  <div className="settings-header">
-                    <div className="settings-title">
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
-                      Preferences
-                    </div>
-                  </div>
-                  <div className="settings-content">
-                    <div className="pref-detail-section">
-                      <h3>Language</h3>
-                      <div className="pref-select-wrap">
-                        <select className="nexus-select"><option>English (US)</option><option>Spanish</option><option>Portuguese</option></select>
-                        <svg className="chevron-down" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"></path></svg>
-                      </div>
-                    </div>
-                    <div className="pref-detail-section notif-section">
-                      <h3>Notifications</h3>
-                      <div className="notif-toggle-list">
-                        {['Email Alerts', 'Push Notifications', 'Marketing', 'Messages'].map((label) => (
-                          <div className="notif-toggle-item" key={label}>
-                            <span>{label}</span>
-                            <label className="nexus-switch"><input type="checkbox" defaultChecked /><span className="nexus-slider round"></span></label>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className={`ptab-panel${tab === 'organiser' ? ' active' : ''}`} id="ptab-organiser">
-              {reputationOverview === null ? (
-                <ReputationOverview overview={null} />
-              ) : hasOrganiserHistory ? (
-                <ReputationOverview overview={reputationOverview} />
+      {tab === 'overview' && (
+        !data ? <LoadingState label="Loading your teams…" /> : (
+          <div className="ui-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', alignItems: 'start' }}>
+            <section className="ui-card">
+              <h2 className="ui-card-title">My teams</h2>
+              {data.mine.length === 0 ? (
+                <EmptyState title="No teams yet" action={<Link className="btn-table-secondary" to="/pages/competitions.html">Browse competitions</Link>} />
               ) : (
-                <div className="profile-section panel-section-wrapper">
-                  <p className="empty-state-text" style={{ color: 'var(--text-muted)', fontSize: 14, padding: '24px 0' }}>
-                    No organiser history available yet.
-                  </p>
+                <div className="ui-list">
+                  {data.mine.map(({ team, comp }) => (
+                    <Link key={team.id} className="ui-row" to={`/pages/team/team-roster.html?compId=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(team.id)}`}>
+                      <div className="ui-avatar">{team.avatar}</div>
+                      <div className="ui-row-main">
+                        <div className="ui-row-title">{team.name}</div>
+                        <div className="ui-row-meta">{comp.name} · {team.leader.toLowerCase() === String(session?.username).toLowerCase() ? 'Captain' : 'Player'} · {team.members.length} players</div>
+                      </div>
+                    </Link>
+                  ))}
                 </div>
               )}
-            </div>
-          </div>
-
-          <aside className="profile-sidebar">
-            <div className="comp-sidebar-block">
-              <h3>My Teams</h3>
-              <div className="teams-list" id="profile-teams-list">
-                {derived.myTeams.length === 0 ? (
-                  <p className="empty-state-text" style={{ color: 'var(--text-muted)', fontSize: 13 }}>Not part of any team yet.</p>
-                ) : (
-                  derived.myTeams.map((t, i) => (
-                    <div className="team-row" key={i}>
-                      <div className="t-icon">{t.icon}</div>
-                      <div><div className="t-name">{t.name}</div><div className="t-game">{t.game}</div></div>
-                      <div className="t-role">{t.role}</div>
-                    </div>
-                  ))
-                )}
+            </section>
+            <section className="ui-card">
+              <h2 className="ui-card-title">Upcoming matches</h2>
+              {data.upcoming.length === 0 ? <EmptyState title="No matches scheduled" message="Fixtures appear here once organizers publish them." /> : (
+                <div className="ui-list">
+                  {data.upcoming.slice(0, 10).map((m) => (
+                    <Link key={m.id} className="ui-row" to={`/pages/comp-info.html?id=${encodeURIComponent(m.compId)}&tab=bracket`}>
+                      <div className="ui-row-main">
+                        <div className="ui-row-title">{m.team1Name} vs {m.team2Name}</div>
+                        <div className="ui-row-meta">{m.compName} · {m.round || 'Match'}</div>
+                      </div>
+                      <span className="ui-row-meta">{m.scheduledAt ? formatDate(m.scheduledAt, true) : 'Time to be confirmed'}</span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+              <div className="ui-row-actions" style={{ marginTop: 14 }}>
+                <Link className="btn-table-secondary" to="/pages/competitions-participated.html">Competition history</Link>
+                <Link className="btn-table-secondary" to="/pages/my-payments.html">My payments</Link>
               </div>
-            </div>
-
-            <div className="comp-sidebar-block">
-              <h3>Upcoming Matches</h3>
-              <div className="match-stack" id="profile-upcoming-matches">
-                {derived.upcoming.length === 0 ? (
-                  <p className="empty-state-text" style={{ color: 'var(--text-muted)', fontSize: 13 }}>No upcoming matches scheduled.</p>
-                ) : (
-                  derived.upcoming.slice(0, 3).map((m, i) => (
-                    <div className="match-card-mini" key={i}>
-                      <div className="match-game-label">{m.game}</div>
-                      <div className="match-title-sm">{m.event}</div>
-                      <div className="match-schedule-sm">{m.dateTime}</div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </aside>
-        </div>
-      </main>
-
-      <div className={`modal-overlay${editOpen ? ' open' : ''}`} id="edit-modal" onClick={(e) => { if (e.target.id === 'edit-modal') setEditOpen(false); }}>
-        <div className="modal modal-relative">
-          <h2>Edit Profile</h2>
-          <p>Update your profile information below.</p>
-          <button className="modal-close" onClick={() => setEditOpen(false)}>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="2" y1="2" x2="14" y2="14" /><line x1="14" y1="2" x2="2" y2="14" /></svg>
-          </button>
-          <div className="modal-body-stack">
-            <div className="form-group"><label className="form-label">Display Name</label><input className="form-input" type="text" id="profile-displayname-input" defaultValue={displayName} /></div>
-            <div className="form-group"><label className="form-label">Username</label><input className="form-input" type="text" id="profile-username-input" defaultValue={`@${username}`} readOnly /></div>
-            <div className="form-group"><label className="form-label">Bio</label><textarea className="form-textarea modal-textarea-sm" id="profile-bio-input" value={bioInput} onChange={(e) => setBioInput(e.target.value)} /></div>
-            <button className="btn-auth-submit modal-submit-btn" onClick={saveProfile}>Save Changes</button>
+            </section>
           </div>
-        </div>
-      </div>
+        )
+      )}
 
-      <div className={`modal-overlay${emailOpen ? ' open' : ''}`} id="email-modal" onClick={(e) => { if (e.target.id === 'email-modal') setEmailOpen(false); }}>
-        <div className="modal modal-relative">
-          <h2>Change Email Address</h2>
-          <p>Update your account email address below.</p>
-          <button className="modal-close" onClick={() => setEmailOpen(false)}>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="2" y1="2" x2="14" y2="14" /><line x1="14" y1="2" x2="2" y2="14" /></svg>
-          </button>
-          <div className="modal-body-stack">
-            <div className="form-group"><label className="form-label">New Email Address</label><input className="form-input" type="email" id="new-email-input" placeholder="name@example.com" value={emailInput} onChange={(e) => setEmailInput(e.target.value)} /></div>
-            <button className="btn-auth-submit modal-submit-btn" onClick={updateEmail}>Update Email</button>
-          </div>
-        </div>
-      </div>
-
-      <div className={`modal-overlay${passwordOpen ? ' open' : ''}`} id="password-modal" onClick={(e) => { if (e.target.id === 'password-modal') setPasswordOpen(false); }}>
-        <div className="modal modal-relative">
-          <h2>Update Password</h2>
-          <p>Ensure your account stays secure with a strong password.</p>
-          <button className="modal-close" onClick={() => setPasswordOpen(false)}>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="2" y1="2" x2="14" y2="14" /><line x1="14" y1="2" x2="2" y2="14" /></svg>
-          </button>
-          <div className="modal-body-stack">
-            <div className="form-group"><label className="form-label">Current Password</label><input className="form-input" type="password" id="current-password-input" placeholder="••••••••" value={pwd.current} onChange={(e) => setPwd((p) => ({ ...p, current: e.target.value }))} /></div>
-            <div className="form-group"><label className="form-label">New Password</label><input className="form-input" type="password" id="new-password-input" placeholder="••••••••" value={pwd.next} onChange={(e) => setPwd((p) => ({ ...p, next: e.target.value }))} /></div>
-            <div className="form-group"><label className="form-label">Confirm New Password</label><input className="form-input" type="password" id="confirm-password-input" placeholder="••••••••" value={pwd.confirm} onChange={(e) => setPwd((p) => ({ ...p, confirm: e.target.value }))} /></div>
-            <button className="btn-auth-submit modal-submit-btn" onClick={updatePassword}>Change Password</button>
-          </div>
-        </div>
-      </div>
-    </>
+      {tab === 'reputation' && <ReputationOverview overview={overview} />}
+      {tab === 'account' && <AccountSettings />}
+    </main>
   );
 }
-
-

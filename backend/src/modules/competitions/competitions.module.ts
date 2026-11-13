@@ -10,9 +10,10 @@ import { RevenueModule } from '../revenue/revenue.module';
 import { TeamEntity } from '../../entities/team.entity';
 import { CompetitionRemovalEntity } from '../../entities/competition-removal.entity';
 import { ReputationModule } from '../reputation/reputation.module';
+import { AdminModule } from '../admin/admin.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([CompetitionEntity, TeamEntity, CompetitionRemovalEntity]), NotificationsModule, RevenueModule, ReputationModule],
+  imports: [TypeOrmModule.forFeature([CompetitionEntity, TeamEntity, CompetitionRemovalEntity]), NotificationsModule, RevenueModule, ReputationModule, AdminModule],
   controllers: [CompetitionsController],
   providers: [CompetitionsService, CompetitionRepository],
   exports: [CompetitionsService, CompetitionRepository],

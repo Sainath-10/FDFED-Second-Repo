@@ -1,101 +1,99 @@
 /**
  * NEXUS ESPORTS — Join Requests
  *
- * pending join requests
- * with accept/decline, a tab badge count, and the empty state.
+ * Requests to join this team, from the backend. Accepting adds the player, or —
+ * where each player pays — waits for their payment, which is what adds them.
+ * The result shown always comes from the server's answer.
  */
-import { Navigate } from 'react-router-dom';
+import { useCallback, useEffect, useState } from 'react';
 import { useTeamContext } from '../../hooks/useTeamContext.js';
-import NexusTeamWorkflow from '../../services/teamWorkflow.js';
-import TeamTabs from '../../components/TeamTabs.jsx';
+import { TeamsAPI } from '../../services/api.js';
+import TeamHeader from '../../components/TeamHeader.jsx';
+import { EmptyState, ErrorState, LoadingState, formatDate, formatINR } from '../../components/ui.jsx';
+import { teamGate } from './TeamGate.jsx';
+import useReportSync from '../../hooks/useReportSync.js';
 import { showToast } from '../../lib/toast.js';
 import '../../styles/pages/team/join-requests.css';
 
 export default function JoinRequests() {
-  const { ctx, checkingPermission, canChat, refresh, canManage: hookCanManage, isEnded: hookIsEnded } = useTeamContext();
+  const t = useTeamContext();
+  const [requests, setRequests] = useState(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState('');
+  const teamId = t.team?.id;
 
-  if (!ctx || !ctx.comp || !ctx.team) {
-    return <main className="main-content"><h1 className="page-title">Team</h1></main>;
-  }
+  const load = useCallback(async () => {
+    if (!teamId) return;
+    const res = await TeamsAPI.getJoinRequests(teamId);
+    if (res.ok) { setRequests(Array.isArray(res.data) ? res.data : []); setError(''); } else setError(res.error || 'Unable to load join requests.');
+  }, [teamId]);
 
-  const { comp, team, session, context } = ctx;
-  const canManage = hookCanManage ?? !!(session && (session.username || '').toLowerCase() === (team.createdBy || '').toLowerCase());
-  const isEnded = hookIsEnded ?? !!(comp.ended || comp.status === 'completed');
+  useEffect(() => { if (t.canManage) load(); }, [load, t.canManage]);
+  useReportSync(t.canManage ? load : null);
 
-  if (checkingPermission) return <main className="main-content"><p role="status">Checking team permissions...</p></main>;
+  const gate = teamGate(t, { captainOnly: true, title: 'Join requests' });
+  if (gate) return gate;
 
-  if (!canManage) {
-    return <Navigate to={`/pages/team/team-roster.html?compId=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(team.id)}`} replace />;
-  }
-
-  const allRequests = NexusTeamWorkflow.getJoinRequests(comp.id, team.id) || [];
-  const pending = allRequests.filter((r) => r.status === 'pending');
-  const awaitingPayment = allRequests.filter((r) => r.status === 'awaiting_payment');
+  const { team, comp, rosterLocked } = t;
   const playerFee = comp.feeType === 'per_player' ? Number(comp.entryFeeAmount) || 0 : 0;
+  const pending = (requests || []).filter((r) => r.status === 'pending');
+  const awaiting = (requests || []).filter((r) => r.status === 'awaiting_payment');
 
-  async function handleRequest(requestId, username, action) {
-    const result = await NexusTeamWorkflow.decideJoinRequest({ compId: comp.id, teamId: team.id, requestId, action });
-    if (!result.ok) { showToast(result.error || 'Failed to update request.', 'error'); return; }
-    if (action === 'accepted' && result.feeDue) showToast(`${username} accepted. They join ${team.name} once they pay the ₹${result.feeDue} entry fee.`);
-    else if (action === 'accepted') showToast(`${username} accepted to ${team.name}!`);
-    else showToast(`${username}'s request declined.`, 'error');
-    refresh();
+  async function decide(request, status) {
+    setBusy(request.id);
+    const res = await TeamsAPI.updateJoinRequest(request.id, status);
+    setBusy('');
+    if (!res.ok) { showToast(res.error || 'Unable to update this request.', 'error'); return; }
+    const result = res.data || {};
+    if (status === 'declined') showToast(`${request.fromUsername}'s request was declined.`);
+    else if (result.status === 'awaiting_payment') showToast(`${request.fromUsername} was accepted and joins after paying ${formatINR(result.amount || playerFee)}.`);
+    else showToast(`${request.fromUsername} joined ${team.name}.`);
+    load();
+    t.refresh();
   }
 
   return (
     <main className="main-content">
-      <h1 className="page-title">{team.name}</h1>
-      <p className="page-subtitle">Players who have requested to join your team</p>
+      <TeamHeader t={t} active="join-requests" joinRequestCount={pending.length} />
+      <div className="td-section-head">
+        <div>
+          <h2 className="td-section-title">Join requests</h2>
+          <p className="td-section-sub">Players who asked to join your team.</p>
+        </div>
+      </div>
 
-      <TeamTabs active="join-requests" context={context} canManage={canManage} canChat={canChat} isEnded={isEnded} joinRequestCount={pending.length} />
+      {error && <ErrorState message={error} onRetry={load} />}
+      {!error && requests === null && <LoadingState label="Loading join requests…" />}
+      {!error && requests && pending.length === 0 && awaiting.length === 0 && (
+        <EmptyState title="All caught up" message="There are no pending join requests." />
+      )}
 
-      <div id="requests-list" className="requests-stack">
-        {pending.length === 0 ? (
-          <div id="no-requests" className="empty-state-card" style={{ display: 'block' }}>
-            <div className="empty-emoji">OK</div>
-            <div className="empty-title">All caught up!</div>
-            <div className="empty-subtitle">No pending join requests.</div>
-          </div>
-        ) : (
-          pending.map((req) => {
-            const initial = (req.displayName || req.username || 'U').charAt(0).toUpperCase();
-            const when = req.requestedAt ? new Date(req.requestedAt).toLocaleString() : 'just now';
-            return (
-              <div className="request-card request-card-alt" id={req.id} key={req.id}>
-                <div className="request-avatar-md">{initial}</div>
-                <div className="request-info-wrapper">
-                  <div className="request-name">{req.displayName || req.username}</div>
-                  <div className="request-meta">Username: {req.username}</div>
-                  <div className="request-time">Requested: {when}</div>
-                  {Number(req.feePaid) > 0 ? (
-                    <div className="request-meta request-fee-note" style={{ color: '#4ade80', fontWeight: 700 }}>✔ Participant has paid the ₹{Number(req.feePaid).toLocaleString('en-IN')} entry fee</div>
-                  ) : playerFee > 0 && (
-                    <div className="request-meta request-fee-note" style={{ color: '#fbbf24', fontWeight: 700 }}>Entry fee not paid yet: they pay ₹{playerFee.toLocaleString('en-IN')} after you accept</div>
-                  )}
-                </div>
-                <div className="request-slot-info">{req.message ? `Message: "${req.message}"` : 'No message provided'}</div>
-                <div className="request-actions-row">
-                  <button className="btn-notif-accept" onClick={() => handleRequest(req.id, req.username, 'accepted')}>Accept</button>
-                  <button className="btn-notif-reject" onClick={() => handleRequest(req.id, req.username, 'declined')}>Decline</button>
-                </div>
-              </div>
-            );
-          })
-        )}
-        {awaitingPayment.map((req) => (
-          <div className="request-card request-card-alt" id={req.id} key={req.id}>
-            <div className="request-avatar-md">{(req.displayName || req.username || 'U').charAt(0).toUpperCase()}</div>
-            <div className="request-info-wrapper">
-              <div className="request-name">{req.displayName || req.username}</div>
-              <div className="request-meta">Username: {req.username}</div>
-              <div className="request-meta request-fee-note" style={{ color: '#fbbf24', fontWeight: 700 }}>You accepted: waiting for them to pay ₹{playerFee.toLocaleString('en-IN')} to join</div>
+      <div className="ui-list">
+        {pending.map((req) => (
+          <div className="ui-row" key={req.id}>
+            <div className="ui-avatar">{String(req.fromUsername || 'U').charAt(0).toUpperCase()}</div>
+            <div className="ui-row-main">
+              <div className="ui-row-title">@{req.fromUsername}</div>
+              <div className="ui-row-meta">Requested {formatDate(req.createdAt, true)}{req.message ? ` · “${req.message}”` : ''}</div>
+              {playerFee > 0 && <div className="ui-row-meta" style={{ color: '#fbbf24' }}>They pay {formatINR(playerFee)} after you accept.</div>}
             </div>
-            <span className="status-pill pending status-pill-sm">Awaiting Payment</span>
+            <div className="ui-row-actions">
+              <button type="button" className="btn-table-primary" disabled={rosterLocked || busy === req.id} onClick={() => decide(req, 'accepted')}>Accept</button>
+              <button type="button" className="btn-table-danger" disabled={busy === req.id} onClick={() => decide(req, 'declined')}>Decline</button>
+            </div>
+          </div>
+        ))}
+        {awaiting.map((req) => (
+          <div className="ui-row" key={req.id}>
+            <div className="ui-avatar">{String(req.fromUsername || 'U').charAt(0).toUpperCase()}</div>
+            <div className="ui-row-main">
+              <div className="ui-row-title">@{req.fromUsername}</div>
+              <div className="ui-row-meta">Accepted — waiting for them to pay {formatINR(playerFee)}.</div>
+            </div>
+            <span className="status-pill pending">Awaiting payment</span>
           </div>
         ))}
       </div>
     </main>
   );
 }
-
-

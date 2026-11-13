@@ -1,365 +1,186 @@
 /**
  * NEXUS ESPORTS — Join Teams
  *
- * the competition
- * context header, the create-team CTA (context-aware), the approved-team list with
- * per-team join states (Your Team / Team Full / In Another Team / Requested /
- * Request to Join), the pending-requests section, the per-player checkout after acceptance,
- * ?teamId= direct-join, and the ended-competition lock.
+ * Lists the competition's registered teams from the backend so every player
+ * sees the same teams, lets a player request to join one (with the private
+ * join code when needed), and shows their own requests — including paying the
+ * entry fee once a captain accepts, where each player pays.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import NexusData from '../services/data.js';
-import NexusTeamWorkflow from '../services/teamWorkflow.js';
+import { ReportsAPI, TeamsAPI } from '../services/api.js';
+import { isOrganizerOf, useCompetition } from '../services/competitions.js';
 import useJoinCodeGate from '../hooks/useJoinCodeGate.jsx';
-import { TeamsAPI } from '../services/api.js';
-import { LocalReportsAPI } from '../services/local/reporting.js';
-import { showToast } from '../lib/toast.js';
+import useReportSync from '../hooks/useReportSync.js';
 import PlayerFeeModal from '../components/PlayerFeeModal.jsx';
+import { EmptyState, ErrorState, LoadingState, Notice, RemovedFromCompetition, formatDate, formatINR } from '../components/ui.jsx';
+import { showToast } from '../lib/toast.js';
 import '../styles/pages/join-teams.css';
 
-function renderTeamAvatar(avatar, name) {
-  const fallback = name ? String(name).slice(0, 4).toUpperCase() : 'TEAM';
-  if (!avatar) return fallback;
-  const str = String(avatar).trim();
-  if (str.startsWith('<svg') && str.endsWith('</svg>')) {
-    return (
-      <span
-        dangerouslySetInnerHTML={{ __html: str }}
-        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}
-      />
-    );
-  }
-  if (str.startsWith('http://') || str.startsWith('https://') || str.startsWith('/') || str.startsWith('data:image/')) {
-    return <img src={str} alt={name || 'Team'} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />;
-  }
-  if (str.length <= 4) return str;
-  return fallback;
-}
+const lower = (v) => String(v || '').toLowerCase();
 
 export default function JoinTeams() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const { session } = useAuth();
+  const id = params.get('id') || params.get('compId') || '';
+  const highlightTeamId = params.get('teamId');
+  const { loading, error, data: comp, reload } = useCompetition(id);
+  const joinCodeGate = useJoinCodeGate(comp);
 
-  const id = params.get('id') || params.get('compId') || null;
-  const preferredTeamId = params.get('teamId');
-
-  const [version, setVersion] = useState(0);
-  const [checkout, setCheckout] = useState(null); // { teamId, teamName, requestId, feeAmount }
+  const [myRequests, setMyRequests] = useState([]);
+  const [removal, setRemoval] = useState(null);
+  const [sending, setSending] = useState('');
+  const [checkout, setCheckout] = useState(null);
   const [paying, setPaying] = useState(false);
-  const [isRemoved, setIsRemoved] = useState(false);
-  const listRef = useRef(null);
 
-  // A removed player cannot re-enter a competition through its join page, an
-  // old bookmark or a ?teamId= direct-join link. The backend rejects the same
-  // requests; this keeps the page honest.
-  useEffect(() => {
-    let cancelled = false;
-    if (!id || !session?.username) { setIsRemoved(false); return undefined; }
-    LocalReportsAPI.removalStatus(id)
-      .then((res) => { if (!cancelled && res.ok && res.data) setIsRemoved(!!res.data.removed); })
-      .catch(() => undefined);
-    return () => { cancelled = true; };
-  }, [id, session && session.username]);
+  const loadMine = useCallback(async () => {
+    if (!session) return;
+    const res = await TeamsAPI.myJoinRequests();
+    if (res.ok && Array.isArray(res.data)) setMyRequests(res.data.filter((r) => r.competitionId === id));
+  }, [session, id]);
 
-  const comp = useMemo(
-    () => (id && NexusData ? NexusData.getCompetitionById(id) : null),
-    [id, version],
-  );
-
- // §2.4 — shared join-code gate for direct URLs (join-teams.html?id=...).
- const joinCodeGate = useJoinCodeGate(comp);
-
- // Rejected competitions are archived.
- useEffect(() => {
-    if (!comp) return;
-    const status = NexusData.getApprovalStatus ? NexusData.getApprovalStatus(comp) : 'approved';
-    if (status === 'rejected') {
-      showToast('This competition has been archived.', 'error');
-      navigate('/pages/competitions.html');
-    }
-  }, [comp, navigate]);
-
- // Ended-competition lock (with cleanup).
-  useEffect(() => {
-    if (comp && NexusData.enforceNotEnded) {
-      NexusData.enforceNotEnded(comp, '.btn-join,.create-team-cta,button[onclick*="handleJoin"],.btn-request');
-    }
-    return () => {
-      const banner = document.getElementById('_ended_banner_');
-      if (banner) banner.remove();
-      document.body.style.marginTop = '';
-    };
-  }, [comp]);
+  useEffect(() => { loadMine(); }, [loadMine]);
+  useReportSync(useCallback(() => { reload(); loadMine(); }, [reload, loadMine]));
 
   useEffect(() => {
-    if (!comp) showToast('Competition context missing.', 'error');
-  }, [comp]);
+    if (!id || !session) return;
+    ReportsAPI.removalStatus(id).then((res) => { if (res.ok) setRemoval(res.data); });
+  }, [id, session]);
 
-  async function proceedJoinTeam(teamId) {
-    // §2.4 — the backend validates the private join code before any local
-    // request is recorded; a rejected code never creates a pending request.
+  if (!id) return <main className="join-page"><ErrorState message="No competition was selected." /></main>;
+  if (removal?.removed) return <RemovedFromCompetition reason={removal.reason} />;
+  if (loading && !comp) return <main className="join-page"><LoadingState label="Loading teams…" /></main>;
+  if (error || !comp) return <main className="join-page"><ErrorState message={error || 'That competition could not be found.'} onRetry={reload} /></main>;
+
+  const me = lower(session?.username);
+  const teams = comp.activeTeams;
+  const myTeam = teams.find((t) => t.members.some((m) => lower(m.username) === me)) || null;
+  const organizer = isOrganizerOf(comp, me);
+  const maxPerTeam = comp.maxPlayersPerTeam || 5;
+  const regOpen = comp.registration.open;
+  const openRequests = myRequests.filter((r) => ['pending', 'awaiting_payment'].includes(r.status));
+  const requestedTeamIds = new Set(openRequests.map((r) => r.teamId));
+  const playerFee = comp.feeType === 'per_player' ? comp.entryFeeAmount : 0;
+
+  async function requestJoin(team) {
+    if (!session) { navigate(`/pages/login.html?redirect=${encodeURIComponent(`/pages/join-teams.html?id=${id}`)}`); return; }
     const code = await joinCodeGate.requireCode();
     if (code === null) return;
-
-    const current = NexusData.getCompetitionById(comp.id);
-    const team = (current.teams || []).find((t) => t.id === teamId);
-    let backendId = null;
-    if (team && team.dbId && session) {
-      try {
-        const res = await TeamsAPI.createJoinRequest(
-          team.dbId,
-          current.dbId || current.id,
-          session.username,
-          '',
-          code || undefined,
-        );
-        if (res && res.ok === false && !/backend|network|Failed to fetch|is the backend/i.test(String(res.error || ''))) {
-          showToast(res.error || 'Unable to send join request.', 'error');
-          return;
-        }
-        backendId = (res && res.data && res.data.id) || null;
-      } catch (err) { /* backend unavailable — local workflow below */ }
-    }
-
-    const result = NexusTeamWorkflow.submitJoinRequest({ compId: current.id, teamId, joinCode: code || '', backendId });
-    if (!result.ok) { showToast(result.error || 'Request failed.', 'error'); return; }
-    const fee = current.feeType === 'per_player' ? Number(current.entryFeeAmount) || 0 : 0;
-    showToast(fee > 0 ? `Join request sent! If the team lead accepts, pay ₹${fee} to join.` : 'Join request sent successfully!');
-    setVersion((v) => v + 1);
+    setSending(team.id);
+    const res = await TeamsAPI.createJoinRequest(team.id, comp.id, null, '', code || undefined);
+    setSending('');
+    if (!res.ok) { showToast(res.error || 'Unable to send the join request.', 'error'); return; }
+    showToast(playerFee > 0 ? `Request sent. If the captain accepts, pay ${formatINR(playerFee)} to join.` : 'Join request sent. The captain will review it.');
+    loadMine();
   }
 
-  function handleJoin(teamId) {
-    if (!session) { navigate('/pages/login.html'); return; }
-    if (!comp || !NexusTeamWorkflow || typeof NexusTeamWorkflow.submitJoinRequest !== 'function') {
-      showToast('Unable to send request right now.', 'error');
-      return;
-    }
-    proceedJoinTeam(teamId);
-  }
-
-  async function confirmPayment() {
+  async function pay() {
     if (!checkout || paying) return;
     setPaying(true);
-    const result = await NexusTeamWorkflow.payJoinRequest({ compId: comp.id, teamId: checkout.teamId, requestId: checkout.requestId });
+    const res = await TeamsAPI.payJoinRequest(checkout.id);
     setPaying(false);
-    if (!result.ok) { showToast(result.error || 'Payment could not be completed.', 'error'); return; }
-    showToast(`Payment received. You have joined ${checkout.teamName}!`);
+    if (!res.ok) { showToast(res.error || 'Payment could not be completed.', 'error'); return; }
+    showToast(`Payment received. You joined ${checkout.teamName}.`);
     setCheckout(null);
-    setVersion((v) => v + 1);
+    reload();
+    loadMine();
   }
 
- // ?teamId= — direct join (once, when a comp is available).
-  const directJoinAttempted = useRef(false);
-  useEffect(() => {
-    if (directJoinAttempted.current || !comp || !preferredTeamId) return;
-    directJoinAttempted.current = true;
-    if (!session || !NexusTeamWorkflow || typeof NexusTeamWorkflow.directJoinTeam !== 'function') return;
-    (async () => {
-      const code = await joinCodeGate.requireCode();
-      if (code === null) return;
-      const result = NexusTeamWorkflow.directJoinTeam({ compId: comp.id, teamId: preferredTeamId, joinCode: code || '' });
-      if (!result.ok) { showToast(result.error || 'Unable to join team.', 'error'); return; }
-      showToast(`You have joined ${result.team && result.team.name ? result.team.name : 'the team'}.`);
-      const compKey = (result.competition && result.competition.id) || comp.id;
-      const teamKey = (result.team && result.team.id) || preferredTeamId;
-      const isCaptain = result.team && result.team.createdBy && result.team.createdBy.toLowerCase() === session.username.toLowerCase();
-      navigate(isCaptain
-        ? `/pages/team/team-roster.html?compId=${encodeURIComponent(compKey)}&teamId=${encodeURIComponent(teamKey)}`
-        : `/pages/comp-participant.html?id=${encodeURIComponent(compKey)}`);
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [comp, preferredTeamId, session, navigate]);
-
- // Highlight the preferred team card after render.
-  useEffect(() => {
-    if (!comp || !preferredTeamId || !listRef.current) return;
-    const card = listRef.current.querySelector(`.request-card[data-team-id="${preferredTeamId}"]`);
-    if (card) {
-      card.classList.add('request-card-highlight');
-      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  }, [comp, preferredTeamId, version]);
-
-  if (isRemoved) {
-    return (
-      <main className="join-page">
-        <div
-          role="alert"
-          style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.45)', borderRadius: 10, padding: '14px 18px', color: '#fca5a5', fontSize: 14, fontWeight: 700, lineHeight: 1.5, marginBottom: 20 }}
-        >
-          You have been removed from this competition. You can no longer access its team or competition management features.
-        </div>
-        <Link to="/pages/my-reports.html" className="create-team-cta">View your reports</Link>
-      </main>
-    );
-  }
-
-  if (!comp) {
-    return <main className="join-page"><a href="/pages/comp-info.html" className="back-btn" onClick={(e) => { e.preventDefault(); navigate('/pages/competitions.html'); }}>Back to Competition</a></main>;
-  }
-
-  const userKey = session ? (session.username || '').toLowerCase() : '';
-  const myTeam = (NexusTeamWorkflow && session && typeof NexusTeamWorkflow.findUserTeamInCompetition === 'function')
-    ? NexusTeamWorkflow.findUserTeamInCompetition(comp.id, session.username)
-    : null;
-  const myTeamId = myTeam && myTeam.team ? myTeam.team.id : null;
-  const maxPerTeam = comp.maxPlayersPerTeam || 5;
-  const teamsToShow = (comp.teams || []).filter((t) => t.status === 'approved');
-
-  const createHref = (() => {
-    if (!session) return '/pages/login.html';
-    if (myTeam && myTeam.context) {
-      return `/pages/team/team-roster.html?compId=${encodeURIComponent(myTeam.context.compId)}&teamId=${encodeURIComponent(myTeam.context.teamId)}`;
-    }
-    return `/pages/create-team.html?id=${encodeURIComponent(comp.id)}`;
-  })();
-  const createLabel = myTeam && myTeam.context ? 'View My Team' : 'Create Team';
-
-  const mine = [];
-  (comp.teams || []).forEach((team) => {
-    (team.joinRequests || []).forEach((req) => {
-      if ((req.username || '').toLowerCase() === userKey && (req.status === 'pending' || req.status === 'awaiting_payment')) {
-        mine.push({ teamId: team.id, teamName: team.name, teamAvatar: team.avatar, request: req });
-      }
-    });
-  });
+  const createHref = myTeam
+    ? `/pages/team/team-roster.html?compId=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(myTeam.id)}`
+    : `/pages/create-team.html?id=${encodeURIComponent(comp.id)}`;
 
   return (
     <main className="join-page">
-      <Link to={`/pages/comp-info.html?id=${encodeURIComponent(comp.id)}`} className="back-btn">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-          <path d="M12 8H4M4 8L8 12M4 8L8 4" />
-        </svg>
-        Back to Competition
-      </Link>
+      <Link to={`/pages/comp-info.html?id=${encodeURIComponent(comp.id)}`} className="back-btn">← Back to competition</Link>
 
       <div className="comp-context">
-        <svg viewBox="0 0 24 24" fill="none" stroke="#c6ff33" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6m12 5h1.5a2.5 2.5 0 0 0 0-5H18m-6-2v2m0 14v-2M9 9h6m-6 6h6M5 9v6a7 7 0 0 0 14 0V9" />
-        </svg>
         <div>
-          <div className="comp-name" id="comp-context-name">{comp.name} - {comp.game}</div>
-          <div className="comp-sub">Select a team to join or create a new team for this tournament</div>
+          <div className="comp-name">{comp.name} · {comp.game}</div>
+          <div className="comp-sub">{comp.registration.label}{comp.registration.detail ? ` · ${comp.registration.detail}` : ''}</div>
         </div>
       </div>
 
       <div className="join-header-row">
         <div>
-          <h1>Request to Join &amp; Play</h1>
-          <p>Browse open teams looking for players, or create your own squad.</p>
+          <h1>Join a team</h1>
+          <p>Request to join a team below, or create your own.</p>
         </div>
-        <Link to={createHref} className="create-team-cta">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <line x1="7" y1="1" x2="7" y2="13" />
-            <line x1="1" y1="7" x2="13" y2="7" />
-          </svg>
-          {createLabel}
-        </Link>
-      </div>
-
-      <div className="section-label" style={{ marginTop: 20 }}>Open Teams Looking for Players</div>
-
-      <div id="team-list" ref={listRef}>
-        {teamsToShow.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 60, background: 'rgba(255,255,255,0.02)', borderRadius: 12, border: '1px dashed rgba(255,255,255,0.1)' }}>
-            <p style={{ color: '#94A3B8', fontSize: 16 }}>No teams are currently registered in this tournament.</p>
-            <p style={{ color: '#64748B', fontSize: 14, marginTop: 8 }}>Be the first to create one.</p>
-          </div>
-        ) : (
-          teamsToShow.map((team) => {
-            const members = Array.isArray(team.members) ? team.members.length : (team.players || 0);
-            const openSlots = Math.max(0, maxPerTeam - members);
-            const isFull = members >= maxPerTeam;
-            const isCaptain = userKey && (team.createdBy || '').toLowerCase() === userKey;
-            const hasPending = userKey && (team.joinRequests || []).some((req) => (req.username || '').toLowerCase() === userKey && (req.status === 'pending' || req.status === 'awaiting_payment'));
-            const userInAnotherTeam = !!myTeamId && team.id !== myTeamId;
-
-            let joinBtn;
-            if (isCaptain) joinBtn = <button className="btn-join" disabled>Your Team</button>;
-            else if (isFull) joinBtn = <button className="btn-join team-full-btn" disabled>Team Full</button>;
-            else if (userInAnotherTeam) joinBtn = <button className="btn-join" disabled>In Another Team</button>;
-            else if (hasPending) joinBtn = <button className="btn-join" disabled>Requested</button>;
-            else joinBtn = <button className="btn-join" onClick={() => handleJoin(team.id)}>Request to Join</button>;
-
-            return (
-              <div className="request-card" data-name={team.name} data-team-id={team.id} key={team.id || team.name}>
-                <div className="request-card-left">
-                  <div className="team-icon">{renderTeamAvatar(team.avatar, team.name)}</div>
-                  <div>
-                    <div className="team-name">{team.name}</div>
-                    <div className="team-info">
-                      {members}/{maxPerTeam} Players filled
-                      {isFull ? <span className="slots-full">0 slots open</span> : <span>{openSlots} slot{openSlots !== 1 ? 's' : ''} open</span>}
-                    </div>
-                    <div className="wanted-roles">
-                      <span>Team Tag:</span>
-                      <span className="role-badge">{team.tag || 'N/A'}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="request-card-actions">
-                  <button className="btn-view-team" onClick={() => navigate(`/pages/team/team-roster.html?compId=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(team.id)}`)}>View Team</button>
-                  {joinBtn}
-                </div>
-              </div>
-            );
-          })
+        {!organizer && (myTeam || regOpen) && (
+          <Link to={createHref} className="create-team-cta">{myTeam ? 'View my team' : '+ Create team'}</Link>
         )}
       </div>
 
-      {mine.length > 0 && (
-        <div className="pending-requests-section">
-          <div className="pending-header">
-            <svg className="clock-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10"></circle>
-              <polyline points="12 6 12 12 16 14"></polyline>
-            </svg>
-            <span>PENDING REQUESTS</span>
-            <span className="pending-badge">{mine.length}</span>
-          </div>
-          <div className="pending-list">
-            {mine.map((entry) => (
-              <div className="pending-card" key={entry.request.id || entry.teamName}>
-                <div className="pending-content">
-                  <div className="team-icon">{renderTeamAvatar(entry.teamAvatar, entry.teamName)}</div>
-                  <div className="pending-info">
-                    <div className="pending-team-name">{entry.teamName}</div>
-                    <div className="pending-time">Sent {entry.request.requestedAt ? new Date(entry.request.requestedAt).toLocaleString() : 'just now'}</div>
-                  </div>
+      {organizer && <Notice tone="info">You organize this competition, so you cannot join a team in it.</Notice>}
+      {!regOpen && <Notice tone="warning">{comp.registration.label}. New join requests are closed.</Notice>}
+      {myTeam && <Notice tone="success">You are on {myTeam.name}. A player can be on only one team per competition.</Notice>}
+
+      {openRequests.length > 0 && (
+        <section className="pending-requests-section" style={{ marginBottom: 28 }}>
+          <div className="pending-header"><span>Your requests</span><span className="pending-badge">{openRequests.length}</span></div>
+          <div className="ui-list">
+            {openRequests.map((req) => (
+              <div className="ui-row" key={req.id}>
+                <div className="ui-avatar">{String(req.teamName || 'T').charAt(0).toUpperCase()}</div>
+                <div className="ui-row-main">
+                  <div className="ui-row-title">{req.teamName || 'Team'}</div>
+                  <div className="ui-row-meta">Sent {formatDate(req.createdAt, true)}</div>
                 </div>
-                {entry.request.status === 'awaiting_payment' ? (
-                  <button
-                    className="btn-join"
-                    onClick={() => setCheckout({ teamId: entry.teamId, teamName: entry.teamName, requestId: entry.request.backendId || entry.request.id, feeAmount: Number(comp.entryFeeAmount) || 0 })}
-                  >
-                    Accepted: Pay ₹{(Number(comp.entryFeeAmount) || 0).toLocaleString('en-IN')}
+                {req.status === 'awaiting_payment' ? (
+                  <button type="button" className="btn-primary" onClick={() => setCheckout({ id: req.id, teamName: req.teamName, amount: req.amount || playerFee })}>
+                    Accepted — pay {formatINR(req.amount || playerFee)}
                   </button>
-                ) : (
-                  <button className="btn-cancel-request" disabled>Pending</button>
-                )}
+                ) : <span className="status-pill pending">Waiting for captain</span>}
               </div>
             ))}
           </div>
+        </section>
+      )}
+
+      <div className="section-label">Registered teams ({teams.length}{comp.maxTeams ? ` / ${comp.maxTeams}` : ''})</div>
+
+      {teams.length === 0 ? (
+        <EmptyState title="No teams registered yet" message={regOpen ? 'Be the first to create one.' : 'Registration is closed.'} />
+      ) : (
+        <div id="team-list">
+          {teams.map((team) => {
+            const count = team.members.length;
+            const full = count >= maxPerTeam;
+            const isMine = myTeam && myTeam.id === team.id;
+            let action;
+            if (isMine) action = <span className="status-pill approved">Your team</span>;
+            else if (organizer) action = null;
+            else if (full) action = <button type="button" className="btn-join team-full-btn" disabled>Team full</button>;
+            else if (myTeam) action = <button type="button" className="btn-join" disabled>In another team</button>;
+            else if (requestedTeamIds.has(team.id)) action = <button type="button" className="btn-join" disabled>Requested</button>;
+            else if (!regOpen) action = <button type="button" className="btn-join" disabled>Closed</button>;
+            else action = <button type="button" className="btn-join" disabled={sending === team.id} onClick={() => requestJoin(team)}>{sending === team.id ? 'Sending…' : 'Request to join'}</button>;
+
+            return (
+              <div className={`request-card${highlightTeamId === team.id ? ' request-card-highlight' : ''}`} key={team.id}>
+                <div className="request-card-left">
+                  <div className="team-icon">{team.avatar}</div>
+                  <div>
+                    <div className="team-name">{team.name}</div>
+                    <div className="team-info">
+                      {count}/{maxPerTeam} players · {full ? <span className="slots-full">no slots open</span> : <span>{maxPerTeam - count} slot{maxPerTeam - count !== 1 ? 's' : ''} open</span>}
+                    </div>
+                    <div className="wanted-roles"><span>Captain:</span><span className="role-badge">@{team.leader}</span></div>
+                  </div>
+                </div>
+                <div className="request-card-actions">{action}</div>
+              </div>
+            );
+          })}
         </div>
       )}
 
       {checkout && (
-        <PlayerFeeModal
-          compName={comp.name}
-          teamName={checkout.teamName}
-          feeAmount={checkout.feeAmount}
-          busy={paying}
-          onCancel={() => setCheckout(null)}
-          onConfirm={confirmPayment}
-        />
+        <PlayerFeeModal compName={comp.name} teamName={checkout.teamName} feeAmount={checkout.amount} busy={paying} onCancel={() => setCheckout(null)} onConfirm={pay} />
       )}
-
       {joinCodeGate.modal}
     </main>
   );
 }
-
-

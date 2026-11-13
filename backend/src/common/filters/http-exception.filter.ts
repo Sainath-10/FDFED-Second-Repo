@@ -6,6 +6,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { QueryFailedError } from 'typeorm';
 import { FileLoggerService } from '../logger/file-logger.service';
 
 @Catch()
@@ -33,9 +34,26 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         message = resObj.message || exception.message;
         error = resObj.error || exception.name;
       }
-    } else if (exception instanceof Error) {
-      message = exception.message;
-      error = exception.name;
+    } else if (exception instanceof QueryFailedError) {
+      // Database errors never reach the client verbatim; the common cases map to a clear 4xx.
+      const code = (exception as any).driverError?.code || (exception as any).code;
+      if (code === '22P02' || code === '22007' || code === '22008') {
+        status = HttpStatus.BAD_REQUEST;
+        error = 'Bad Request';
+        message = 'One of the identifiers or values in this request is not valid.';
+      } else if (code === '23505') {
+        status = HttpStatus.CONFLICT;
+        error = 'Conflict';
+        message = 'This record already exists.';
+      } else if (code === '23503') {
+        status = HttpStatus.BAD_REQUEST;
+        error = 'Bad Request';
+        message = 'This request refers to a record that does not exist.';
+      } else if (code === '23514' || code === '22003' || code === '22001') {
+        status = HttpStatus.BAD_REQUEST;
+        error = 'Bad Request';
+        message = 'One of the values in this request is out of range.';
+      }
     }
 
     const timestamp = new Date().toISOString();

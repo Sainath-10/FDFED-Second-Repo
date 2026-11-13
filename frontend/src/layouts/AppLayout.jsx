@@ -6,38 +6,34 @@
  * `.page-with-sidebar`, `#footer-mount`) so the stylesheet applies
  * unchanged.
  *
- * `offset={false}` omits the `.page-with-sidebar` wrapper and gives the footer the
- * landing `.footer-offset` class. Super-admin-style pages (e.g. admin/users) are
- * also full-bleed but keep a plain `#footer-mount` — those pass
- * `footerClassName=""`.
+ * `offset={false}` (the landing page only) omits the `.page-with-sidebar`
+ * wrapper and gives the footer the `.footer-offset` class.
  */
 import Sidebar from '../components/Sidebar.jsx';
 import SiteFooter from '../components/SiteFooter.jsx';
+import UnreadPopup from '../components/UnreadPopup.jsx';
 
-export default function AppLayout({ children, offset = true, footerClassName, hideFooter = false }) {
+export default function AppLayout({ children, offset = true }) {
   return (
     <>
       <div id="sidebar-mount">
         <Sidebar />
       </div>
+      <UnreadPopup />
       {offset ? (
         <div className="page-with-sidebar">
           {/* Each page supplies its own <main class="…">. */}
           {children}
-          {!hideFooter && (
-            <div id="footer-mount">
-              <SiteFooter />
-            </div>
-          )}
+          <div id="footer-mount">
+            <SiteFooter />
+          </div>
         </div>
       ) : (
         <>
           {children}
-          {!hideFooter && (
-            <div id="footer-mount" className={footerClassName !== undefined ? footerClassName : 'footer-offset'}>
-              <SiteFooter />
-            </div>
-          )}
+          <div id="footer-mount" className="footer-offset">
+            <SiteFooter />
+          </div>
         </>
       )}
     </>

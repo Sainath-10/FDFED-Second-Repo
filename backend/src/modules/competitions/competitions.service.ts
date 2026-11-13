@@ -11,8 +11,10 @@ import { CompetitionRemovalEntity } from '../../entities/competition-removal.ent
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditLogService } from '../../common/audit/audit.service';
 import { ReputationService } from '../reputation/reputation.service';
+import { AdminService } from '../admin/admin.service';
 import { CreateCompetitionDto, UpdateCompetitionDto } from './dto/competition.dto';
 import { ICompetition } from '../../common/interfaces';
+import { isPrivilegedRole } from '../../common/validation/player-eligibility';
 import {
   MAX_PRIZE_POOL,
   MIN_ENTRY_FEE,
@@ -22,11 +24,16 @@ import {
   resolvePrizeTotal,
   validateEntryFee,
   validateDateWindow,
+  validateFutureDates,
+  validateCompetitionName,
+  validateDescription,
   isRegistrationClosed,
   isCompetitionStarted,
   validateCapacityEdit,
   resolveCoOrganizers,
   generateJoinCode,
+  LARGE_PRIZE_POOL,
+  isUnpublished,
 } from '../../common/validation/competition.rules';
 
 @Injectable()
@@ -42,6 +49,7 @@ export class CompetitionsService {
     private auditLog: AuditLogService,
     private revenueService: RevenueService,
     private reputation: ReputationService,
+    private adminService: AdminService,
     @Optional() private lifecycle?: LifecycleService,
   ) {}
 
@@ -67,12 +75,10 @@ export class CompetitionsService {
 
     const { name, description, startDate, endDate, coOrganizers, ...extras } = createCompetitionDto;
 
-    if (!name || name.trim().length < 3) {
-      throw new BadRequestException('Tournament name must be at least 3 characters.');
-    }
-    if (!description || description.trim().length < 10) {
-      throw new BadRequestException('Tournament description must be at least 10 characters.');
-    }
+    const nameError = validateCompetitionName(name);
+    if (nameError) throw new BadRequestException(nameError);
+    const descriptionError = validateDescription(description);
+    if (descriptionError) throw new BadRequestException(descriptionError);
     if (!startDate || isNaN(new Date(startDate).getTime())) {
       throw new BadRequestException('Valid tournament start date is required for auto-approval.');
     }
@@ -83,12 +89,13 @@ export class CompetitionsService {
     // §3.4 — registration window and competition dates are separate concepts
     const regOpenRaw = createCompetitionDto.registrationOpenAt ?? createCompetitionDto.regOpen ?? null;
     const regCloseRaw = createCompetitionDto.registrationCloseAt ?? createCompetitionDto.regClose ?? null;
-    const dateErrors = validateDateWindow({
+    const window = {
       registrationOpenAt: regOpenRaw ? new Date(regOpenRaw) : null,
       registrationCloseAt: regCloseRaw ? new Date(regCloseRaw) : null,
       startDate: new Date(startDate),
       endDate: new Date(endDate),
-    });
+    };
+    const dateErrors = [...validateDateWindow(window), ...validateFutureDates(window)];
     if (dateErrors.length) {
       throw new BadRequestException(dateErrors.map((e) => e.message).join(' '));
     }
@@ -116,27 +123,43 @@ export class CompetitionsService {
     // Organiser reputation + platform ceiling. Both are enforced here so a
     // direct API request can never bypass the limits shown in the UI.
     await this.reputation.assertCanOrganise(createdBy);
-    const prizeGate = await this.reputation.authorizePrizePool(resolvedPrize, createdBy);
+    // Above ₹10,00,000 a finance moderator approves this specific competition,
+    // so the organiser must say who they are and how finance can reach them.
+    const largePrize = resolvedPrize > LARGE_PRIZE_POOL;
+    const contact = (createCompetitionDto as any).contactDetails;
+    if (largePrize && !contact) {
+      throw new BadRequestException(`Prize pools above ₹${LARGE_PRIZE_POOL.toLocaleString('en-IN')} need a finance moderator's approval. Add your contact details so finance can reach you.`);
+    }
+    const prizeGate = largePrize
+      ? await this.reputation.assertWithinCeiling(resolvedPrize)
+      : await this.reputation.authorizePrizePool(resolvedPrize, createdBy);
 
-    const { prizes: _prizeDistribution, ...competitionExtras } = extras as any;
+    const { prizes: _prizeDistribution, contactDetails: _contact, ...competitionExtras } = extras as any;
 
-    // §2.2 — minimum entry fee ₹10 where a fee applies
-    const feeTypeError = validateEntryFee(extras.feeType, extras.entryFeeAmount);
+    // §2.2 — minimum entry fee ₹10 where a fee applies; a free competition charges nothing.
+    const feeType = extras.feeType || 'free';
+    if (feeType === 'free' && Number(extras.entryFeeAmount || 0) !== 0) {
+      throw new BadRequestException('A free competition cannot have an entry fee.');
+    }
+    if (feeType !== 'free' && extras.entryFeeAmount === undefined) {
+      throw new BadRequestException('Enter the entry fee for a paid competition.');
+    }
+    const feeTypeError = validateEntryFee(feeType, extras.entryFeeAmount);
     if (feeTypeError) throw new BadRequestException(feeTypeError);
 
-    // §2.1 — co-organizers must be registered usernames; no self-assignment; no duplicates
+    // Super Admin platform switches apply to every organizer.
+    const platform = await this.adminService.getPlatformSettings();
+    const format = String(extras.format || '');
+    if (/elimination/i.test(format) && !platform.allowKnockout) throw new BadRequestException('Knockout competitions are currently disabled by the platform.');
+    if (/robin|league/i.test(format) && !platform.allowRoundRobin) throw new BadRequestException('Round-robin competitions are currently disabled by the platform.');
+    if (Number(extras.maxTeams || 0) > platform.maxTeams) throw new BadRequestException(`Max teams cannot exceed ${platform.maxTeams} on this platform.`);
+    if (extras.img !== undefined) this.assertBanner(extras.img);
+
+    // §2.1 — co-organizers must be registered player accounts; they are invited and
+    // gain organizer rights only after accepting.
     let validCoOrganizers: string[] = [];
     if (Array.isArray(coOrganizers) && coOrganizers.length > 0) {
-      const allUsers = await this.userRepository.findAll();
-      const { coOrganizers: clean, errors } = resolveCoOrganizers(
-        coOrganizers,
-        createdBy,
-        allUsers.map((u) => u.username),
-      );
-      if (errors.length) {
-        throw new BadRequestException(errors.map((e) => e.message).join(' '));
-      }
-      validCoOrganizers = clean;
+      validCoOrganizers = await this.resolveInvitees(coOrganizers, createdBy);
     }
 
     // §2.4 visibility + join code generation for private competitions
@@ -158,9 +181,12 @@ export class CompetitionsService {
       new Date(startDate),
       new Date(endDate),
       createdBy,
-      validCoOrganizers,
+      [],
       {
         ...competitionExtras,
+        feeType,
+        entryFeeAmount: feeType === 'free' ? 0 : extras.entryFeeAmount,
+        pendingOrganizers: validCoOrganizers,
         prize: resolvedPrize,
         prizeDistributionMinor: prizeDistributionMinor.length ? prizeDistributionMinor : [Math.round(resolvedPrize * 100)],
         visibility,
@@ -172,8 +198,23 @@ export class CompetitionsService {
         approvalStatus: 'approved',
         status: 'draft',
         organizerPaid: false,
-        paymentStatus: 'AWAITING_PLATFORM_FEE',
+        paymentStatus: largePrize ? 'AWAITING_FINANCE_APPROVAL' : 'AWAITING_PLATFORM_FEE',
         platformFee: feeMinor / 100,
+        largePrizeRequest: largePrize
+          ? {
+              status: 'pending',
+              requestedBy: createdBy,
+              requestedAt: new Date().toISOString(),
+              prize: resolvedPrize,
+              contact: {
+                fullName: String(contact.fullName).trim(),
+                phone: String(contact.phone).trim(),
+                email: String(contact.email).trim().toLowerCase(),
+                organisation: contact.organisation ? String(contact.organisation).trim() : '',
+                purpose: String(contact.purpose).trim(),
+              },
+            }
+          : null,
       },
     );
 
@@ -182,16 +223,8 @@ export class CompetitionsService {
       await this.reputation.consumeException(prizeGate.exceptionId, competition.id, resolvedPrize);
     }
 
-    // §2.1 preserve the co-organizer invitation notification flow
-    validCoOrganizers.forEach((co) => {
-      this.notificationsService.create({
-        toUsername: co,
-        type: 'co-organizer-invite',
-        title: '🏆 Co-Organizer Invitation',
-        body: `@${createdBy} added you as a co-organizer for "${competition.name}".`,
-        meta: { compId: competition.id, compName: competition.name, invitedBy: createdBy },
-      }).catch(() => {});
-    });
+    validCoOrganizers.forEach((co) => this.sendOrganizerInvite(competition, co, createdBy));
+    if (largePrize) await this.notifyFinanceOfLargePrize(competition as any, createdBy, resolvedPrize);
 
     await this.auditLog.record('COMPETITION_CREATED', {
       actor: createdBy,
@@ -204,10 +237,30 @@ export class CompetitionsService {
     return competition as any;
   }
 
+  /** Every finance moderator is asked to review a prize pool above ₹10,00,000. */
+  private async notifyFinanceOfLargePrize(competition: ICompetition, organiser: string, prize: number) {
+    const staff = (await this.userRepository.findAll()).filter((u: any) => u.role === 'finance_moderator' && !u.banned);
+    await Promise.all(staff.map((u: any) => this.notificationsService.create({
+      toUsername: u.username,
+      type: 'large-prize-request',
+      status: 'pending',
+      title: 'Prize pool approval needed',
+      body: `@${organiser} wants to run "${competition.name}" with a ₹${prize.toLocaleString('en-IN')} prize pool. Review their contact details and approve or reject it.`,
+      meta: { compId: competition.id, link: '/pages/admin/finance.html?tab=requests' },
+    }).catch(() => undefined)));
+    await this.auditLog.record('LARGE_PRIZE_REQUESTED', {
+      actor: organiser,
+      entityType: 'competition',
+      entityId: competition.id,
+      details: `Requested finance approval for a ₹${prize.toLocaleString('en-IN')} prize pool on "${competition.name}".`,
+      metadata: { prize },
+    });
+  }
+
   async getCompetitionById(id: string, viewerUsername?: string): Promise<ICompetition> {
     const comp = await this.competitionRepository.findById(id);
     if (!comp) return comp;
-    if (comp.paymentStatus === 'AWAITING_PLATFORM_FEE') throw new NotFoundException('Competition is not published yet.');
+    if (isUnpublished(comp)) throw new NotFoundException('Competition is not published yet.');
     // A removed player is not a participant of this competition any more. The
     // check runs against the database on every read, so a cached page or an old
     // URL cannot restore access. Public/ANONYMOUS reads are unaffected.
@@ -229,9 +282,96 @@ export class CompetitionsService {
     return this.withoutJoinCode(comp);
   }
 
+  /** Final placings, visible to anyone who can see the competition. */
+  async getResults(id: string, viewerUsername?: string) {
+    await this.getCompetitionById(id, viewerUsername);
+    if (!this.lifecycle) return { available: false, reason: 'unavailable' };
+    return this.lifecycle.results(id);
+  }
+
+  private assertBanner(image: unknown) {
+    if (typeof image !== 'string') throw new BadRequestException('Choose a PNG or JPEG banner up to 5 MB.');
+    if (image === '' || /^\/?[\w./-]+\.(png|jpe?g|webp)$/i.test(image) || /^https?:\/\//i.test(image)) return;
+    if (image.length > 7 * 1024 * 1024 || !/^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(image)) {
+      throw new BadRequestException('Choose a PNG or JPEG banner up to 5 MB.');
+    }
+  }
+
+  /**
+   * Co-organizer candidates must be existing, active player accounts other than
+   * the creator. Staff accounts can never organize a competition.
+   */
+  private async resolveInvitees(raw: string[], creator: string): Promise<string[]> {
+    const allUsers = await this.userRepository.findAll();
+    const { coOrganizers: clean, errors } = resolveCoOrganizers(raw, creator, allUsers.map((u) => u.username));
+    if (errors.length) throw new BadRequestException(errors.map((e) => e.message).join(' '));
+    const byName = new Map(allUsers.map((u) => [String(u.username).toLowerCase(), u]));
+    const result: string[] = [];
+    for (const name of clean) {
+      const account = byName.get(name.toLowerCase());
+      if (!account) throw new BadRequestException(`Co-organizer username "${name}" does not exist.`);
+      if (account.banned) throw new BadRequestException(`@${account.username} is banned and cannot organize.`);
+      if (isPrivilegedRole(account.role, account.adminType)) {
+        throw new BadRequestException(`@${account.username} is a staff account. Staff cannot be co-organizers.`);
+      }
+      result.push(account.username);
+    }
+    return result;
+  }
+
+  private sendOrganizerInvite(competition: any, invitee: string, invitedBy: string) {
+    this.notificationsService.create({
+      toUsername: invitee,
+      type: 'co-organizer-invite',
+      status: 'pending',
+      title: 'Co-organizer invitation',
+      body: `@${invitedBy} invited you to co-organize "${competition.name}". Accept to help run it, or decline.`,
+      meta: { compId: competition.id, compName: competition.name, invitedBy },
+    }).catch(() => {});
+  }
+
+  /** The invitee accepts or declines; only acceptance grants organizer rights. */
+  async respondToOrganizerInvite(id: string, user: any, accept: boolean): Promise<ICompetition> {
+    const comp = await this.competitionRepository.findById(id);
+    if (!comp) throw new NotFoundException('Competition not found');
+    const me = String(user?.username || '');
+    const pending = comp.pendingOrganizers || [];
+    const entry = pending.find((p) => p.toLowerCase() === me.toLowerCase());
+    if (!entry) throw new BadRequestException('You do not have a pending co-organizer invitation for this competition.');
+    const remaining = pending.filter((p) => p !== entry);
+    const updates: any = { pendingOrganizers: remaining };
+    if (accept) {
+      if (isPrivilegedRole(user?.role, user?.adminType)) throw new ForbiddenException('Staff accounts cannot co-organize.');
+      await this.assertNotPlaying(id, [entry]);
+      updates.organizers = Array.from(new Set([...(comp.organizers || [comp.createdBy]), entry]));
+    }
+    const updated = await this.competitionRepository.update(id, updates);
+    await this.auditLog.record(accept ? 'CO_ORGANIZER_ACCEPTED' : 'CO_ORGANIZER_DECLINED', {
+      actor: entry,
+      entityType: 'competition',
+      entityId: id,
+      details: `@${entry} ${accept ? 'accepted' : 'declined'} the co-organizer invitation for "${comp.name}".`,
+    });
+    this.notificationsService.create({
+      toUsername: comp.createdBy,
+      type: 'co-organizer-response',
+      status: accept ? 'approved' : 'rejected',
+      title: accept ? 'Co-organizer joined' : 'Co-organizer invitation declined',
+      body: `@${entry} ${accept ? 'accepted' : 'declined'} your invitation to co-organize "${comp.name}".`,
+      meta: { compId: id },
+    }).catch(() => {});
+    return this.withoutJoinCode(updated);
+  }
+
+  /**
+   * The public shape of a competition: never the private join code, and only
+   * the status of finance requests. The organiser's contact details and the
+   * early-end reason are served to owners and finance by the payments API.
+   */
   private withoutJoinCode(comp: any): ICompetition {
-    const { joinCode, ...publicCompetition } = comp;
-    return publicCompetition as ICompetition;
+    const { joinCode, largePrizeRequest, earlyEndRequest, ...publicCompetition } = comp;
+    const brief = (req: any) => (req ? { status: req.status, requestedAt: req.requestedAt || null, decidedAt: req.decidedAt || null } : null);
+    return { ...publicCompetition, largePrizeRequest: brief(largePrizeRequest), earlyEndRequest: brief(earlyEndRequest) } as ICompetition;
   }
 
   /** Join-code validation for private competitions (§2.4). */
@@ -250,7 +390,7 @@ export class CompetitionsService {
     const comp = await this.competitionRepository.findById(competitionId);
     if (!comp) throw new NotFoundException(`Competition with ID ${competitionId} not found`);
     const isOrganizer = comp.createdBy === requesterUsername || (comp.organizers || []).includes(requesterUsername);
-    const isAdmin = ['admin', 'super_admin', 'admin'].includes(requesterRole);
+    const isAdmin = ['admin', 'super_admin'].includes(requesterRole);
     if (!isOrganizer && !isAdmin) {
       throw new ForbiddenException('Only organizers of this competition can view its join code.');
     }
@@ -269,7 +409,7 @@ export class CompetitionsService {
 
     const comp = await this.competitionRepository.findById(competitionId);
     if (!comp) throw new NotFoundException(`Competition ${competitionId} not found`);
-    if (comp.paymentStatus === 'AWAITING_PLATFORM_FEE') throw new ForbiddenException('Platform fee payment is pending.');
+    if (isUnpublished(comp)) throw new ForbiddenException('This competition is not published yet.');
     if (comp.visibility === 'private') {
       if (!joinCode || String(joinCode).trim().toUpperCase() !== String(comp.joinCode || '').toUpperCase()) {
         throw new BadRequestException('Invalid join code. Please check the code with your organizer and try again.');
@@ -281,7 +421,7 @@ export class CompetitionsService {
 
   async getAllCompetitions(): Promise<ICompetition[]> {
     const competitions = await this.competitionRepository.findAll();
-    return competitions.filter(comp => comp.paymentStatus !== 'AWAITING_PLATFORM_FEE').map((comp) => this.withoutJoinCode(comp));
+    return competitions.filter(comp => !isUnpublished(comp)).map((comp) => this.withoutJoinCode(comp));
   }
 
   async getCompetitionsByUser(userId: string): Promise<ICompetition[]> {
@@ -291,7 +431,7 @@ export class CompetitionsService {
 
   async getCompetitionsByOrganizer(userId: string, requesterUsername?: string): Promise<ICompetition[]> {
     const competitions = await this.competitionRepository.findByOrganizer(userId);
-    return competitions.filter(comp => comp.paymentStatus !== 'AWAITING_PLATFORM_FEE' || comp.createdBy === requesterUsername || (comp.organizers || []).includes(requesterUsername)).map((comp) => this.withoutJoinCode(comp));
+    return competitions.filter(comp => !isUnpublished(comp) || comp.createdBy === requesterUsername || (comp.organizers || []).includes(requesterUsername)).map((comp) => this.withoutJoinCode(comp));
   }
 
   async addCoOrganizer(id: string, organizerId: string, requesterUsername: string): Promise<ICompetition> {
@@ -300,13 +440,19 @@ export class CompetitionsService {
     const isOrganizer = comp.createdBy === requesterUsername || (comp.organizers || []).includes(requesterUsername);
     if (!isOrganizer) throw new ForbiddenException('Only an organizer of this competition can add co-organizers.');
 
-    const user = await this.userRepository.findByUsername(organizerId);
-    if (!user) throw new BadRequestException('This username does not exist.');
-    if (String(user.username).toLowerCase() === String(comp.createdBy).toLowerCase()) {
-      throw new BadRequestException('The creator is already the primary organizer.');
+    const [invitee] = await this.resolveInvitees([organizerId], comp.createdBy);
+    if ((comp.organizers || []).some((o) => o.toLowerCase() === invitee.toLowerCase())) {
+      throw new BadRequestException(`@${invitee} already co-organizes this competition.`);
     }
-    await this.assertNotPlaying(id, [user.username]);
-    return this.competitionRepository.addCoOrganizer(id, user.username);
+    if ((comp.pendingOrganizers || []).some((o) => o.toLowerCase() === invitee.toLowerCase())) {
+      throw new BadRequestException(`@${invitee} already has a pending invitation.`);
+    }
+    await this.assertNotPlaying(id, [invitee]);
+    const updated = await this.competitionRepository.update(id, {
+      pendingOrganizers: [...(comp.pendingOrganizers || []), invitee],
+    } as any);
+    this.sendOrganizerInvite(comp, invitee, requesterUsername);
+    return this.withoutJoinCode(updated);
   }
 
   /**
@@ -330,7 +476,18 @@ export class CompetitionsService {
     if (!comp) throw new NotFoundException(`Competition ${id} not found`);
     const isOrganizer = comp.createdBy === requesterUsername || (comp.organizers || []).includes(requesterUsername);
     if (!isOrganizer) throw new ForbiddenException('Only an organizer of this competition can remove co-organizers.');
-    return this.competitionRepository.removeCoOrganizer(id, organizerId);
+    const target = String(organizerId || '').trim().replace(/^@/, '').toLowerCase();
+    if (target === String(comp.createdBy).toLowerCase()) {
+      throw new BadRequestException('The primary organizer cannot be removed.');
+    }
+    const inOrganizers = (comp.organizers || []).find((o) => o.toLowerCase() === target);
+    const inPending = (comp.pendingOrganizers || []).find((o) => o.toLowerCase() === target);
+    if (!inOrganizers && !inPending) throw new NotFoundException(`@${organizerId} is not a co-organizer of this competition.`);
+    const updated = await this.competitionRepository.update(id, {
+      organizers: (comp.organizers || []).filter((o) => o.toLowerCase() !== target),
+      pendingOrganizers: (comp.pendingOrganizers || []).filter((o) => o.toLowerCase() !== target),
+    } as any);
+    return this.withoutJoinCode(updated);
   }
 
   /**
@@ -351,7 +508,7 @@ export class CompetitionsService {
     if (!comp) throw new NotFoundException(`Competition with ID ${id} not found`);
 
     const isOrganizer = comp.createdBy === requesterUsername || (comp.organizers || []).includes(requesterUsername);
-    const isAdmin = ['admin', 'super_admin', 'admin'].includes(requesterRole);
+    const isAdmin = ['admin', 'super_admin'].includes(requesterRole);
     if (!isOrganizer && !isAdmin) {
       throw new ForbiddenException('Only an organizer of this competition (or an admin) can update it.');
     }
@@ -387,40 +544,21 @@ export class CompetitionsService {
       throw new BadRequestException('Registration has closed: "description" can no longer be edited.');
     }
 
-    // §2.1 — co-organizers are validated in full BEFORE any database write.
-    // Nonexistent usernames reject the whole update, so existing co-organizers
-    // and every other competition field remain untouched.
+    // §2.1 — co-organizer edits are validated in full before any write. Existing
+    // co-organizers stay; new names become pending invitations.
     let nextOrganizers: string[] | undefined;
+    let nextPending: string[] | undefined;
+    let newlyInvited: string[] = [];
     if (updateCompetitionDto.coOrganizers !== undefined && updateCompetitionDto.coOrganizers !== null) {
-      const requested = (Array.isArray(updateCompetitionDto.coOrganizers) ? updateCompetitionDto.coOrganizers : [])
-        .map((value) => String(value || '').trim().replace(/^@/, ''))
-        .filter(Boolean);
-
-      if (!requested.length) {
-        nextOrganizers = [comp.createdBy];
-      } else {
-        const allUsers = await this.userRepository.findAll();
-        const known = new Set(allUsers.map((u) => String(u.username || '').toLowerCase()));
-        const unknown = requested.filter((username) => !known.has(username.toLowerCase()));
-        if (unknown.length) {
-          throw new BadRequestException(
-            unknown.length === 1
-              ? `Co-organizer username "${unknown[0]}" does not exist. Please select a valid registered username.`
-              : `Co-organizer usernames ${unknown.map((u) => `"${u}"`).join(', ')} do not exist. Please select valid registered usernames.`,
-          );
-        }
-
-        const { coOrganizers, errors } = resolveCoOrganizers(
-          requested,
-          comp.createdBy,
-          allUsers.map((u) => String(u.username || '')),
-        );
-        if (errors.length) {
-          throw new BadRequestException(errors.map((e) => e.message).join(' '));
-        }
-        nextOrganizers = Array.from(new Set([comp.createdBy, ...coOrganizers].filter(Boolean)));
-        await this.assertNotPlaying(id, nextOrganizers.filter((name) => !(comp.organizers || []).includes(name)));
-      }
+      const requested = await this.resolveInvitees(updateCompetitionDto.coOrganizers || [], comp.createdBy);
+      const wanted = new Set(requested.map((n) => n.toLowerCase()));
+      const current = (comp.organizers || []).filter((o) => o.toLowerCase() !== String(comp.createdBy).toLowerCase());
+      const pending = comp.pendingOrganizers || [];
+      nextOrganizers = [comp.createdBy, ...current.filter((o) => wanted.has(o.toLowerCase()))];
+      const known = new Set([...current, ...pending].map((n) => n.toLowerCase()));
+      newlyInvited = requested.filter((n) => !known.has(n.toLowerCase()));
+      nextPending = [...pending.filter((p) => wanted.has(p.toLowerCase())), ...newlyInvited];
+      await this.assertNotPlaying(id, newlyInvited);
     }
 
     // §3.3 capacity checks with real registered teams + roster sizes
@@ -439,29 +577,53 @@ export class CompetitionsService {
       }
     }
 
-    // §3.4 date chronology whenever any date is being changed
-    if (updateCompetitionDto.startDate || updateCompetitionDto.endDate || updateCompetitionDto.registrationOpenAt || updateCompetitionDto.registrationCloseAt) {
-      const dateErrors = validateDateWindow({
-        registrationOpenAt: updateCompetitionDto.registrationOpenAt ?? (updateCompetitionDto as any).regOpen ? new Date(updateCompetitionDto.registrationOpenAt ?? (updateCompetitionDto as any).regOpen) : (comp.registrationOpenAt ?? null),
-        registrationCloseAt: updateCompetitionDto.registrationCloseAt ?? (updateCompetitionDto as any).regClose ? new Date(updateCompetitionDto.registrationCloseAt ?? (updateCompetitionDto as any).regClose) : (comp.registrationCloseAt ?? null),
-        startDate: updateCompetitionDto.startDate ? new Date(updateCompetitionDto.startDate) : (comp.startDate ?? null),
-        endDate: updateCompetitionDto.endDate ? new Date(updateCompetitionDto.endDate) : (comp.endDate ?? null),
+    // §3.4 date order whenever any date changes. Dates are frozen once play starts,
+    // and any date that changes must lie in the future.
+    const dateChange = {
+      registrationOpenAt: updateCompetitionDto.registrationOpenAt ? new Date(updateCompetitionDto.registrationOpenAt) : null,
+      registrationCloseAt: updateCompetitionDto.registrationCloseAt ? new Date(updateCompetitionDto.registrationCloseAt) : null,
+      startDate: updateCompetitionDto.startDate ? new Date(updateCompetitionDto.startDate) : null,
+      endDate: updateCompetitionDto.endDate ? new Date(updateCompetitionDto.endDate) : null,
+    };
+    const changed = (a: Date | null, b: Date | null | undefined) => !!a && (!b || +a !== +new Date(b));
+    const datesChanging = changed(dateChange.registrationOpenAt, comp.registrationOpenAt) || changed(dateChange.registrationCloseAt, comp.registrationCloseAt)
+      || changed(dateChange.startDate, comp.startDate) || changed(dateChange.endDate, comp.endDate);
+    if (datesChanging) {
+      if (isCompetitionStarted(comp as any)) {
+        throw new BadRequestException('The competition has started: its dates can no longer be changed.');
+      }
+      const merged = {
+        registrationOpenAt: dateChange.registrationOpenAt ?? comp.registrationOpenAt ?? null,
+        registrationCloseAt: dateChange.registrationCloseAt ?? comp.registrationCloseAt ?? null,
+        startDate: dateChange.startDate ?? comp.startDate ?? null,
+        endDate: dateChange.endDate ?? comp.endDate ?? null,
+      };
+      const future = validateFutureDates({
+        startDate: changed(dateChange.startDate, comp.startDate) ? dateChange.startDate : null,
+        endDate: changed(dateChange.endDate, comp.endDate) ? dateChange.endDate : null,
+        registrationCloseAt: changed(dateChange.registrationCloseAt, comp.registrationCloseAt) ? dateChange.registrationCloseAt : null,
       });
+      const dateErrors = [...validateDateWindow(merged), ...future];
       if (dateErrors.length) {
         throw new BadRequestException(dateErrors.map((e) => e.message).join(' '));
       }
     }
+    if (updateCompetitionDto.name !== undefined) {
+      const nameError = validateCompetitionName(updateCompetitionDto.name);
+      if (nameError) throw new BadRequestException(nameError);
+    }
+    if (updateCompetitionDto.description !== undefined) {
+      const descriptionError = validateDescription(updateCompetitionDto.description);
+      if (descriptionError) throw new BadRequestException(descriptionError);
+    }
 
     const updates: Partial<ICompetition> = {};
     if (updateCompetitionDto.img !== undefined) {
-      const image = updateCompetitionDto.img;
-      if (typeof image !== 'string' || image.length > 7 * 1024 * 1024 || (image !== '' && !/^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(image))) {
-        throw new BadRequestException('Choose a PNG or JPEG banner up to 5 MB.');
-      }
-      (updates as any).img = image;
+      this.assertBanner(updateCompetitionDto.img);
+      (updates as any).img = updateCompetitionDto.img;
     }
-    if (updateCompetitionDto.name !== undefined) updates.name = updateCompetitionDto.name;
-    if (updateCompetitionDto.description !== undefined) updates.description = updateCompetitionDto.description;
+    if (updateCompetitionDto.name !== undefined) updates.name = updateCompetitionDto.name.trim();
+    if (updateCompetitionDto.description !== undefined) updates.description = updateCompetitionDto.description.trim();
     if (updateCompetitionDto.game !== undefined) (updates as any).game = updateCompetitionDto.game;
     if (updateCompetitionDto.type !== undefined) (updates as any).type = updateCompetitionDto.type;
     if (updateCompetitionDto.status && comp.paymentStatus && comp.paymentStatus !== 'LEGACY' && updateCompetitionDto.status !== comp.status) {
@@ -469,17 +631,17 @@ export class CompetitionsService {
     }
     if (updateCompetitionDto.status) updates.status = updateCompetitionDto.status;
     if (nextOrganizers !== undefined) (updates as any).organizers = nextOrganizers;
+    if (nextPending !== undefined) (updates as any).pendingOrganizers = nextPending;
     if (updateCompetitionDto.endDate) updates.endDate = new Date(updateCompetitionDto.endDate);
     if (updateCompetitionDto.startDate) (updates as any).startDate = new Date(updateCompetitionDto.startDate);
     if (updateCompetitionDto.maxTeams !== undefined) (updates as any).maxTeams = updateCompetitionDto.maxTeams;
     if (updateCompetitionDto.maxPlayersPerTeam !== undefined) (updates as any).maxPlayersPerTeam = updateCompetitionDto.maxPlayersPerTeam;
     if (updateCompetitionDto.entryFeeAmount !== undefined) (updates as any).entryFeeAmount = updateCompetitionDto.entryFeeAmount;
     if (updateCompetitionDto.registrationOpenAt) (updates as any).registrationOpenAt = new Date(updateCompetitionDto.registrationOpenAt);
-    if ((updateCompetitionDto as any).regOpen) (updates as any).registrationOpenAt = new Date((updateCompetitionDto as any).regOpen);
     if (updateCompetitionDto.registrationCloseAt) (updates as any).registrationCloseAt = new Date(updateCompetitionDto.registrationCloseAt);
-    if ((updateCompetitionDto as any).regClose) (updates as any).registrationCloseAt = new Date((updateCompetitionDto as any).regClose);
 
     const updated = await this.competitionRepository.update(id, updates as any);
+    newlyInvited.forEach((invitee) => this.sendOrganizerInvite(updated, invitee, requesterUsername));
 
     await this.auditLog.record('COMPETITION_UPDATED', {
       actor: requesterUsername,
@@ -489,7 +651,7 @@ export class CompetitionsService {
       metadata: { regClosed, status: updated.status },
     });
 
-    return updated as any;
+    return this.withoutJoinCode(updated);
   }
 
   /**
@@ -505,7 +667,7 @@ export class CompetitionsService {
     const comp = await this.competitionRepository.findById(id);
     if (!comp) throw new NotFoundException(`Competition with ID ${id} not found`);
     const isOrganizer = comp.createdBy === requesterUsername || (comp.organizers || []).includes(requesterUsername);
-    const isAdmin = ['admin', 'super_admin', 'admin'].includes(requesterRole);
+    const isAdmin = ['admin', 'super_admin', 'finance_moderator'].includes(requesterRole);
     if (!isOrganizer && !isAdmin) {
       throw new ForbiddenException('Only organizers of this competition (or admins) can view participant contact details.');
     }
@@ -538,7 +700,7 @@ export class CompetitionsService {
     if (!comp) throw new NotFoundException(`Competition with ID ${id} not found`);
 
     const isOrganizer = comp.createdBy === requesterUsername || (comp.organizers || []).includes(requesterUsername);
-    const isAdmin = ['admin', 'super_admin', 'admin'].includes(requesterRole);
+    const isAdmin = ['admin', 'super_admin'].includes(requesterRole);
     if (!isOrganizer && !isAdmin) {
       throw new ForbiddenException('Only an organizer of this competition (or an admin) can end it.');
     }
@@ -581,7 +743,7 @@ export class CompetitionsService {
 
   async getActiveCompetitions(): Promise<ICompetition[]> {
     const competitions = await this.competitionRepository.findByStatus('active');
-    return competitions.filter(comp => comp.paymentStatus !== 'AWAITING_PLATFORM_FEE').map((comp) => this.withoutJoinCode(comp));
+    return competitions.filter(comp => !isUnpublished(comp)).map((comp) => this.withoutJoinCode(comp));
   }
 
   async setApproval(id: string, decision: string, adminUsername: string): Promise<ICompetition> {

@@ -32,6 +32,10 @@ export class CompetitionEntity {
   @Column({ type: 'simple-array', default: '' })
   organizers: string[];
 
+  /** Invited co-organizers who have not accepted yet; they have no organizer rights. */
+  @Column({ type: 'simple-array', default: '' })
+  pendingOrganizers: string[];
+
   @Column({ nullable: true })
   game: string;
 
@@ -125,6 +129,12 @@ export class CompetitionEntity {
   @Column({ default: false }) financeHold: boolean;
   @Column({ type: 'text', nullable: true }) abandonedReason: string;
   @Column({ type: 'timestamptz', nullable: true }) endedAt: Date;
+
+  /** Prize pools above ₹10,00,000 wait for finance approval: contact details, status, reviewer, note. */
+  @Column({ type: 'jsonb', nullable: true }) largePrizeRequest: Record<string, any> | null;
+
+  /** Ending a started competition before its fixtures finish: reason, status, reviewer, note. */
+  @Column({ type: 'jsonb', nullable: true }) earlyEndRequest: Record<string, any> | null;
 
   @CreateDateColumn()
   createdAt: Date;

@@ -3,14 +3,13 @@
  *
  * Reuses the Competition Admin Activity layout: account summary card, stat
  * counters, audit timeline cards, expandable details and the same empty state.
- * Data comes from the local report store, filtered to resolved/discarded
- * moderator-queue reports handled by the selected Community Moderator.
+ * Data comes from the reports API: resolved/discarded moderator-queue reports
+ * handled by the selected Community Moderator.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { findAccount } from '../../services/auth.js';
-import { LocalReportsAPI } from '../../services/local/reporting.js';
+import { ReportsAPI as LocalReportsAPI } from '../../services/api.js';
 import useReportSync from '../../hooks/useReportSync.js';
 import EvidenceGallery from '../../components/EvidenceGallery.jsx';
 import { UpliftModal } from '../../components/ReportActionModals.jsx';
@@ -29,9 +28,8 @@ export default function ModeratorActivity() {
   const [params] = useSearchParams();
   const { session } = useAuth();
   const targetUsername = (params.get('admin') || session?.username || '').trim();
-  const targetAccount = useMemo(() => findAccount(targetUsername), [targetUsername]);
-  const displayName = targetAccount?.displayName || targetUsername || 'Community Moderator';
-  const email = targetAccount?.email || (targetUsername.includes('@') ? targetUsername : `${targetUsername}@nexus.gg`);
+  const displayName = targetUsername || 'Community Moderator';
+  const email = targetUsername === session?.username ? (session?.email || '') : '';
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);

@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { isUUID } from 'class-validator';
 import { CompetitionEntity } from '../../../entities/competition.entity';
 
 @Injectable()
@@ -35,6 +36,8 @@ export class CompetitionRepository {
   }
 
   async findById(id: string): Promise<CompetitionEntity | null> {
+    // A malformed id cannot match a row; Postgres would otherwise reject it with a raw error.
+    if (!isUUID(String(id || ''))) return null;
     return this.repo.findOne({ where: { id } });
   }
 
@@ -127,48 +130,67 @@ export class CompetitionRepository {
     return this.repo.count();
   }
 
+  /**
+   * Demo competitions are free, public and upcoming: registration is open
+   * today, closes in ten days, and play starts two weeks out. They are
+   * organized by a normal player account so staff never organize events.
+   */
   async seedDemoCompetitions(): Promise<void> {
+    const day = 86_400_000;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const at = (days: number, endOfDay = false) => {
+      const d = new Date(today.getTime() + days * day);
+      if (endOfDay) d.setHours(23, 59, 59, 0);
+      return d;
+    };
     const demoComps = [
       {
         name: 'Global Masters',
-        description: 'World-class League of Legends tournament for elite teams.',
-        startDate: new Date('2026-05-01'),
-        endDate: new Date('2026-05-14'),
-        createdBy: 'admin@nexus.gg',
-        extras: { game: 'League of Legends', type: 'league', location: 'Berlin, Germany', prizePool: '₹1,00,000', season: 'Season 2', format: 'Round Robin', maxTeams: 32, bannerColor: '#1a2e2e' },
+        description: 'World-class League of Legends league for competitive teams.',
+        game: 'League of Legends', type: 'league', format: 'Round Robin', location: 'Online', prize: 100000, maxTeams: 16, offset: 14, length: 4,
       },
       {
         name: 'Pro Circuit Week 3',
-        description: 'Fast-paced Counter-Strike 2 weekly competitive circuit.',
-        startDate: new Date('2026-02-18'),
-        endDate: new Date('2026-02-20'),
-        createdBy: 'admin@nexus.gg',
-        extras: { game: 'Counter-Strike 2', type: 'tournament', location: 'Online', prizePool: '₹75,000', season: 'Season 1', format: 'Single Elimination', maxTeams: 64, bannerColor: '#2e1a2e' },
+        description: 'Fast-paced Counter-Strike 2 single-elimination weekly circuit.',
+        game: 'Counter-Strike 2', type: 'tournament', format: 'Single Elimination', location: 'Online', prize: 75000, maxTeams: 16, offset: 14, length: 1,
       },
       {
         name: 'Champions League',
-        description: 'Premier Rocket League competition across top teams.',
-        startDate: new Date('2026-05-10'),
-        endDate: new Date('2026-05-15'),
-        createdBy: 'regular@nexus.gg',
-        extras: { game: 'Rocket League', type: 'league', location: 'Sri City, India', prizePool: '₹35,000', season: 'Season 3', format: 'Round Robin', maxTeams: 24, bannerColor: '#1a2a1a' },
+        description: 'Premier Rocket League competition across top community teams.',
+        game: 'Rocket League', type: 'league', format: 'Round Robin', location: 'Sri City, India', prize: 35000, maxTeams: 12, offset: 21, length: 5,
       },
       {
         name: 'Open Series #12',
-        description: 'Dota 2 double elimination open to all skilled players.',
-        startDate: new Date('2026-03-22'),
-        endDate: new Date('2026-03-24'),
-        createdBy: 'regular@nexus.gg',
-        extras: { game: 'Dota 2', type: 'tournament', location: 'Online', prizePool: '₹18,000', season: 'Season 1', format: 'Double Elimination', maxTeams: 32, bannerColor: '#2a1a2e' },
+        description: 'Dota 2 single-elimination open to all skilled players.',
+        game: 'Dota 2', type: 'tournament', format: 'Single Elimination', location: 'Online', prize: 18000, maxTeams: 16, offset: 21, length: 2,
       },
     ];
 
     for (const c of demoComps) {
       const existing = await this.repo.findOne({ where: { name: c.name } });
-      if (!existing) {
-        await this.create(c.name, c.description, c.startDate, c.endDate, c.createdBy, [], { ...c.extras, paymentStatus: 'LEGACY' });
-        console.log(`✓ Seeded competition: ${c.name}`);
-      }
+      if (existing) continue;
+      const startDate = at(c.offset);
+      await this.create(c.name, c.description, startDate, at(c.offset + c.length - 1, true), 'regular', [], {
+        game: c.game,
+        type: c.type,
+        format: c.format,
+        location: c.location,
+        prize: c.prize,
+        prizePool: `₹${c.prize.toLocaleString('en-IN')}`,
+        maxTeams: c.maxTeams,
+        maxPlayersPerTeam: 5,
+        feeType: 'free',
+        entryFeeAmount: 0,
+        entryFee: 'Free',
+        visibility: 'public',
+        registrationOpenAt: today,
+        registrationCloseAt: at(c.offset - 4, true),
+        organizerPaid: true,
+        paymentStatus: 'LEGACY',
+        status: 'active',
+      });
+      console.log(`Seeded competition: ${c.name}`);
     }
   }
 }

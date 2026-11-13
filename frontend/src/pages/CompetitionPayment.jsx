@@ -9,7 +9,7 @@ import { Fragment, useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import PaymentMailbox from '../components/PaymentMailbox.jsx';
 import { ConfirmAction, EscrowStats, LifecycleSteps, MockBanner, Notice, PayoutPreview, Pill, TransactionTable } from '../components/PaymentUI.jsx';
-import { paymentRequest, loadCheckout, money, rupees, formatDateTime, competitionState, TERMINAL_STATES } from '../services/payments.js';
+import { paymentRequest, loadCheckout, money, rupees, formatDateTime, competitionState, TERMINAL_STATES, requestEarlyEnd } from '../services/payments.js';
 import { showToast } from '../lib/toast.js';
 import '../styles/pages/admin/dashboard.css';
 import '../styles/pages/payments.css';
@@ -97,6 +97,10 @@ export default function CompetitionPayment() {
   const state = competitionState(ledger?.paymentStatus);
   const closed = TERMINAL_STATES.includes(ledger?.paymentStatus);
   const draft = ledger?.paymentStatus === 'AWAITING_PLATFORM_FEE';
+  const awaitingApproval = ledger?.paymentStatus === 'AWAITING_FINANCE_APPROVAL';
+  const largeRequest = ledger?.largePrizeRequest || null;
+  const earlyRequest = ledger?.earlyEndRequest || null;
+  const penaltyPercent = ledger?.earlyEndPenaltyPercent ?? 10;
   const completed = ledger?.paymentStatus === 'COMPLETED';
   const mock = status?.provider === 'mock';
   const canAct = ledger?.owner;
@@ -129,6 +133,25 @@ export default function CompetitionPayment() {
       {ledger && <>
         <LifecycleSteps ledger={ledger} />
 
+        {awaitingApproval && (
+          <Notice tone="info">
+            <strong>Waiting for finance.</strong> Prize pools above ₹10,00,000 are approved by a finance moderator before the competition can be published.
+            They have your contact details ({largeRequest?.contact?.phone}, {largeRequest?.contact?.email}) and may get in touch. Nothing is charged until they approve.
+          </Notice>
+        )}
+        {largeRequest?.status === 'approved' && draft && (
+          <Notice tone="success"><strong>Prize pool approved by finance.</strong> {largeRequest.note ? `Note: ${largeRequest.note}. ` : ''}Pay the platform fee to publish your competition.</Notice>
+        )}
+        {largeRequest?.status === 'rejected' && (
+          <Notice tone="error"><strong>Prize pool not approved.</strong> {largeRequest.note ? `Finance said: ${largeRequest.note}. ` : ''}Nothing was charged. You can create the competition again with a smaller prize pool.</Notice>
+        )}
+        {earlyRequest?.status === 'pending' && (
+          <Notice tone="warn"><strong>Early end requested.</strong> A finance moderator is reviewing your request: “{earlyRequest.reason}”. The competition keeps running until they decide.</Notice>
+        )}
+        {earlyRequest?.status === 'rejected' && !closed && (
+          <Notice tone="error"><strong>Early end rejected.</strong> {earlyRequest.note ? `Finance said: ${earlyRequest.note}. ` : ''}Finish the remaining fixtures, then end the competition.</Notice>
+        )}
+
         {closed && (
           <Notice tone={ledger.paymentStatus === 'PRIZE_RELEASED' ? 'success' : 'warn'}>
             {ledger.paymentStatus === 'PRIZE_RELEASED' && <><strong>Settled.</strong> Prizes were paid to the winners and registration revenue was released to you.</>}
@@ -145,10 +168,15 @@ export default function CompetitionPayment() {
           <section className={`pay-card ${draft ? 'highlight' : ''}`} aria-labelledby="pf-title">
             <div className="pay-card-head">
               <h2 className="pay-card-title" id="pf-title">Platform fee</h2>
-              <Pill tone={ledger.platformFeePaid ? 'ok' : draft ? 'warn' : 'muted'}>{ledger.platformFeePaid ? 'Paid' : draft ? 'Due now' : 'Unpaid'}</Pill>
+              <Pill tone={ledger.platformFeePaid ? 'ok' : draft || awaitingApproval ? 'warn' : 'muted'}>{ledger.platformFeePaid ? 'Paid' : awaitingApproval ? 'After finance approval' : draft ? 'Due now' : 'Unpaid'}</Pill>
             </div>
             <div className="pay-amount">{rupees(ledger.platformFeeAmount)}</div>
             <p className="pay-card-text">Publishes your competition. Calculated as the greater of the platform minimum or a percentage of the prize pool. <strong style={{ color: 'var(--text-light)' }}>Non-refundable</strong>, even if you cancel later.</p>
+            {awaitingApproval && canAct && (
+              <ConfirmAction label="Withdraw request & discard draft" variant="danger" requireReason busy={busy}
+                description="Withdraws the request to finance and discards the draft. Nothing was charged."
+                onConfirm={(note) => run(() => paymentRequest(path('cancel'), 'POST', { note }), 'Draft discarded.').then((ok) => { if (ok) navigate('/pages/my-activity.html'); return ok; })} />
+            )}
             {draft && canAct && <>
               {Number(ledger.prizePoolAmount) > 0 && (
                 <label className="pay-check">
@@ -211,12 +239,20 @@ export default function CompetitionPayment() {
                     onConfirm={() => run(() => paymentRequest(path('end'), 'POST'), 'Results submitted. Finance will review and release payouts.')} />
                 </div>
                 {!ledger.canEnd && <span className="pay-hint">{!ledger.prizePoolPaid ? 'Deposit the prize pool first.' : !ledger.started ? `Available once the competition starts (${formatDateTime(ledger.startDate)}).` : ''}</span>}
+                {ledger.canEnd && ledger.payoutPreview?.error && earlyRequest?.status !== 'pending' && (
+                  <div style={{ marginTop: 14 }}>
+                    <p className="pay-card-text">Fixtures are still to be played. To end now, give a reason: a finance moderator reviews it, every player is refunded, and you forfeit {penaltyPercent}% of the prize pool ({rupees(Number(ledger.prizePoolAmount || 0) * penaltyPercent / 100)}).</p>
+                    <ConfirmAction label="Request early end" variant="danger" requireReason minLength={20} busy={busy}
+                      description="Nothing changes until finance approves. Explain why the remaining fixtures cannot be played."
+                      onConfirm={(reason) => run(() => requestEarlyEnd(id, reason), 'Request sent to finance. The competition keeps running until they decide.')} />
+                  </div>
+                )}
               </>}
             </section>
           )}
 
           {/* 4 — Cancel */}
-          {ledger.platformFeePaid && !closed && !completed && canAct && (
+          {ledger.platformFeePaid && !closed && !completed && canAct && !ledger.started && (
             <section className="pay-card danger" aria-labelledby="cancel-title">
               <h2 className="pay-card-title" id="cancel-title">Cancel competition</h2>
               <p className="pay-card-text">Every registered player is refunded in full from escrow. Your platform fee is forfeited and your organizer trust score drops by 10. {ledger.prizePoolPaid && (ledger.totalRegistrations ? 'Because players registered, your prize pool is held for finance review.' : 'With no registrations, your prize pool is returned to you.')}</p>

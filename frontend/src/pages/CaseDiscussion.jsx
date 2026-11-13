@@ -7,7 +7,8 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { LocalReportsAPI as ReportsAPI, prepareEvidenceFile } from '../services/local/reporting.js';
+import { ReportsAPI } from '../services/api.js';
+import { prepareEvidenceFile } from '../lib/evidence.js';
 import useReportSync from '../hooks/useReportSync.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { PRIORITY_META, capitalise, formatDate, reportCode } from '../lib/reporting.js';

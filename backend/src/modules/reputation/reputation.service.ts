@@ -316,6 +316,19 @@ export class ReputationService implements OnModuleInit {
     );
   }
 
+  /**
+   * Prize pools above ₹10,00,000 are reviewed case by case by a finance moderator
+   * (who sees the organiser's level), so only the platform ceiling applies here.
+   */
+  async assertWithinCeiling(amount: number) {
+    const globalMax = await this.getGlobalMax();
+    if (!Number.isFinite(amount) || amount < 0) throw new BadRequestException('Prize pool must be a valid, non-negative amount.');
+    if (amount > globalMax) {
+      throw new BadRequestException(`The platform-wide maximum prize pool is ₹${globalMax.toLocaleString('en-IN')}.`);
+    }
+    return { exceptionId: null as string | null };
+  }
+
   /** Binds an approved single-use exception to the competition that used it. */
   async consumeException(exceptionId: string, competitionId: string, amount: number): Promise<void> {
     const result = await this.exceptions
@@ -666,6 +679,45 @@ export class ReputationService implements OnModuleInit {
       metadata: { reportId: options.reportId || null, days: options.days || null },
     });
     return sanction;
+  }
+
+  /**
+   * Reverses what one report decision did: its sanctions are deactivated and,
+   * when given, the reputation level returns to the level before that decision.
+   * Nothing created by any other report is touched.
+   */
+  async revertDecision(
+    username: string,
+    reportId: string,
+    restoreLevel: ReputationLevel | null,
+    reason: string,
+    reviewer: string,
+  ) {
+    const rows = await this.sanctions.find({ where: { username, reportId, active: true } });
+    for (const row of rows) {
+      row.active = false;
+      row.endsAt = new Date();
+      await this.sanctions.save(row);
+    }
+    if (restoreLevel && isReputationLevel(restoreLevel)) {
+      const profile = await this.getOrCreate(username);
+      if (profile.level !== restoreLevel) {
+        const previous = profile.level;
+        profile.level = restoreLevel;
+        await this.reputation.save(profile);
+        await this.history.save(
+          this.history.create({ username, fromLevel: previous, toLevel: restoreLevel, reason, policy: 'decision_uplifted', reportId, reviewer }),
+        );
+      }
+    }
+    await this.auditLog.record('ORGANISER_DECISION_REVERTED', {
+      actor: reviewer,
+      entityType: 'organiser_reputation',
+      entityId: username,
+      details: `Decision on report ${reportId} reverted for @${username}: ${rows.length} sanction(s) lifted${restoreLevel ? `, level restored to ${restoreLevel}` : ''}. ${reason}`,
+      metadata: { reportId },
+    });
+    return this.getProfile(username);
   }
 
   async getHistory(username: string) {

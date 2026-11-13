@@ -20,6 +20,7 @@ import CreateTeam from './CreateTeam.jsx';
 import JoinTeams from './JoinTeams.jsx';
 import TeamRoster from './team/TeamRoster.jsx';
 import TeamChat from './team/TeamChat.jsx';
+import TeamMatches from './team/TeamMatches.jsx';
 import AddPlayers from './team/AddPlayers.jsx';
 import InvitePlayer from './team/InvitePlayer.jsx';
 import InvitationsSent from './team/InvitationsSent.jsx';
@@ -27,10 +28,9 @@ import JoinRequests from './team/JoinRequests.jsx';
 import TeamSettings from './team/TeamSettings.jsx';
 import Profile from './Profile.jsx';
 import MyActivity from './MyActivity.jsx';
-import CompReports from './CompReports.jsx';
 import CompManageTeams from './CompManageTeams.jsx';
 import FixtureRedirect from './FixtureRedirect.jsx';
-import CompParticipant from './CompParticipant.jsx';
+import ParticipantRedirect, { CompetitionCenterRedirect, DisputeFormRedirect } from './ParticipantRedirect.jsx';
 import OrganizerRevenue from './OrganizerRevenue.jsx';
 import CreateCompetition from './CreateCompetition.jsx';
 import EditCompetition from './EditCompetition.jsx';
@@ -41,7 +41,6 @@ import AdminDisputeReview from './admin/AdminDisputeReview.jsx';
 import AdminUsers from './admin/AdminUsers.jsx';
 import AdminDashboard from './admin/AdminDashboard.jsx';
 import AdminActivity from './admin/AdminActivity.jsx';
-import AdminCompetitionDetail from './admin/AdminCompetitionDetail.jsx';
 import AdminProfile from './admin/AdminProfile.jsx';
 import AdminRevenueConfig from './admin/AdminRevenueConfig.jsx';
 import AdminDisputes from './admin/AdminDisputes.jsx';
@@ -80,7 +79,7 @@ export const PAGE_COMPONENTS = {
   '/pages/admin/revenue-transactions.html': AdminRevenueTransactions,
   '/pages/admin/disputes.html': AdminDisputes,
   '/pages/admin/revenue-config.html': AdminRevenueConfig,
-  '/pages/admin/competition-detail.html': AdminCompetitionDetail,
+  '/pages/admin/competition-detail.html': CompetitionCenterRedirect,
   '/pages/admin/dashboard.html': AdminDashboard,
   '/pages/admin/admin-activity.html': AdminActivity,
   '/pages/admin/users.html': AdminUsers,
@@ -90,7 +89,7 @@ export const PAGE_COMPONENTS = {
   '/pages/disputes.html': Disputes,
   '/pages/submit-report.html': SubmitReport,
   '/pages/dispute-escalation.html': DisputeEscalation,
-  '/pages/comp-participant.html': CompParticipant,
+  '/pages/comp-participant.html': ParticipantRedirect,
   '/pages/comp-manage-organizers.html': FixtureRedirect,
   '/pages/organizer-revenue.html': OrganizerRevenue,
   '/pages/comp-manage-teams.html': CompManageTeams,
@@ -100,7 +99,7 @@ export const PAGE_COMPONENTS = {
   '/pages/profile.html': Profile,
   '/pages/my-activity.html': MyActivity,
   '/pages/comp-standings.html': FixtureRedirect,
-  '/pages/comp-reports.html': CompReports,
+  '/pages/comp-reports.html': DisputeFormRedirect,
   '/pages/comp-info.html': CompInfo,
   '/pages/competition-detail.html': CompetitionDetail,
   '/pages/notifications.html': Notifications,
@@ -108,6 +107,7 @@ export const PAGE_COMPONENTS = {
   '/pages/join-teams.html': JoinTeams,
   '/pages/team/team-roster.html': TeamRoster,
   '/pages/team/team-chat.html': TeamChat,
+  '/pages/team/team-matches.html': TeamMatches,
   '/pages/team/add-players.html': AddPlayers,
   '/pages/team/invite-player.html': InvitePlayer,
   '/pages/team/invitations-sent.html': InvitationsSent,

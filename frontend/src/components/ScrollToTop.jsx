@@ -13,13 +13,21 @@ import { useEffect } from 'react';
 import { useLocation, useNavigationType } from 'react-router-dom';
 
 export default function ScrollToTop() {
-  const { pathname, search } = useLocation();
+  const { pathname, search, hash } = useLocation();
   const navigationType = useNavigationType();
 
   useEffect(() => {
     if (navigationType === 'POP') return;
+    if (hash) {
+      // Links like /pages/about.html#policies land on that section once it renders.
+      const id = decodeURIComponent(hash.slice(1));
+      const scroll = () => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const timer = window.setTimeout(scroll, 60);
+      return () => window.clearTimeout(timer);
+    }
     window.scrollTo(0, 0);
-  }, [pathname, search, navigationType]);
+    return undefined;
+  }, [pathname, search, hash, navigationType]);
 
   return null;
 }

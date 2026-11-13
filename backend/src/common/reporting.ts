@@ -12,8 +12,8 @@ export const REPUTATION_LEVELS: ReputationLevel[] = ['blue', 'green', 'orange', 
 
 /** Maximum prize pool per reputation level (INR). The platform ceiling applies on top. */
 export const REPUTATION_LEVEL_LIMITS: Record<ReputationLevel, number> = {
-  blue: 300000,
-  green: 300000,
+  blue: 1000000,
+  green: 1000000,
   orange: 20000,
   red: 10000,
 };
@@ -26,7 +26,7 @@ export const REPUTATION_LEVEL_LABELS: Record<ReputationLevel, string> = {
 };
 
 /** Platform-wide hard ceiling. Configurable through platform_settings (never bypassable). */
-export const DEFAULT_GLOBAL_MAX_PRIZE_POOL = 300000;
+export const DEFAULT_GLOBAL_MAX_PRIZE_POOL = 10000000;
 
 /** Thresholds used by the transition rules (INR). */
 export const QUALIFYING_THRESHOLDS = {
@@ -73,6 +73,7 @@ export type ReportAction =
   | 'reputation_downgrade'
   | 'creation_restriction'
   | 'competition_suspension'
+  | 'competition_termination'
   // Historical decisions only — never offered for a new decision.
   | 'formal_warning'
   | 'final_warning';
@@ -82,6 +83,7 @@ export const MODERATOR_ACTIONS: ReportAction[] = [
   'reputation_downgrade',
   'creation_restriction',
   'competition_suspension',
+  'competition_termination',
   'no_action',
 ];
 

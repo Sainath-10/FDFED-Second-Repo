@@ -6,19 +6,20 @@
  * owner/team-aware CTA block, the share link, and the raise-dispute modal with
  * its target-type routing.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import NexusData from '../services/data.js';
-import { LocalReportsAPI } from '../services/local/reporting.js';
-import NexusTeamWorkflow from '../services/teamWorkflow.js';
+import { ReportsAPI as LocalReportsAPI } from '../services/api.js';
+import { isCancelledCompetition, isOrganizerOf, useCompetition } from '../services/competitions.js';
+import { formatDate, formatINR, copyText, LoadingState } from '../components/ui.jsx';
 import useJoinCodeGate from '../hooks/useJoinCodeGate.jsx';
-import { MatchesAPI, TeamsAPI } from '../services/api.js';
+import { MatchesAPI } from '../services/api.js';
 import ChatRoom from '../components/ChatRoom.jsx';
 import OrganisersInfo from '../components/OrganisersInfo.jsx';
 import ReportButton from '../components/ReportButton.jsx';
+import CompetitionResults from '../components/CompetitionResults.jsx';
 import { showToast } from '../lib/toast.js';
-import { assetUrl } from '../lib/assets.js';
+import { competitionBanner } from '../lib/assets.js';
 import '../styles/pages/comp-info.css';
 
 const TABS = [
@@ -32,16 +33,13 @@ const TABS = [
   { id: 'general-chat', label: 'General chat' },
 ];
 
-const STATUS_MAP = { ongoing: 'Ongoing', upcoming: 'Registration Open', active: 'Active', completed: 'Completed', cancelled: 'Cancelled', live: 'LIVE' };
 const TYPE_MAP = { tournament: 'Single Elimination', league: 'Round Robin' };
 const PRIZE_ICONS = ['🥇', '🥈', '🥉'];
 
 const normalize = (v) => String(v || '').trim().toLowerCase();
-const formatStatus = (s) => STATUS_MAP[s] || s || '—';
 const formatType = (t) => TYPE_MAP[t] || t || '—';
 
 function getApprovalStatus(comp) {
-  if (NexusData && typeof NexusData.getApprovalStatus === 'function') return NexusData.getApprovalStatus(comp);
   return String((comp && comp.approvalStatus) || '').toLowerCase() || 'approved';
 }
 
@@ -100,22 +98,13 @@ export default function CompInfo() {
   const navigate = useNavigate();
   const { session } = useAuth();
 
-  const compId = params.get('id') || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('last_comp_id') : '') || '';
-  const [syncVersion, setSyncVersion] = useState(0);
-  const comp = useMemo(() => (compId && NexusData ? NexusData.getCompetitionById(compId) : null), [compId, syncVersion]);
-  // The cached copy may predate a cancellation or settlement: refresh it from the server once.
-  useEffect(() => {
-    if (!NexusData || typeof NexusData.fetchCompetitionsFromAPI !== 'function') return undefined;
-    let active = true;
-    NexusData.fetchCompetitionsFromAPI().then(() => { if (active) setSyncVersion((v) => v + 1); }).catch(() => {});
-    return () => { active = false; };
-  }, [compId]);
+  const compId = params.get('id') || '';
+  const { loading: compLoading, data: comp } = useCompetition(compId);
 
   const [tab, setTab] = useState(() => {
     const requestedTab = params.get('tab');
     return TABS.some((item) => item.id === requestedTab) ? requestedTab : 'overview';
   });
-  const [serverTeams, setServerTeams] = useState(null);
   const [removal, setRemoval] = useState(null);
 
   // Participation revocation is read from the stored decision record. The API
@@ -129,16 +118,7 @@ export default function CompInfo() {
     return () => { cancelled = true; };
   }, [compId, session?.username]);
 
-  // Rosters change on other devices, so the Teams tab reads them from the backend.
-  const backendCompId = comp ? (comp.dbId || comp.id) : null;
-  useEffect(() => {
-    if (!backendCompId) return undefined;
-    let cancelled = false;
-    TeamsAPI.getByCompetition(backendCompId).then((res) => {
-      if (!cancelled && res.ok && Array.isArray(res.data)) setServerTeams(res.data);
-    });
-    return () => { cancelled = true; };
-  }, [backendCompId]);
+  const backendCompId = comp ? comp.id : null;
   const joinCodeGate = useJoinCodeGate(comp);
 
   // §9/§10 — bracket and standings use persisted match records, not local cache.
@@ -160,8 +140,7 @@ export default function CompInfo() {
 
   const userKey = normalize(session && session.username);
   const approvalStatus = comp ? getApprovalStatus(comp) : 'approved';
-  const isCoOrg = !!(comp && Array.isArray(comp.organizers) && comp.organizers.map(normalize).includes(userKey));
-  const isOwner = !!(comp && userKey && (isCoOrg || normalize(comp.organizerId) === userKey || normalize(comp.createdBy) === userKey));
+  const isOwner = isOrganizerOf(comp, userKey);
   const isRemoved = !!removal?.removed && !isOwner;
   // A removed player keeps the public competition page and the organiser tab
   // (so a complaint can still be filed) but loses every team-scoped surface.
@@ -171,6 +150,10 @@ export default function CompInfo() {
   useEffect(() => {
     if (isRemoved && RESTRICTED_TABS.includes(tab)) setTab('overview');
   }, [isRemoved, tab]);
+
+  if (compId && compLoading && !comp) {
+    return <main className="comp-info-page"><LoadingState label="Loading competition…" /></main>;
+  }
 
   if (!compId || !comp || (approvalStatus !== 'approved' && !isOwner)) {
     return (
@@ -187,61 +170,42 @@ export default function CompInfo() {
     );
   }
 
-  const approvedTeams = (comp.teams || []).filter((t) => t.status === 'approved');
+  const approvedTeams = comp.activeTeams;
+  const bannedNames = new Set(comp.teams.filter((t) => t.status === 'banned').map((t) => normalize(t.name)));
   const authoritativeMatches = apiMatches.map(mapApiMatch);
   const matchSource = authoritativeMatches.length ? authoritativeMatches : (comp.matches || []);
   const standings = buildStandings({ ...comp, matches: matchSource });
   const matches = matchSource.filter((m) => ['completed', 'live', 'scheduled'].includes(m.status));
   const prizes = comp.prizes || [];
-  const hasPrize = comp.prizePool && !['No Prize Pool', '₹0', '—'].includes(comp.prizePool);
+  const hasPrize = comp.prize > 0;
   const prizePhrase = hasPrize ? `the prize pool of ${comp.prizePool}` : 'glory and championship honors';
 
  // ── CTA logic ──
-  const myTeam = (NexusTeamWorkflow && typeof NexusTeamWorkflow.findUserTeamInCompetition === 'function')
-    ? NexusTeamWorkflow.findUserTeamInCompetition(comp.id)
-    : null;
-  const isTeamLeader = !!(myTeam && myTeam.team && normalize(myTeam.team.createdBy) === userKey);
+  const mine = comp.teams.find((t) => t.members.some((m) => normalize(m.username) === userKey) && !['rejected', 'disbanded'].includes(normalize(t.status)));
+  const myTeam = mine ? { team: mine, context: { compId: comp.id, teamId: mine.id } } : null;
+  const isTeamLeader = !!(mine && normalize(mine.leader) === userKey);
 
-  // Team cards with player names: the backend roster plus players only this browser knows about.
-  const teamRosters = approvedTeams
-    .map((t) => {
-      const server = (serverTeams || []).find((b) => b.id === t.dbId || b.id === t.id || b.name === t.name);
-      const lead = normalize((server && server.leaderId) || t.createdBy || t.leaderUsername);
-      const names = [...((server && server.memberUsernames) || []), ...(t.members || []).map((m) => m.username)];
-      const seen = new Set();
-      const members = names
-        .filter((name) => {
-          const key = normalize(name);
-          if (!name || seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        })
-        .map((username) => ({ username, isLead: normalize(username) === lead }))
-        .sort((a, b) => Number(b.isLead) - Number(a.isLead));
-      return { key: t.id || t.name, name: t.name || 'Unknown Team', status: server && server.status, members };
-    })
-    .filter((t) => t.status !== 'disbanded');
+  const teamRosters = approvedTeams.map((t) => ({
+    key: t.id,
+    name: t.name,
+    status: t.status,
+    members: t.members.map((m) => ({ username: m.username, isLead: m.role === 'captain' })).sort((a, b) => Number(b.isLead) - Number(a.isLead)),
+  }));
   // §6 — only people playing in this competition see rosters and report buttons.
   const isCompetitionParticipant = !!userKey && teamRosters.some((t) => t.members.some((m) => normalize(m.username) === userKey));
   const teamStatus = myTeam && myTeam.team ? String(myTeam.team.status || '').toLowerCase() : '';
 
 
-  function onShare() {
-    const url = window.location.href;
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(url)
-        .then(() => showToast('Competition link copied to clipboard!'))
-        .catch(() => { window.prompt('Copy this link:', url); });
-    } else {
-      window.prompt('Copy this link:', url);
-    }
+  async function onShare() {
+    const url = `${window.location.origin}/pages/comp-info.html?id=${encodeURIComponent(comp.id)}`;
+    showToast((await copyText(url)) ? 'Competition link copied.' : `Copy this link: ${url}`);
   }
 
   function onRegister() {
     if (getApprovalStatus(comp) !== 'approved') { showToast('Registration opens only after admin approval.', 'error'); return; }
     if (!session) { navigate('/pages/login.html'); return; }
     if (myTeam && myTeam.context && teamStatus !== 'rejected') {
-      navigate(`/pages/comp-participant.html?id=${encodeURIComponent(myTeam.context.compId)}`);
+      navigate(`/pages/team/team-roster.html?compId=${encodeURIComponent(myTeam.context.compId)}&teamId=${encodeURIComponent(myTeam.context.teamId)}`);
       return;
     }
     (async () => {
@@ -259,11 +223,7 @@ export default function CompInfo() {
     if (getApprovalStatus(comp) !== 'approved') { showToast('Team creation opens only after admin approval.', 'error'); return; }
     if (!session) { navigate('/pages/login.html'); return; }
     if (myTeam && myTeam.context && teamStatus !== 'rejected') {
-      if (isTeamLeader) {
-        navigate(`/pages/team/team-roster.html?compId=${encodeURIComponent(myTeam.context.compId)}&teamId=${encodeURIComponent(myTeam.context.teamId)}`);
-      } else {
-        navigate(`/pages/comp-participant.html?id=${encodeURIComponent(myTeam.context.compId)}`);
-      }
+      navigate(`/pages/team/team-roster.html?compId=${encodeURIComponent(myTeam.context.compId)}&teamId=${encodeURIComponent(myTeam.context.teamId)}`);
       return;
     }
     (async () => {
@@ -287,8 +247,8 @@ export default function CompInfo() {
   let createDisabled = false;
   let rejectedNotice = false;
 
-  const cancelledComp = !!NexusData?.isCancelledCompetition?.(comp);
-  const registration = NexusData?.registrationState ? NexusData.registrationState(comp) : { open: true };
+  const cancelledComp = isCancelledCompetition(comp);
+  const registration = comp.registration;
   if (!isOwner && !registration.open && !(myTeam && teamStatus !== 'rejected')) {
     // Same rules the server enforces: no joining before it opens, after it closes, or once play has started.
     registerLabel = registration.label;
@@ -320,23 +280,9 @@ export default function CompInfo() {
 
   // All organisers stored on this competition (creator + co-organisers),
   // de-duplicated case-insensitively so nobody is listed twice.
-  const organisers = useMemo(() => {
-    const rows = [comp.createdBy, comp.organizerId, ...(Array.isArray(comp.organizers) ? comp.organizers : [])];
-    const seen = new Set();
-    return rows
-      .map((value) => {
-        if (!value) return '';
-        if (typeof value === 'object') return String(value.username || value.email || value.name || '').trim().replace(/^@/, '');
-        return String(value).trim().replace(/^@/, '');
-      })
-      .filter((name) => {
-        if (!name) return false;
-        const key = name.toLowerCase();
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-  }, [comp]);
+  const organisers = Array.from(new Map([comp.createdBy, ...(comp.organizers || [])]
+    .filter(Boolean)
+    .map((name) => [normalize(name), String(name).replace(/^@/, '')])).values());
 
   return (
     <>
@@ -354,20 +300,8 @@ export default function CompInfo() {
           </div>
         )}
 
-        {approvalStatus === 'pending' && (
-          <div style={{ background: 'rgba(251,146,60,0.15)', border: '1px solid #fb923c', borderRadius: 12, padding: '16px 24px', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 16 }}>
-            <span style={{ fontSize: 28 }}>⏳</span>
-            <div>
-              <h4 style={{ margin: '0 0 4px', color: '#fb923c', fontSize: 16, fontWeight: 700 }}>Pending Admin Approval</h4>
-              <p style={{ margin: 0, color: '#cbd5e1', fontSize: 13 }}>
-                This tournament's prize pool ({comp.prizePool || 'High Stakes'}) exceeds ₹50,000. It is currently under review by Platform Admin and will be published publicly once approved.
-              </p>
-            </div>
-          </div>
-        )}
-
         <div className="comp-info-hero" id="comp-hero">
-          <img id="comp-hero-img" src={assetUrl(comp.img) || assetUrl('b890c61489a080992ad7e99adabb1145e6d59606.png')} alt="" />
+          <img id="comp-hero-img" src={competitionBanner(comp)} alt="" />
           <div className="comp-info-overlay">
             <div className="game" id="comp-hero-game">{comp.game || '—'}</div>
             <h1 id="comp-hero-name">{comp.name || 'Competition'}</h1>
@@ -396,6 +330,7 @@ export default function CompInfo() {
             </div>
 
             <div className={`tab-panel${tab === 'overview' ? ' active' : ''}`} id="tab-overview">
+              <CompetitionResults competitionId={comp.id} highlightTeamId={mine?.id} />
               <div className="comp-info-block">
                 <h2>About this Tournament</h2>
                 <p id="comp-description">
@@ -405,8 +340,8 @@ export default function CompInfo() {
               <div className="comp-info-block" style={{ marginTop: 20 }}>
                 <h2>Schedule</h2>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }} id="comp-schedule">
-                  <div className="info-row"><span className="key">Registration Opens</span><span className="val" id="sched-reg-open">{(comp.registrationDates || {}).open || '—'}</span></div>
-                  <div className="info-row"><span className="key">Registration Closes</span><span className="val" id="sched-reg-close">{(comp.registrationDates || {}).close || '—'}</span></div>
+                  <div className="info-row"><span className="key">Registration Opens</span><span className="val" id="sched-reg-open">{formatDate(comp.registrationOpenAt, true)}</span></div>
+                  <div className="info-row"><span className="key">Registration Closes</span><span className="val" id="sched-reg-close">{formatDate(comp.registrationCloseAt, true)}</span></div>
                   <div className="info-row"><span className="key">Competition Dates</span><span className="val" id="sched-dates">{comp.dates || '—'}</span></div>
                 </div>
               </div>
@@ -469,9 +404,9 @@ export default function CompInfo() {
                     ))
                   ) : (
                     approvedTeams.map((t) => (
-                      <div className="team-card" key={t.id || t.name}>
-                        <div className="name">{t.name || 'Unknown Team'}</div>
-                        <div className="players">{t.players || '—'} Players</div>
+                      <div className="team-card" key={t.id}>
+                        <div className="name">{t.name}</div>
+                        <div className="players">{t.members.length} player{t.members.length === 1 ? '' : 's'}</div>
                       </div>
                     ))
                   )}
@@ -493,8 +428,8 @@ export default function CompInfo() {
                     matches.map((m) => {
                       const isLive = m.status === 'live';
                       const isDone = m.status === 'completed';
-                      const t1Banned = NexusData && NexusData.isTeamBannedInComp && NexusData.isTeamBannedInComp(m.team1, comp);
-                      const t2Banned = NexusData && NexusData.isTeamBannedInComp && NexusData.isTeamBannedInComp(m.team2, comp);
+                      const t1Banned = bannedNames.has(normalize(m.team1));
+                      const t2Banned = bannedNames.has(normalize(m.team2));
                       // Prefer the persisted winner; never infer one when absent.
                       const winner1 = isDone && (m.winnerName ? normalize(m.winnerName) === normalize(m.team1) : Number(m.score1) > Number(m.score2));
                       const winner2 = isDone && (m.winnerName ? normalize(m.winnerName) === normalize(m.team2) : Number(m.score2) > Number(m.score1));
@@ -576,7 +511,7 @@ export default function CompInfo() {
                       <p>4. Teams must be ready to play within 10 minutes of scheduled match time.</p>
                       <p>5. All matches must be played on official NEXUS tournament servers.</p>
                       <p>6. Entry fee: {comp.entryFee || 'Free'}.</p>
-                      <p>7. Prize money will be distributed within 14 business days of tournament conclusion.</p>
+                      <p>7. Prize money is held in escrow and released by a finance moderator after the dispute window closes.</p>
                     </>
                   )}
                 </div>
@@ -615,24 +550,24 @@ export default function CompInfo() {
           <aside className="comp-sidebar-panel">
             <div className="comp-sidebar-block">
               <h3>Tournament Info</h3>
-              <div className="info-row"><span className="key">Status</span><span className="val" id="info-status" style={{ color: 'var(--accent)' }}>{formatStatus(comp.status)}</span></div>
+              <div className="info-row"><span className="key">Status</span><span className="val" id="info-status" style={{ color: 'var(--accent)' }}>{comp.badge}</span></div>
               <div className="info-row"><span className="key">Game</span><span className="val" id="info-game">{comp.game || '—'}</span></div>
               <div className="info-row"><span className="key">Format</span><span className="val" id="info-format">{formatType(comp.type)}</span></div>
               <div className="info-row"><span className="key">Teams</span><span className="val" id="info-teams">{approvedTeams.length} / {comp.maxTeams || '—'}</span></div>
               <div className="info-row"><span className="key">Date</span><span className="val" id="info-date">{comp.dates || '—'}</span></div>
-              <div className="info-row"><span className="key">Prize Pool</span><span className="val" id="info-prize" style={{ color: 'var(--accent)', fontSize: 18 }}>{comp.prizePool || '—'}</span></div>
+              <div className="info-row"><span className="key">Prize Pool</span><span className="val" id="info-prize" style={{ color: 'var(--accent)', fontSize: 18 }}>{hasPrize ? comp.prizePool : 'No prize pool'}</span></div>
             </div>
 
             <div className="comp-sidebar-block" id="prize-breakdown-block">
               <h3>Prize Breakdown</h3>
               <div className="prize-breakdown" id="comp-prize-breakdown">
                 {prizes.length === 0 ? (
-                  <div className="prize-row"><span className="place">{PRIZE_ICONS[0]} 1st Place</span><span className="amount">{comp.prizePool || '—'}</span></div>
+                  <div className="prize-row"><span className="place">{PRIZE_ICONS[0]} 1st Place</span><span className="amount">{hasPrize ? comp.prizePool : '—'}</span></div>
                 ) : (
                   prizes.map((p, i) => (
                     <div className="prize-row" key={p.place || i}>
                       <span className="place">{PRIZE_ICONS[i] || ''} {p.place}</span>
-                      <span className="amount">{p.amount || '—'}</span>
+                      <span className="amount">{formatINR(p.amount)}</span>
                     </div>
                   ))
                 )}

@@ -5,6 +5,21 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/decorators/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../common/interfaces';
+import { ApiProperty, PartialType } from '@nestjs/swagger';
+import { IsBoolean, IsNumber, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+
+export class CreatePolicyDto {
+  @ApiProperty() @IsString() @MinLength(3) @MaxLength(200) title: string;
+  @ApiProperty() @IsString() @MinLength(10) @MaxLength(50000) content: string;
+  @ApiProperty({ required: false }) @IsOptional() @IsString() @MaxLength(60) category?: string;
+  @ApiProperty({ required: false }) @IsOptional() @IsString() @MaxLength(20) version?: string;
+  @ApiProperty({ required: false }) @IsOptional() @IsNumber() @Min(0) @Max(100) compliance?: number;
+  @ApiProperty({ required: false }) @IsOptional() @IsBoolean() active?: boolean;
+  @ApiProperty({ required: false, description: 'Ignored: the author comes from the token' })
+  @IsOptional() @IsString() @MaxLength(60) createdBy?: string;
+}
+
+export class UpdatePolicyDto extends PartialType(CreatePolicyDto) {}
 
 @Controller('policies')
 @ApiTags('Policies')
@@ -31,9 +46,9 @@ export class PoliciesController {
   @ApiOperation({ summary: 'Create a new policy (Super Admin / Admin only)' })
   async create(
     @Request() req: any,
-    @Body() body: { title: string; content: string; category?: string; version?: string; createdBy?: string; compliance?: number },
+    @Body() body: CreatePolicyDto,
   ) {
-    const createdBy = req.user?.username || body.createdBy || 'superadmin';
+    const createdBy = req.user.username;
     return this.service.create({ ...body, createdBy });
   }
 
@@ -42,8 +57,9 @@ export class PoliciesController {
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a policy (Super Admin / Admin only)' })
-  async update(@Param('id') id: string, @Body() body: any) {
-    return this.service.update(id, body);
+  async update(@Param('id') id: string, @Body() body: UpdatePolicyDto) {
+    const { createdBy: _ignored, ...updates } = body;
+    return this.service.update(id, updates);
   }
 
   @Patch(':id/archive')

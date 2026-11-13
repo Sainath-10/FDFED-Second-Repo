@@ -12,7 +12,7 @@ import { RevenueTransactionEntity } from '../../entities/revenue-transaction.ent
 import { CompetitionRemovalEntity } from '../../entities/competition-removal.entity';
 import { CreateTeamDto, UpdateTeamDto, AddTeamMemberDto } from './dto/team.dto';
 import { ITeam, UserRole } from '../../common/interfaces';
-import { isCompetitionStarted } from '../../common/validation/competition.rules';
+import { isCompetitionStarted, isUnpublished } from '../../common/validation/competition.rules';
 import { isEligiblePlayerAccount } from '../../common/validation/player-eligibility';
 import { MatchesService } from '../matches/matches.service';
 
@@ -114,6 +114,12 @@ export class TeamsService {
     if (!this.isInvitableAccount(account)) {
       throw new BadRequestException(`${account.username} is a staff account and cannot join a competition team.`);
     }
+    const competition = await this.competitionRepository.findById(competitionId);
+    const organisers = [competition?.createdBy, ...(competition?.organizers || []), ...((competition as any)?.pendingOrganizers || [])]
+      .map((name) => String(name || '').toLowerCase());
+    if (organisers.includes(String(account.username).toLowerCase())) {
+      throw new BadRequestException(`${account.username} organises this competition and cannot play in it.`);
+    }
     await this.assertNotRemoved(competitionId, account.username);
     return account;
   }
@@ -127,7 +133,12 @@ export class TeamsService {
       throw new NotFoundException(`Competition with ID ${competitionId} not found`);
     }
     await this.assertNotRemoved(competitionId, leaderId);
-    if (competition.paymentStatus === 'AWAITING_PLATFORM_FEE') throw new ForbiddenException('Platform fee payment is pending.');
+    if (isUnpublished(competition)) throw new ForbiddenException('This competition is not published yet.');
+    // The captain is held to the same rule as every member: no staff, no organisers.
+    await this.assertEligibleMember(leaderId, competitionId);
+    // Fixture checks run before any fee is taken, so a refused registration never charges the player.
+    await this.matchesService?.assertCanRegisterTeam(competitionId);
+    await this.assertTeamNameAvailable(competitionId, name);
     if (managed(competition)) {
       const team = await this.lifecycle.registerTeam(createTeamDto, user);
       await this.matchesService?.syncRosterAfterRegistration(competitionId);
@@ -139,7 +150,6 @@ export class TeamsService {
     if (isCompetitionStarted(competition)) {
       throw new ForbiddenException('Team registration is closed because the competition has started.');
     }
-    await this.matchesService?.assertRosterCanChange(competitionId);
 
     // §2.4 — private competitions require a valid join code; public never do
     if (competition.visibility === 'private') {
@@ -207,6 +217,16 @@ export class TeamsService {
     return team;
   }
 
+  /** Team names are unique within a competition (case-insensitive), so standings stay unambiguous. */
+  private async assertTeamNameAvailable(competitionId: string, name: string, exceptTeamId?: string) {
+    const wanted = String(name || '').trim().toLowerCase();
+    const teams = await this.teamRepository.findByCompetition(competitionId);
+    const clash = teams.find(
+      (t) => t.id !== exceptTeamId && this.isActiveTeam(t) && String(t.name || '').trim().toLowerCase() === wanted,
+    );
+    if (clash) throw new BadRequestException(`A team called "${clash.name}" is already registered in this competition.`);
+  }
+
   async getTeamById(id: string, viewer?: any): Promise<ITeam> {
     const team = await this.teamRepository.findById(id);
     if (!team) {
@@ -252,7 +272,10 @@ export class TeamsService {
     }
 
     const updates: Partial<ITeam> = {};
-    if (updateTeamDto.name) updates.name = updateTeamDto.name;
+    if (updateTeamDto.name && updateTeamDto.name.trim() !== team.name) {
+      await this.assertTeamNameAvailable(team.competitionId, updateTeamDto.name, team.id);
+      updates.name = updateTeamDto.name.trim();
+    }
     if (updateTeamDto.members) updates.members = updateTeamDto.members;
 
     return this.teamRepository.update(id, updates);
@@ -328,12 +351,22 @@ export class TeamsService {
       throw new BadRequestException('A meaningful removal reason (at least 5 characters) is required.');
     }
 
-    const member = String(memberId || '').trim().replace(/^@/, '');
+    const requested = String(memberId || '').trim().replace(/^@/, '');
+    const member = (team.memberUsernames || []).find((m) => m.toLowerCase() === requested.toLowerCase());
+    if (!member) {
+      throw new NotFoundException(`@${requested} is not on this team.`);
+    }
     if (member.toLowerCase() === String(team.leaderId || '').toLowerCase()) {
       throw new BadRequestException('Cannot remove the team leader. Disband the team instead.');
     }
 
-    if (managed(competition) && competition.feeType === 'per_player') throw new ForbiddenException('Paid participants require finance review; disband to refund the team before start.');
+    // Payment-managed: the player's own fee (if any) is refunded as they leave the roster.
+    if (managed(competition)) {
+      const updated = await this.lifecycle.releaseMember(teamId, member, user, meaningfulReason);
+      this.notifyRemoval(team, competition, member, meaningfulReason);
+      return updated;
+    }
+
     // Authoritative payment check — frontend-supplied payment status is never trusted
     const hasPaid = await this.participantHasPaid(team.competitionId, member);
     if (hasPaid) {
@@ -352,15 +385,56 @@ export class TeamsService {
       metadata: { reason: meaningfulReason },
     });
 
+    this.notifyRemoval(team, competition, member, meaningfulReason);
+    return updated;
+  }
+
+  private notifyRemoval(team: ITeam, competition: any, member: string, reason: string) {
     this.notificationsService.create({
       toUsername: member,
       type: 'team-member-removed',
       status: 'rejected',
-      title: '🚪 Removed from Team',
-      body: `You were removed from team "${team.name}"${competition ? ` in "${competition.name}"` : ''}. Reason: ${meaningfulReason}`,
-      meta: { compId: team.competitionId, teamId, reason: meaningfulReason },
+      title: 'Removed from team',
+      body: `You were removed from team "${team.name}"${competition ? ` in "${competition.name}"` : ''}. Reason: ${reason}`,
+      meta: { compId: team.competitionId, teamId: team.id, reason },
     }).catch(() => {});
+  }
 
+  /** A player (not the captain) leaves their team before the competition starts. */
+  async leaveTeam(teamId: string, user: any, reason?: string): Promise<ITeam> {
+    const team = await this.getTeamById(teamId);
+    const me = String(user?.username || '');
+    const member = (team.memberUsernames || []).find((m) => m.toLowerCase() === me.toLowerCase());
+    if (!member) throw new NotFoundException('You are not on this team.');
+    if (member.toLowerCase() === String(team.leaderId || '').toLowerCase()) {
+      throw new BadRequestException('The captain cannot leave the team. Disband it instead.');
+    }
+    const competition = await this.competitionRepository.findById(team.competitionId);
+    const ended = !!competition && (['completed', 'cancelled'].includes(String(competition.status))
+      || ['COMPLETED', 'PRIZE_RELEASED', 'REVERSED', 'REFUND_ISSUED', 'CANCELLED', 'EXPIRED'].includes(String(competition.paymentStatus)));
+    if (ended) throw new ForbiddenException('This competition has ended: the roster is final.');
+    if (['banned', 'rejected', 'disbanded'].includes(String(team.status))) throw new BadRequestException('This team is no longer registered.');
+    // Players may unregister at any time before the end; only before the start is their fee refunded.
+    const started = !!competition && isCompetitionStarted(competition as any);
+    const note = String(reason || '').trim() || 'Unregistered from the team';
+    const updated = managed(competition)
+      ? await this.lifecycle.releaseMember(teamId, member, user, note, true)
+      : await this.teamRepository.removeMember(teamId, member);
+
+    await this.auditLog.record('TEAM_MEMBER_LEFT', {
+      actor: member,
+      entityType: 'team',
+      entityId: teamId,
+      details: `@${member} left team "${team.name}". ${note}`,
+    });
+    this.notificationsService.create({
+      toUsername: team.leaderId,
+      type: 'team-member-left',
+      status: 'info',
+      title: 'A player left your team',
+      body: `@${member} unregistered from "${team.name}"${started ? ' after the competition started (no refund)' : ''}.${reason ? ` Note: ${note}` : ''}`,
+      meta: { compId: team.competitionId, teamId },
+    }).catch(() => {});
     return updated;
   }
 
@@ -525,8 +599,28 @@ export class TeamsService {
     return updated;
   }
 
-  async addWarning(teamId: string, issuedBy: string) {
-    return this.teamRepository.addWarning(teamId, issuedBy);
+  /** Only the competition's organizers (or admins) may warn a team; the third warning bans it. */
+  async addWarning(teamId: string, user: any, reason?: string) {
+    const { team, competition } = await this.assertCompetitionManager(teamId, user);
+    if (!this.isActiveTeam(team) || team.status === 'banned') {
+      throw new BadRequestException('This team is no longer active.');
+    }
+    const nextCount = (team.warningsCount || 0) + 1;
+    if (nextCount >= 3) {
+      await this.teamRepository.update(teamId, { warningsCount: nextCount } as any);
+      await this.banTeam(teamId, user, reason || 'Third warning');
+      return { warningsCount: nextCount, banned: true };
+    }
+    const result = await this.teamRepository.addWarning(teamId, user.username);
+    this.notificationsService.create({
+      toUsername: team.leaderId,
+      type: 'team-warning',
+      status: 'info',
+      title: `Warning ${nextCount} of 3`,
+      body: `Your team "${team.name}" received a warning in "${competition?.name || 'a competition'}".${reason ? ` Reason: ${reason}` : ''} A third warning bans the team.`,
+      meta: { compId: team.competitionId, teamId },
+    }).catch(() => {});
+    return result;
   }
 
   /** Only an organizer of the team's competition (or a competition admin) may change a team's standing. */
@@ -610,6 +704,24 @@ export class TeamsService {
       meta: { compId: team.competitionId, teamId, requestId: request.id },
     }).catch(() => {});
     return request;
+  }
+
+  /** The signed-in player's own join requests, with team and competition names. */
+  async getMyJoinRequests(user: any) {
+    const rows = await this.teamRepository.getJoinRequestsByUser(String(user?.username || ''));
+    const result = [];
+    for (const row of rows) {
+      const team = await this.teamRepository.findById(row.teamId);
+      const competition = await this.competitionRepository.findById(row.competitionId);
+      result.push({
+        ...row,
+        teamName: team?.name || null,
+        teamStatus: team?.status || null,
+        competitionName: competition?.name || null,
+        amount: this.playerFeeDue(competition),
+      });
+    }
+    return result;
   }
 
   async getJoinRequestsByTeam(teamId: string) {
@@ -779,7 +891,7 @@ export class TeamsService {
     if (targetKey === String(user?.username || '').toLowerCase()) {
       throw new BadRequestException('You cannot invite yourself.');
     }
-    const competitionOrganisers = [competition?.createdBy, ...(competition?.organizers || [])]
+    const competitionOrganisers = [competition?.createdBy, ...(competition?.organizers || []), ...((competition as any)?.pendingOrganizers || [])]
       .map((name) => String(name || '').toLowerCase());
     if (competitionOrganisers.includes(targetKey)) {
       throw new BadRequestException(`${target.username} organises this competition and cannot be invited as a player.`);
@@ -824,7 +936,7 @@ export class TeamsService {
     const team = await this.verifyTeamOwnership(teamId, user);
     const competition = await this.competitionRepository.findById(team.competitionId);
     const taken = new Set<string>(
-      [competition?.createdBy, ...(competition?.organizers || [])].map((u) => String(u || '').toLowerCase()),
+      [competition?.createdBy, ...(competition?.organizers || []), ...((competition as any)?.pendingOrganizers || [])].map((u) => String(u || '').toLowerCase()),
     );
     const teams = await this.teamRepository.findByCompetition(team.competitionId);
     teams

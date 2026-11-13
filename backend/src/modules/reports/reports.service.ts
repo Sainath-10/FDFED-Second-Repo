@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
   OnModuleInit,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
@@ -27,6 +28,7 @@ import { UserRepository } from '../auth/repositories/user.repository';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditLogService } from '../../common/audit/audit.service';
 import { ReputationService } from '../reputation/reputation.service';
+import { LifecycleService } from '../payments/lifecycle.service';
 import {
   DISCARD_REASONS,
   MAX_DISCARDED_REPORTS,
@@ -51,6 +53,9 @@ import {
 } from './dto/report.dto';
 
 const REVIEW_STATUSES: ReportStatus[] = ['new', 'under_review', 'awaiting_response'];
+/** Organiser decisions with a real restriction can be appealed once and uplifted. */
+const APPEALABLE_ACTIONS = new Set(['reputation_downgrade', 'creation_restriction', 'competition_suspension', 'formal_warning', 'final_warning']);
+const lower = (v: unknown) => String(v ?? '').trim().toLowerCase();
 const MAX_EVIDENCE = 5;
 const MAX_EVIDENCE_BYTES = 5 * 1024 * 1024;
 
@@ -79,6 +84,7 @@ export class ReportsService implements OnModuleInit {
     private readonly notifications: NotificationsService,
     private readonly auditLog: AuditLogService,
     private readonly reputation: ReputationService,
+    @Optional() private readonly lifecycle?: LifecycleService,
   ) {}
 
   onModuleInit(): void {
@@ -424,9 +430,21 @@ export class ReportsService implements OnModuleInit {
     const original = report.originalReportId
       ? await this.reports.findOne({ where: { id: report.originalReportId } }).catch(() => null)
       : null;
+    const history = this.decisionHistoryOf(report);
+    const latestDecision = history.length ? history[history.length - 1] : null;
+    const appealUsed = this.appealUsed(report);
     return {
       ...report,
       code: this.reportCode(report.id),
+      decisionHistory: history,
+      latestDecision,
+      appealUsed,
+      canAppeal: report.queue === 'moderator'
+        && report.status === 'resolved'
+        && APPEALABLE_ACTIONS.has(String(report.action || ''))
+        && !report.uplifted
+        && !appealUsed
+        && (!latestDecision || latestDecision.status === 'active'),
       competitionName: comp?.name || report.competitionId,
       reporterPriorSubstantiated: reporterPrior,
       accusedPriorSubstantiated: accusedPrior,
@@ -539,10 +557,11 @@ export class ReportsService implements OnModuleInit {
       .where('r.queue = :queue', { queue })
       .groupBy('r.status')
       .getRawMany();
-    const counts: Record<string, number> = { new: 0, under_review: 0, awaiting_response: 0, resolved: 0, discarded: 0 };
+    const counts: Record<string, number> = { new: 0, under_review: 0, awaiting_response: 0, resolved: 0, discarded: 0, appealed: 0 };
     rows.forEach((row) => {
       counts[row.status] = Number(row.count) || 0;
     });
+    counts.appealed = await this.reports.count({ where: { queue, status: 'resolved', appealStatus: 'submitted', uplifted: false } });
     return counts;
   }
 
@@ -924,6 +943,7 @@ export class ReportsService implements OnModuleInit {
     report.status = 'resolved';
     report.resolvedBy = user.username;
     report.resolvedAt = new Date();
+    this.pushDecision(report, { finding: dto.finding, action: dto.action, conclusion, decidedBy: user.username });
     await this.reports.save(report);
     await this.recordStatus({ ...report, status: 'new' }, 'resolved', user.username, `Finding: ${dto.finding}; action: ${dto.action}.`);
     await this.audit(id, 'REPORT_DECIDED', user.username, `Player decision: ${dto.finding} / ${dto.action}.`, {
@@ -1102,10 +1122,13 @@ export class ReportsService implements OnModuleInit {
     if (!MODERATOR_ACTIONS.includes(dto.action as ReportAction)) throw new BadRequestException('Invalid action.');
     const conclusion = String(dto.conclusion || '').trim();
     if (conclusion.length < 15) throw new BadRequestException('A conclusion explaining the decision is required.');
+    let suspendedFrom: string | null = null;
     if (dto.finding === 'unsubstantiated' && !['no_action', 'warning'].includes(dto.action)) {
       throw new BadRequestException('An unsubstantiated finding cannot justify a punitive action.');
     }
+    let termination: Record<string, any> | null = null;
     const organiser = report.reportedUsername;
+    const previousLevel = (await this.reputation.getOrCreate(organiser).catch(() => null))?.level || null;
 
     if (dto.action === 'reputation_downgrade') {
       if (!dto.level) throw new BadRequestException('Choose the reputation level for the downgrade.');
@@ -1124,8 +1147,19 @@ export class ReportsService implements OnModuleInit {
       });
       const comp: any = await this.competitions.findById(report.competitionId).catch(() => null);
       if (comp) {
+        suspendedFrom = comp.status;
         await this.competitions.update(report.competitionId, { status: 'suspended' } as any);
       }
+    } else if (dto.action === 'competition_termination') {
+      // Ends the competition now: players are refunded from escrow and the
+      // organiser forfeits part of the prize pool. Cannot be uplifted.
+      if (!report.competitionId) throw new BadRequestException('This report is not linked to a competition.');
+      if (!this.lifecycle) throw new BadRequestException('Competition payments are unavailable, so it cannot be ended here.');
+      termination = await this.lifecycle.terminateForMisconduct(report.competitionId, user, conclusion);
+      await this.reputation.issueSanction(organiser, 'warning', `Competition ended by the Community Moderator: ${conclusion}`, {
+        reportId: report.id,
+        appliedBy: user.username,
+      });
     } else if (dto.action === 'warning') {
       // A warning alone never changes reputation.
       await this.reputation.issueSanction(organiser, 'warning', conclusion, {
@@ -1140,6 +1174,17 @@ export class ReportsService implements OnModuleInit {
     report.status = 'resolved';
     report.resolvedBy = user.username;
     report.resolvedAt = new Date();
+    this.pushDecision(report, {
+      finding: dto.finding,
+      action: dto.action,
+      level: dto.level || null,
+      days: dto.days || null,
+      conclusion,
+      decidedBy: user.username,
+      previousLevel,
+      suspendedFrom,
+      termination,
+    });
     await this.reports.save(report);
     await this.recordStatus({ ...report, status: 'new' }, 'resolved', user.username, `Finding: ${dto.finding}; action: ${dto.action}.`);
     await this.audit(id, 'REPORT_DECIDED', user.username, `Organiser decision: ${dto.finding} / ${dto.action}.`, {
@@ -1155,6 +1200,241 @@ export class ReportsService implements OnModuleInit {
       { reportId: report.id, compId: report.competitionId },
     );
     return this.get(id, user);
+  }
+
+  // ─── Decision history, appeals and uplift ──────────────────────────────────
+  private decisionHistoryOf(report: ReportEntity): Array<Record<string, any>> {
+    const history = Array.isArray(report.decisionHistory) ? report.decisionHistory : [];
+    if (history.length || !report.finding || !report.action) return history;
+    // Reports decided before versioning: the current decision is synthesised from the report.
+    return [{
+      version: 1,
+      finding: report.finding,
+      action: report.action,
+      conclusion: report.conclusion || '',
+      decidedBy: report.resolvedBy || 'system',
+      decidedAt: report.resolvedAt || report.updatedAt,
+      status: report.uplifted ? 'uplifted' : 'active',
+      legacy: true,
+    }];
+  }
+
+  private pushDecision(report: ReportEntity, decision: Record<string, any>) {
+    const history = this.decisionHistoryOf(report).map((row) => (row.status === 'active' ? { ...row, status: 'superseded' } : row));
+    history.push({ version: history.length + 1, decidedAt: new Date().toISOString(), status: 'active', ...decision });
+    report.decisionHistory = history;
+  }
+
+  private appealUsed(report: ReportEntity): boolean {
+    return Number(report.appealCount || 0) > 0 || !!report.appealedAt || !!report.appealStatus;
+  }
+
+  /** Opens (or reopens) the one discussion room attached to a report. */
+  private async ensureRoom(report: ReportEntity, reviewer: string, people: Array<{ username: string; role: string }>, actor: string) {
+    let room = report.appealDiscussionId
+      ? await this.discussions.findOne({ where: { id: report.appealDiscussionId } })
+      : null;
+    if (!room) room = await this.discussions.findOne({ where: { reportId: report.id } });
+    if (!room) {
+      room = await this.discussions.save(this.discussions.create({ reportId: report.id, status: 'open', createdBy: actor }));
+    } else if (room.status === 'ended') {
+      room.status = 'open';
+      await this.discussions.save(room);
+    }
+    const existing = await this.participants.find({ where: { discussionId: room.id } });
+    const known = new Set(existing.map((row) => lower(row.username)));
+    for (const person of [{ username: reviewer, role: 'reviewer' }, ...people]) {
+      if (!person.username || known.has(lower(person.username))) continue;
+      known.add(lower(person.username));
+      await this.participants.save(this.participants.create({ discussionId: room.id, username: person.username, role: person.role, addedBy: actor }));
+    }
+    return room;
+  }
+
+  /** The organiser appeals a restrictive decision once; the decision stays active meanwhile. */
+  async appeal(id: string, user: any) {
+    const report = await this.reports.findOne({ where: { id } });
+    if (!report) throw new NotFoundException('Report not found.');
+    if (report.queue !== 'moderator') throw new BadRequestException('Only decisions against an organiser can be appealed.');
+    if (lower(report.reportedUsername) !== lower(user?.username)) {
+      throw new ForbiddenException('Only the organiser affected by this decision can appeal it.');
+    }
+    if (report.status !== 'resolved') throw new BadRequestException('This decision is not active.');
+    if (!APPEALABLE_ACTIONS.has(String(report.action || ''))) {
+      throw new BadRequestException('A normal warning or a no-action decision cannot be appealed.');
+    }
+    if (this.appealUsed(report)) throw new BadRequestException('This report has already used its one appeal.');
+
+    const reviewer = report.resolvedBy || user.username;
+    const room = await this.ensureRoom(report, reviewer, [
+      { username: report.reportedUsername, role: 'accused' },
+      { username: report.reporterUsername, role: 'reporter' },
+    ], user.username);
+    report.appealStatus = 'submitted';
+    report.appealCount = Number(report.appealCount || 0) + 1;
+    report.appealedAt = new Date();
+    report.appealDiscussionId = room.id;
+    await this.reports.save(report);
+    await this.recordStatus(report, 'resolved', user.username, 'Appeal submitted. The decision remains active while it is reviewed.');
+    await this.audit(id, 'APPEAL_SUBMITTED', user.username, 'Appeal submitted; the active sanction was not changed.', { discussionId: room.id });
+    const link = `/pages/case-discussion.html?discussionId=${room.id}`;
+    if (report.resolvedBy) {
+      await this.notifyUser(report.resolvedBy, 'Organiser appealed a decision',
+        `The organiser appealed the decision on ${this.reportCode(report.id)}. Open the Appealed tab to join the discussion.`,
+        { reportId: report.id, discussionId: room.id, link: '/pages/moderator/reports.html' });
+    }
+    await this.notifyUser(user.username, 'Appeal submitted',
+      `Your appeal for ${this.reportCode(report.id)} was sent to the Community Moderator. The decision stays active until it is reviewed.`,
+      { reportId: report.id, discussionId: room.id, link });
+    return { discussionId: room.id, discussion: room, report: await this.decorate(report) };
+  }
+
+  /**
+   * A Community Moderator reverses the current decision: only what that
+   * decision created is undone, the history is kept, and the report reopens.
+   */
+  async uplift(id: string, dto: { reason: string; competitionDisposition?: string }, user: any) {
+    if (!this.isModerator(user)) throw new ForbiddenException('Only a Community Moderator can uplift an action.');
+    const reason = String(dto?.reason || '').trim();
+    if (reason.length < 15) throw new BadRequestException('Give a reason of at least 15 characters to uplift an action.');
+    const report = await this.reports.findOne({ where: { id } });
+    if (!report) throw new NotFoundException('Report not found.');
+    if (report.queue !== 'moderator') throw new BadRequestException('Only decisions against an organiser can be uplifted.');
+    if (report.status !== 'resolved') throw new BadRequestException('This decision is no longer active.');
+    const history = this.decisionHistoryOf(report);
+    const active = history.length ? history[history.length - 1] : null;
+    if (!active || active.status !== 'active') throw new BadRequestException('There is no active decision to uplift.');
+    if (!APPEALABLE_ACTIONS.has(String(active.action || ''))) throw new BadRequestException('This decision has no restriction to uplift.');
+
+    await this.reputation.revertDecision(
+      report.reportedUsername,
+      report.id,
+      active.action === 'reputation_downgrade' ? (active.previousLevel || null) : null,
+      `Uplifted decision on ${this.reportCode(report.id)}: ${reason}`,
+      user.username,
+    );
+
+    let disposition: string | null = null;
+    if (active.action === 'competition_suspension') {
+      disposition = dto.competitionDisposition === 'reopen' ? 'reopen' : 'remain_terminated';
+      if (disposition === 'reopen') {
+        await this.competitions.update(report.competitionId, { status: active.suspendedFrom && active.suspendedFrom !== 'suspended' ? active.suspendedFrom : 'active' } as any).catch(() => undefined);
+      }
+    }
+
+    active.status = 'uplifted';
+    active.upliftedBy = user.username;
+    active.upliftReason = reason;
+    active.upliftedAt = new Date().toISOString();
+    active.competitionDisposition = disposition;
+    report.decisionHistory = [...history.slice(0, -1), active];
+    report.uplifted = true;
+    report.upliftReason = reason;
+    report.upliftedBy = user.username;
+    report.upliftedAt = new Date();
+    report.competitionDisposition = disposition;
+    if (report.appealStatus === 'submitted') report.appealStatus = 'resolved';
+    const previous = report.status;
+    report.finding = null;
+    report.action = null;
+    report.conclusion = null;
+    report.status = 'new';
+    await this.reports.save(report);
+    await this.recordStatus({ ...report, status: previous }, 'new', user.username, `Previous action uplifted: ${reason}`);
+    const room = await this.discussions.findOne({ where: { reportId: report.id } });
+    if (room && room.status === 'ended') {
+      room.status = 'open';
+      await this.discussions.save(room);
+    }
+    await this.audit(id, 'ACTION_UPLIFTED', user.username, `${active.action} uplifted. ${reason}`, { disposition });
+    await this.notifyUser(report.reportedUsername, 'Decision uplifted',
+      `The Community Moderator uplifted the decision on ${this.reportCode(report.id)}. Its restrictions were removed and the report was reopened for review.`,
+      { reportId: report.id, compId: report.competitionId, link: '/pages/my-reports.html' });
+    return this.get(id, user);
+  }
+
+  /** The moderator opens the report's single discussion room (created when missing). */
+  async appealRoom(id: string, user: any) {
+    if (!this.isModerator(user)) throw new ForbiddenException('Community Moderator access is required.');
+    const report = await this.reports.findOne({ where: { id } });
+    if (!report) throw new NotFoundException('Report not found.');
+    if (report.queue !== 'moderator') throw new BadRequestException('This report is not in the moderator queue.');
+    const room = await this.ensureRoom(report, report.resolvedBy || user.username, [
+      { username: report.reportedUsername, role: 'accused' },
+      { username: report.reporterUsername, role: 'reporter' },
+    ], user.username);
+    if (report.appealDiscussionId !== room.id) {
+      report.appealDiscussionId = room.id;
+      await this.reports.save(report);
+    }
+    return { discussionId: room.id, discussion: room };
+  }
+
+  /** The reporter or the organiser enters the same appeal room. */
+  async organiserAppealRoom(id: string, user: any) {
+    const report = await this.reports.findOne({ where: { id } });
+    if (!report) throw new NotFoundException('Report not found.');
+    const me = lower(user?.username);
+    if (me !== lower(report.reportedUsername) && me !== lower(report.reporterUsername)) {
+      throw new ForbiddenException('You are not authorised to view this appeal.');
+    }
+    const room = await this.ensureRoom(report, report.resolvedBy || 'community_moderator', [
+      { username: report.reportedUsername, role: 'accused' },
+      { username: report.reporterUsername, role: 'reporter' },
+    ], user.username);
+    if (report.appealDiscussionId !== room.id) {
+      report.appealDiscussionId = room.id;
+      await this.reports.save(report);
+    }
+    return { discussionId: room.id, discussion: room };
+  }
+
+  /** Whether the signed-in player was removed from a competition, and why. */
+  async removalStatus(competitionId: string, user: any) {
+    const row = await this.dataSource.getRepository(CompetitionRemovalEntity)
+      .createQueryBuilder('r')
+      .where('r."competitionId" = :competitionId', { competitionId })
+      .andWhere('lower(r.username) = :username', { username: lower(user?.username) })
+      .getOne();
+    return { removed: !!row, removedAt: row?.createdAt || null, reason: row?.reason || '' };
+  }
+
+  /** Every report in one competition, for its organisers (moderators also see organiser reports). */
+  async forCompetition(competitionId: string, user: any) {
+    const organizers = await this.organizersOf(competitionId);
+    const me = lower(user?.username);
+    const moderator = this.isModerator(user);
+    if (!moderator && !organizers.some((o) => lower(o) === me)) {
+      throw new ForbiddenException('Only an organiser of this competition can view its reports.');
+    }
+    const rows = await this.reports.find({ where: { competitionId }, order: { createdAt: 'DESC' }, take: 200 });
+    const visible = rows
+      .filter((row) => lower(row.reportedUsername) !== me)
+      .filter((row) => moderator || row.queue === 'organiser');
+    return Promise.all(visible.map((row) => this.decorate(row)));
+  }
+
+  /** Reports a Community Moderator closed. Moderators see their own; a Super Admin may open anyone's. */
+  async moderatorActivity(username: string | undefined, user: any) {
+    const target = String(username || user?.username || '').trim();
+    const viewerIsSuper = String(user?.role || '') === UserRole.SUPER_ADMIN;
+    if (!viewerIsSuper && lower(target) !== lower(user?.username)) {
+      throw new ForbiddenException('You cannot access another moderator’s activity.');
+    }
+    const account: any = await this.users.findByUsername(target);
+    if (!account || (account.role !== UserRole.COMMUNITY_MODERATOR && account.adminType !== UserRole.COMMUNITY_MODERATOR)) {
+      throw new NotFoundException('That account is not a Community Moderator.');
+    }
+    const rows = await this.reports
+      .createQueryBuilder('r')
+      .where('r.queue = :queue', { queue: 'moderator' })
+      .andWhere('r.status IN (:...statuses)', { statuses: ['resolved', 'discarded'] })
+      .andWhere('r.uplifted = false')
+      .andWhere('lower(r."resolvedBy") = :target', { target: lower(target) })
+      .orderBy('r."resolvedAt"', 'DESC')
+      .take(200)
+      .getMany();
+    return Promise.all(rows.map((row) => this.decorate(row)));
   }
 
   // ─── Investigation (Community Moderator) ───────────────────────────────────
@@ -1235,9 +1515,10 @@ export class ReportsService implements OnModuleInit {
         activeRestrictions: profile.activeSanctions,
         reputationHistory: sanctionsCount.reputationHistory,
         sanctions: sanctionsCount.sanctions,
+        allSanctions: sanctionsCount.sanctions,
       },
       competition: comp,
-      teams,
+      teams: teams.map((t) => ({ ...t, leaderUsername: t.leaderUsername || t.leaderId })),
       matches,
       chat: chatRows.slice().reverse(),
       financial,

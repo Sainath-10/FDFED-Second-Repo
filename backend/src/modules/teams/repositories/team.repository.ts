@@ -142,6 +142,14 @@ export class TeamRepository {
     return this.joinRepo.find({ where: { teamId }, order: { createdAt: 'DESC' } });
   }
 
+  async getJoinRequestsByUser(fromUsername: string): Promise<TeamJoinRequestEntity[]> {
+    return this.joinRepo
+      .createQueryBuilder('r')
+      .where('lower(r."fromUsername") = lower(:fromUsername)', { fromUsername })
+      .orderBy('r."createdAt"', 'DESC')
+      .getMany();
+  }
+
   async findJoinRequestById(id: string): Promise<TeamJoinRequestEntity | null> {
     if (!isUUID(id)) return null;
     return this.joinRepo.findOne({ where: { id } });

@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { LocalReportsAPI as ReportsAPI } from '../../services/local/reporting.js';
+import { ReportsAPI } from '../../services/api.js';
 import useReportSync from '../../hooks/useReportSync.js';
 import ReputationBadge from '../../components/ReputationBadge.jsx';
 import EvidenceGallery from '../../components/EvidenceGallery.jsx';

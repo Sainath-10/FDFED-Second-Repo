@@ -1,129 +1,76 @@
 ﻿/**
- * NEXUS ESPORTS — Admin Revenue Configuration
+ * NEXUS ESPORTS — Platform fee settings
  *
- * the platform fee % and
- * min hosting cost form with the admin bounds (<15% and <₹100), the current-config
- * summary, revenue-config save, and the admin activity log entry.
+ * The percentage of the prize pool (with a minimum) charged to organizers when
+ * they publish. Saved on the server and applied to every new competition.
  */
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext.jsx';
-import NexusData from '../../services/data.js';
+import { useEffect, useState } from 'react';
+import { AdminAPI, RevenueAPI } from '../../services/api.js';
+import { calculatePlatformFee } from '../../services/competitions.js';
+import { LoadingState, Notice, PageHeader, formatDate, formatINR } from '../../components/ui.jsx';
 import { showToast } from '../../lib/toast.js';
-import '../../styles/pages/create-competition.css';
-import '../../styles/pages/admin/dashboard.css';
 
 export default function AdminRevenueConfig() {
-  const navigate = useNavigate();
-  const { session } = useAuth();
-
-  const initial = (NexusData && NexusData.getRevenueConfig) ? NexusData.getRevenueConfig() : { percentage: 7, minCost: 50 };
-  const [percentage, setPercentage] = useState(String(initial.percentage));
-  const [minCost, setMinCost] = useState(String(initial.minCost));
+  const [config, setConfig] = useState(null);
+  const [percentage, setPercentage] = useState('');
+  const [minCost, setMinCost] = useState('');
   const [error, setError] = useState('');
-  const [config, setConfig] = useState(initial);
+  const [saving, setSaving] = useState(false);
 
-  async function submit(e) {
-    e.preventDefault();
+  async function load() {
+    const res = await RevenueAPI.getConfig();
+    if (!res.ok) { setError(res.error || 'Unable to load the configuration.'); return; }
+    setConfig(res.data);
+    setPercentage(String(res.data.percentage));
+    setMinCost(String(res.data.minCost));
+  }
+  useEffect(() => { load(); }, []);
+
+  async function submit(event) {
+    event.preventDefault();
     setError('');
-    const pct = parseFloat(percentage);
-    const cost = parseFloat(minCost);
-
-    if (Number.isNaN(pct) || pct < 0) { setError('⚠️ Please enter a valid positive percentage.'); return; }
-    if (pct >= 15) { setError('⚠️ Percentage from Prize Pool must be strictly less than 15% (< 15%).'); return; }
-    if (Number.isNaN(cost) || cost < 0) { setError('⚠️ Please enter a valid positive minimum cost.'); return; }
-    if (cost >= 100) { setError('⚠️ Minimum Cost to host a Competition must be strictly less than 100 (< 100).'); return; }
-
-    const prevConfig = (NexusData && NexusData.getRevenueConfig) ? NexusData.getRevenueConfig() : { percentage: 7, minCost: 50 };
-
-    if (NexusData && typeof NexusData.saveRevenueConfig === 'function') {
-      const res = await NexusData.saveRevenueConfig({ percentage: pct, minCost: cost });
-      if (!res.ok) { setError(`⚠️ ${res.error || 'Failed to save revenue configuration.'}`); return; }
-    }
-
-    try {
-      const adminName = (session && (session.username || session.email)) || 'admin@nexus.gg';
-      const details = `Changed Revenue Configuration: Prize Pool Fee (${prevConfig.percentage}% → ${pct}%), Minimum Cost to Host (₹${prevConfig.minCost} → ₹${cost})`;
-      if (NexusData && typeof NexusData.logAdminActivity === 'function') {
-        NexusData.logAdminActivity(adminName, 'REVENUE_CONFIG_CHANGE', details, { prevPercentage: prevConfig.percentage, newPercentage: pct, prevMinCost: prevConfig.minCost, newMinCost: cost });
-      }
-    } catch (e) {
-      console.error('Error logging revenue config activity:', e);
-    }
-
-    const refreshed = (NexusData && NexusData.getRevenueConfig) ? NexusData.getRevenueConfig() : { percentage: pct, minCost: cost };
-    setConfig(refreshed);
-    showToast('Revenue configuration updated successfully!', 'success');
-    setTimeout(() => navigate('/pages/admin/revenue-transactions.html'), 500);
+    const pct = Number(percentage);
+    const cost = Number(minCost);
+    if (!Number.isFinite(pct) || pct < 0 || pct >= 15) { setError('The percentage must be at least 0 and below 15.'); return; }
+    if (!Number.isFinite(cost) || cost < 0 || cost >= 100) { setError('The minimum fee must be at least ₹0 and below ₹100.'); return; }
+    setSaving(true);
+    const res = await RevenueAPI.saveConfig({ percentage: pct, minCost: cost });
+    setSaving(false);
+    if (!res.ok) { setError(res.error || 'The configuration was not saved.'); return; }
+    await AdminAPI.logActivity(null, 'REVENUE_CONFIG_CHANGE', `Platform fee changed from ${config.percentage}% (min ${formatINR(config.minCost)}) to ${pct}% (min ${formatINR(cost)}).`, {
+      prevPercentage: config.percentage, newPercentage: pct, prevMinCost: config.minCost, newMinCost: cost,
+    });
+    showToast('Platform fee saved.');
+    load();
   }
 
+  if (!config && !error) return <main className="main-content"><LoadingState label="Loading configuration…" /></main>;
+  const preview = { percentage: Number(percentage) || 0, minCost: Number(minCost) || 0 };
+
   return (
-    <main className="create-comp-page">
-      <Link to="/pages/admin/revenue-transactions.html" className="back-btn">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M12 8H4M4 8L8 12M4 8L8 4" /></svg>
-        Back to Revenue Transactions
-      </Link>
-
-      <h1 className="page-title">Change Revenue Configuration</h1>
-      <p className="page-subtitle">Configure global platform fee percentage rates and minimum tournament hosting cost.</p>
-
-      <div style={{ background: 'rgba(198,255,51,0.08)', border: '1px solid rgba(198,255,51,0.3)', borderRadius: 12, padding: '14px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 14 }}>
-        <span style={{ fontSize: 26 }}>🛡️</span>
-        <div>
-          <h4 style={{ margin: '0 0 2px', color: '#c6ff33', fontSize: 15, fontWeight: 700 }}>Admin Privileged Configuration Control</h4>
-          <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 13 }}>Only Admin users can modify these global platform revenue thresholds. Changes will immediately take effect for all tournament creation logic.</p>
+    <main className="main-content">
+      <PageHeader title="Platform fee" subtitle="What organizers pay to publish a competition." />
+      <form className="ui-card" style={{ maxWidth: 640 }} onSubmit={submit}>
+        <div className="ui-field">
+          <label htmlFor="fee-pct">Percentage of the prize pool (below 15%)</label>
+          <input id="fee-pct" className="form-input" type="number" min={0} max={14.99} step="0.01" value={percentage} onChange={(e) => setPercentage(e.target.value)} />
         </div>
-      </div>
-
-      <div className="create-layout">
-        <div className="form-card">
-          <form id="revenue-config-form" noValidate onSubmit={submit}>
-            <div className="form-section-title">Platform Revenue Parameters</div>
-
-            <div className="form-group">
-              <label className="form-label" htmlFor="prize-percentage">Percentage from Prize Pool (%) <span style={{ color: '#ef4444' }}>*</span></label>
-              <input className="form-input" type="number" id="prize-percentage" step="0.1" min="0" max="14.99" placeholder="e.g. 7" required value={percentage} onChange={(e) => setPercentage(e.target.value)} />
-              <div style={{ fontSize: 12, color: '#fb923c', fontWeight: 600, marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span>⚠️ Admin Restriction:</span> Must be strictly less than 15% (&lt; 15%)
-              </div>
-            </div>
-
-            <div className="form-group" style={{ marginTop: 24 }}>
-              <label className="form-label" htmlFor="min-cost">Minimum Cost to host a Competition (₹) <span style={{ color: '#ef4444' }}>*</span></label>
-              <input className="form-input" type="number" id="min-cost" step="1" min="0" max="99.99" placeholder="e.g. 50" required value={minCost} onChange={(e) => setMinCost(e.target.value)} />
-              <div style={{ fontSize: 12, color: '#fb923c', fontWeight: 600, marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span>⚠️ Admin Restriction:</span> Must be strictly less than ₹100 (&lt; 100) (Default: 50)
-              </div>
-            </div>
-
-            {error && <div id="config-error-msg" style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid #ef4444', color: '#ef4444', padding: '12px 16px', borderRadius: 8, fontSize: 13, marginTop: 20, fontWeight: 600 }}>{error}</div>}
-
-            <div style={{ marginTop: 32, display: 'flex', alignItems: 'center', gap: 14 }}>
-              <button type="submit" className="btn-submit" style={{ flex: 1 }}>Save Revenue Configuration</button>
-              <Link to="/pages/admin/revenue-transactions.html" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '14px 28px', background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 12, fontSize: 14, fontWeight: 700, textDecoration: 'none' }}>Cancel</Link>
-            </div>
-          </form>
+        <div className="ui-field">
+          <label htmlFor="fee-min">Minimum fee in ₹ (below ₹100)</label>
+          <input id="fee-min" className="form-input" type="number" min={0} max={99.99} step="0.01" value={minCost} onChange={(e) => setMinCost(e.target.value)} />
         </div>
-
-        <div className="summary-card">
-          <h3>Current Configuration</h3>
-          <div className="summary-row"><span className="k">Prize Pool Percentage</span><span className="v" id="curr-percentage" style={{ color: '#c6ff33', fontWeight: 800 }}>{config.percentage}%</span></div>
-          <div className="summary-row"><span className="k">Min Hosting Cost</span><span className="v" id="curr-min-cost" style={{ color: '#fb923c', fontWeight: 800 }}>₹{config.minCost}</span></div>
-          <div className="summary-row"><span className="k">Access Scope</span><span className="v" style={{ color: '#60a5fa', fontWeight: 700 }}>Admin Only</span></div>
-          <div className="summary-row"><span className="k">Last Modified</span><span className="v" id="curr-last-modified" style={{ fontSize: 11 }}>{config.updatedAt ? new Date(config.updatedAt).toLocaleString() : 'Default Settings'}</span></div>
-
-          <div style={{ marginTop: 24 }}>
-            <h3>Enforcement Rules</h3>
-            <div className="steps-list">
-              <div className="step-item"><div className="step-num done">✓</div><span className="step-text">Calculates higher of Min Cost or Prize Pool %</span></div>
-              <div className="step-item"><div className="step-num done">✓</div><span className="step-text">Updates competition creation platform fees live</span></div>
-              <div className="step-item"><div className="step-num done">✓</div><span className="step-text">Enforces Admin-only restriction bounds (&lt;15% &amp; &lt;₹100)</span></div>
-            </div>
-          </div>
+        <div className="ui-card" style={{ marginBottom: 16 }}>
+          <div className="ui-row-meta" style={{ marginBottom: 6 }}>Examples with these values</div>
+          {[0, 1000, 10000, 100000].map((prize) => (
+            <div className="ui-kv" key={prize}><span className="k">Prize pool {formatINR(prize)}</span><span className="v">{formatINR(calculatePlatformFee(prize, preview))}</span></div>
+          ))}
         </div>
-      </div>
+        {config && <p className="ui-field-help">Last changed {formatDate(config.updatedAt, true)}{config.updatedBy ? ` by @${config.updatedBy}` : ''}.</p>}
+        {error && <Notice tone="danger">{error}</Notice>}
+        <div className="ui-dialog-actions">
+          <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+        </div>
+      </form>
     </main>
   );
 }
-
-

@@ -4,15 +4,23 @@
  * Shared by create/update services and unit tests. All monetary amounts are in INR.
  *
  * Implements (§2.2, §2.4, §3.1–§3.4):
- *  - Platform prize-pool ceiling ₹3,00,000 (organiser reputation limits may be stricter), min entry fee ₹10
- *  - Prize pools above ₹50,000 no longer require administrative approval
+ *  - Platform prize-pool ceiling ₹1,00,00,000 (organiser reputation limits may be stricter), min entry fee ₹10
+ *  - Prize pools above ₹10,00,000 need a finance moderator's approval (with the organiser's contact details)
  *  - Registration window validated separately from competition dates
  *  - Registration-closed field locks for name/game/type/description
  *  - Capacity (max teams / players per team) may not decrease below current values
  *  - Co-organizer rules: must exist, no self-assignment, no duplicates
  */
 
-export const MAX_PRIZE_POOL = 300_000; // ₹3,00,000 platform-wide ceiling
+export const MAX_PRIZE_POOL = 10_000_000; // ₹1,00,00,000 platform-wide ceiling
+/** Prize pools above this need a finance moderator's approval before the competition can be published. */
+export const LARGE_PRIZE_POOL = 1_000_000; // ₹10,00,000
+export const MAX_ENTRY_FEE = 300_000;
+
+/** Drafts nobody else can see yet: waiting for finance approval or for the platform fee. */
+export const UNPUBLISHED_PAYMENT_STATES = ['AWAITING_FINANCE_APPROVAL', 'AWAITING_PLATFORM_FEE'];
+export const isUnpublished = (competition: { paymentStatus?: string } | null | undefined) =>
+  UNPUBLISHED_PAYMENT_STATES.includes(String(competition?.paymentStatus || ''));
 export const MIN_ENTRY_FEE = 10; // ₹10
 export const MIN_COMPETITION_NAME = 3;
 export const MIN_DESCRIPTION = 10;
@@ -31,28 +39,100 @@ function validDate(d: Date | null | undefined): d is Date {
 }
 
 /**
- * Validates chronology of the registration window and competition dates as
- * separate concepts (§3.4). Registration may close before or after the
- * competition starts — only logical ordering is enforced, and no restriction is
- * imposed between reg-close and competition start.
+ * Validates the order of the registration window and competition dates:
+ * registration open <= registration close <= start <= end. The end may fall on
+ * the start day because the form saves the end date as 23:59:59 (one-day events).
  */
 export function validateDateWindow(w: DateWindow): ValidationError[] {
   const errors: ValidationError[] = [];
   const { registrationOpenAt, registrationCloseAt, startDate, endDate } = w;
 
-  const hasAnyDate = [registrationOpenAt, registrationCloseAt, startDate, endDate].some(validDate);
-  if (!hasAnyDate) return errors;
-
   if (validDate(registrationOpenAt) && validDate(registrationCloseAt) && registrationCloseAt.getTime() < registrationOpenAt.getTime()) {
-    errors.push({ field: 'registrationCloseAt', message: 'Registration Close must be on or after Registration Open.' });
+    errors.push({ field: 'registrationCloseAt', message: 'Registration must close on or after the day it opens.' });
   }
-  if (validDate(startDate) && validDate(endDate) && endDate.getTime() <= startDate.getTime()) {
-    errors.push({ field: 'endDate', message: 'Competition End Date must be strictly after the Start Date.' });
+  if (validDate(registrationCloseAt) && validDate(startDate) && registrationCloseAt.getTime() > startDate.getTime()) {
+    errors.push({ field: 'registrationCloseAt', message: 'Registration must close before the competition starts.' });
   }
-  if (validDate(registrationOpenAt) && validDate(endDate) && endDate.getTime() < registrationOpenAt.getTime()) {
-    errors.push({ field: 'endDate', message: 'Competition End Date cannot be before Registration Open.' });
+  if (validDate(registrationOpenAt) && validDate(startDate) && registrationOpenAt.getTime() > startDate.getTime()) {
+    errors.push({ field: 'registrationOpenAt', message: 'Registration must open before the competition starts.' });
+  }
+  if (validDate(startDate) && validDate(endDate) && endDate.getTime() < startDate.getTime()) {
+    errors.push({ field: 'endDate', message: 'The competition cannot end before it starts.' });
   }
   return errors;
+}
+
+/** Furthest a competition may be scheduled ahead. */
+export const MAX_SCHEDULE_AHEAD_DAYS = 730;
+
+/** New or changed dates must lie in the future and within the scheduling horizon. */
+export function validateFutureDates(w: DateWindow, now: Date = new Date()): ValidationError[] {
+  const errors: ValidationError[] = [];
+  const horizon = now.getTime() + MAX_SCHEDULE_AHEAD_DAYS * 86_400_000;
+  if (validDate(w.startDate)) {
+    if (w.startDate.getTime() <= now.getTime()) errors.push({ field: 'startDate', message: 'The start date must be in the future.' });
+    else if (w.startDate.getTime() > horizon) errors.push({ field: 'startDate', message: 'Competitions can be scheduled at most two years ahead.' });
+  }
+  if (validDate(w.endDate) && w.endDate.getTime() <= now.getTime()) {
+    errors.push({ field: 'endDate', message: 'The end date must be in the future.' });
+  }
+  if (validDate(w.registrationCloseAt) && w.registrationCloseAt.getTime() <= now.getTime()) {
+    errors.push({ field: 'registrationCloseAt', message: 'Registration must close in the future.' });
+  }
+  return errors;
+}
+
+/** Games, formats and fee models offered by the create and edit forms. */
+export const SUPPORTED_GAMES = [
+  'Counter-Strike 2',
+  'League of Legends',
+  'Dota 2',
+  'Fortnite',
+  'Valorant',
+  'Rocket League',
+  'Apex Legends',
+  'Overwatch 2',
+  'Street Fighter 6',
+];
+export const SUPPORTED_FORMATS = ['Single Elimination', 'Round Robin'];
+export const COMPETITION_TYPES = ['tournament', 'league'];
+export const FEE_TYPES = ['free', 'per_team', 'per_player'];
+export const MAX_TEAMS_LIMIT = 256;
+export const MAX_PLAYERS_LIMIT = 20;
+export const MAX_NAME_LENGTH = 100;
+export const MAX_DESCRIPTION_LENGTH = 2000;
+
+/** Plain-text name check shared by create and edit: trimmed length and no markup. */
+export function validateCompetitionName(name: unknown): string | null {
+  const clean = String(name ?? '').trim();
+  if (clean.length < MIN_COMPETITION_NAME) return `Competition name must be at least ${MIN_COMPETITION_NAME} characters.`;
+  if (clean.length > MAX_NAME_LENGTH) return `Competition name cannot exceed ${MAX_NAME_LENGTH} characters.`;
+  if (/[<>]/.test(clean)) return 'Competition name cannot contain < or >.';
+  return null;
+}
+
+export function validateDescription(description: unknown): string | null {
+  const clean = String(description ?? '').trim();
+  if (clean.length < MIN_DESCRIPTION) return `Description must be at least ${MIN_DESCRIPTION} characters (spaces do not count).`;
+  if (clean.length > MAX_DESCRIPTION_LENGTH) return `Description cannot exceed ${MAX_DESCRIPTION_LENGTH} characters.`;
+  return null;
+}
+
+/** Whole rupees only, so no amount is silently rounded anywhere in the ledger. */
+export function isWholeRupees(value: number): boolean {
+  return Number.isFinite(value) && Number.isInteger(value);
+}
+
+/**
+ * Prize places must not increase (1st >= 2nd >= 3rd), and a later place cannot
+ * pay when an earlier one pays nothing.
+ */
+export function validatePrizeOrder(amounts: number[]): string | null {
+  for (let i = 1; i < amounts.length; i++) {
+    if (amounts[i] > 0 && amounts[i - 1] <= 0) return `Place ${i + 1} cannot have a prize while place ${i} has none.`;
+    if (amounts[i] > amounts[i - 1]) return `Place ${i} must pay at least as much as place ${i + 1}.`;
+  }
+  return null;
 }
 
 /** True when registration has closed for the competition (§3.1). */
@@ -112,10 +192,13 @@ export function validatePrizeDistribution(prizes: unknown): string | null {
     const amount = parsePrizeAmount(raw);
     if (Number.isNaN(amount)) return 'Each prize distribution amount must be a valid number.';
     if (amount < 0) return 'Prize distribution amounts cannot be negative.';
+    if (!isWholeRupees(amount)) return 'Prize amounts must be whole rupees (no paise).';
   }
+  const orderError = validatePrizeOrder(prizes.map((entry) => parsePrizeAmount(entry && typeof entry === 'object' ? (entry as any).amount : entry)));
+  if (orderError) return orderError;
   const total = prizeDistributionTotal(prizes);
   if (total > MAX_PRIZE_POOL) {
-    return `Total prize pool cannot exceed ₹${MAX_PRIZE_POOL.toLocaleString('en-IN')} (₹3 lakh platform maximum).`;
+    return `Total prize pool cannot exceed ₹${MAX_PRIZE_POOL.toLocaleString('en-IN')} (platform maximum).`;
   }
   return null;
 }
@@ -142,7 +225,8 @@ export function validatePrizePool(prize: unknown): string | null {
   const num = typeof prize === 'number' ? prize : Number(prize);
   if (Number.isNaN(num)) return 'Prize pool must be a valid number.';
   if (num < 0) return 'Prize pool cannot be negative.';
-  if (num > MAX_PRIZE_POOL) return `Prize pool cannot exceed ₹${MAX_PRIZE_POOL.toLocaleString('en-IN')} (₹3 lakh platform maximum).`;
+  if (!isWholeRupees(num)) return 'Prize pool must be a whole number of rupees.';
+  if (num > MAX_PRIZE_POOL) return `Prize pool cannot exceed ₹${MAX_PRIZE_POOL.toLocaleString('en-IN')} (platform maximum).`;
   return null;
 }
 
@@ -151,8 +235,9 @@ export function validateEntryFee(feeType: string | undefined, amount: unknown): 
   if (!feeType || feeType === 'free') return null;
   const num = typeof amount === 'number' ? amount : Number(amount);
   if (Number.isNaN(num)) return 'Entry fee must be a valid number.';
+  if (!isWholeRupees(num)) return 'Entry fee must be a whole number of rupees.';
   if (num < MIN_ENTRY_FEE) return 'Entry fee must be at least ₹10.';
-  if (num > MAX_PRIZE_POOL) return 'Entry fee is unreasonably high.';
+  if (num > MAX_ENTRY_FEE) return 'Entry fee is unreasonably high.';
   return null;
 }
 
@@ -170,8 +255,10 @@ export function validateCapacityEdit(
   const errors: ValidationError[] = [];
   if (updates.maxTeams !== undefined) {
     const next = Number(updates.maxTeams);
-    if (Number.isNaN(next) || next < 2) {
-      errors.push({ field: 'maxTeams', message: 'Max Teams must be at least 2.' });
+    if (Number.isNaN(next) || !Number.isInteger(next) || next < 2) {
+      errors.push({ field: 'maxTeams', message: 'Max Teams must be a whole number of at least 2.' });
+    } else if (next > MAX_TEAMS_LIMIT) {
+      errors.push({ field: 'maxTeams', message: `Max Teams cannot exceed ${MAX_TEAMS_LIMIT}.` });
     } else if (comp.maxTeams !== undefined && next < comp.maxTeams) {
       errors.push({ field: 'maxTeams', message: `Max Teams cannot be decreased below its current value (${comp.maxTeams}).` });
     } else if (registeredTeamsCount > 0 && next < registeredTeamsCount) {
@@ -180,8 +267,10 @@ export function validateCapacityEdit(
   }
   if (updates.maxPlayersPerTeam !== undefined) {
     const next = Number(updates.maxPlayersPerTeam);
-    if (Number.isNaN(next) || next < 1) {
-      errors.push({ field: 'maxPlayersPerTeam', message: 'Max Players per Team must be at least 1.' });
+    if (Number.isNaN(next) || !Number.isInteger(next) || next < 1) {
+      errors.push({ field: 'maxPlayersPerTeam', message: 'Max Players per Team must be a whole number of at least 1.' });
+    } else if (next > MAX_PLAYERS_LIMIT) {
+      errors.push({ field: 'maxPlayersPerTeam', message: `Max Players per Team cannot exceed ${MAX_PLAYERS_LIMIT}.` });
     } else if (comp.maxPlayersPerTeam !== undefined && next < comp.maxPlayersPerTeam) {
       errors.push({ field: 'maxPlayersPerTeam', message: `Max Players per Team cannot be decreased below its current value (${comp.maxPlayersPerTeam}).` });
     } else if (largestRosterSize > 0 && next < largestRosterSize) {
@@ -216,7 +305,7 @@ export function resolveCoOrganizers(
     }
     if (seen.has(lower)) return; // silent dedupe of duplicates
     if (!existing.has(lower)) {
-      errors.push({ field: 'coOrganizers', message: 'This username does not exist.' });
+      errors.push({ field: 'coOrganizers', message: `Co-organizer username "${clean}" does not exist.` });
       return;
     }
     seen.add(lower);

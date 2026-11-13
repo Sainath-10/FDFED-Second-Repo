@@ -1,4 +1,5 @@
-import { IsString, IsDateString, IsEnum, IsOptional, MinLength, IsArray, IsNumber, IsBoolean, ValidateNested } from 'class-validator';
+import { IsString, IsDateString, IsEnum, IsOptional, MinLength, MaxLength, IsArray, IsNumber, IsBoolean, ValidateNested, IsInt, Min, Max, IsIn, ArrayMaxSize, IsEmail, Matches } from 'class-validator';
+import { SUPPORTED_GAMES, SUPPORTED_FORMATS, COMPETITION_TYPES, FEE_TYPES, MAX_TEAMS_LIMIT, MAX_PLAYERS_LIMIT, MAX_PRIZE_POOL, MAX_NAME_LENGTH, MAX_DESCRIPTION_LENGTH } from '../../../common/validation/competition.rules';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -13,6 +14,24 @@ export class PrizeDistributionDto {
   amount?: string | number;
 }
 
+/** Required when the prize pool is above ₹10,00,000: how finance can reach the organiser. */
+export class OrganiserContactDto {
+  @IsString() @MinLength(2) @MaxLength(80)
+  fullName: string;
+
+  @IsString() @Matches(/^\+?[0-9][0-9 -]{7,17}$/, { message: 'Enter a valid phone number (digits, spaces or dashes, optionally starting with +).' })
+  phone: string;
+
+  @IsEmail({}, { message: 'Enter a valid contact email.' }) @MaxLength(120)
+  email: string;
+
+  @IsOptional() @IsString() @MaxLength(120)
+  organisation?: string;
+
+  @IsString() @MinLength(20, { message: 'Explain in at least 20 characters how the prize pool is funded and why it is this large.' }) @MaxLength(2000)
+  purpose: string;
+}
+
 export class CreateCompetitionDto {
   @ApiProperty({
     description: 'Competition name',
@@ -20,6 +39,7 @@ export class CreateCompetitionDto {
   })
   @IsString()
   @MinLength(3)
+  @MaxLength(MAX_NAME_LENGTH)
   name: string;
 
   @ApiProperty({
@@ -27,6 +47,7 @@ export class CreateCompetitionDto {
     example: 'Annual football championship for all teams',
   })
   @IsString()
+  @MaxLength(MAX_DESCRIPTION_LENGTH)
   description: string;
 
   @ApiProperty({
@@ -49,21 +70,24 @@ export class CreateCompetitionDto {
     required: false,
   })
   @IsArray()
+  @ArrayMaxSize(10)
+  @IsString({ each: true })
   @IsOptional()
   coOrganizers?: string[];
 
   @ApiProperty({ required: false })
-  @IsString()
+  @IsIn(SUPPORTED_GAMES, { message: `game must be one of: ${SUPPORTED_GAMES.join(', ')}` })
   @IsOptional()
   game?: string;
 
   @ApiProperty({ required: false })
-  @IsString()
+  @IsIn(COMPETITION_TYPES)
   @IsOptional()
   type?: string;
 
   @ApiProperty({ required: false })
   @IsString()
+  @MaxLength(120)
   @IsOptional()
   location?: string;
 
@@ -73,20 +97,29 @@ export class CreateCompetitionDto {
   prizePool?: string;
 
   @ApiProperty({ required: false })
-  @IsNumber()
+  @IsInt({ message: 'Prize pool must be a whole number of rupees.' })
+  @Min(0)
+  @Max(MAX_PRIZE_POOL)
   @IsOptional()
   prize?: number;
 
   /** §2.2 — full prize distribution; the backend caps the total at ₹10,00,000. */
   @ApiProperty({ required: false, type: [PrizeDistributionDto] })
   @IsArray()
+  @ArrayMaxSize(3)
   @ValidateNested({ each: true })
   @Type(() => PrizeDistributionDto)
   @IsOptional()
   prizes?: PrizeDistributionDto[];
 
+  @ApiProperty({ required: false, description: 'Organiser contact details; required when the prize pool is above ₹10,00,000.' })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => OrganiserContactDto)
+  contactDetails?: OrganiserContactDto;
+
   @ApiProperty({ required: false })
-  @IsString()
+  @IsIn(SUPPORTED_FORMATS, { message: `format must be one of: ${SUPPORTED_FORMATS.join(', ')}` })
   @IsOptional()
   format?: string;
 
@@ -124,12 +157,16 @@ export class CreateCompetitionDto {
   regClose?: string;
 
   @ApiProperty({ required: false })
-  @IsNumber()
+  @IsInt({ message: 'Max teams must be a whole number.' })
+  @Min(2)
+  @Max(MAX_TEAMS_LIMIT)
   @IsOptional()
   maxTeams?: number;
 
   @ApiProperty({ required: false })
-  @IsNumber()
+  @IsInt({ message: 'Max players per team must be a whole number.' })
+  @Min(1)
+  @Max(MAX_PLAYERS_LIMIT)
   @IsOptional()
   maxPlayersPerTeam?: number;
 
@@ -149,12 +186,14 @@ export class CreateCompetitionDto {
   badgeClass?: string;
 
   @ApiProperty({ required: false })
-  @IsString()
+  @IsIn(FEE_TYPES, { message: `feeType must be one of: ${FEE_TYPES.join(', ')}` })
   @IsOptional()
   feeType?: string;
 
   @ApiProperty({ required: false })
-  @IsNumber()
+  @IsInt({ message: 'Entry fee must be a whole number of rupees.' })
+  @Min(0)
+  @Max(MAX_PRIZE_POOL)
   @IsOptional()
   entryFeeAmount?: number;
 
@@ -180,12 +219,16 @@ export class CreateCompetitionDto {
 }
 
 export class AddCoOrganizerDto {
-  @ApiProperty({
-    description: 'User ID or username of the co-organizer to add',
-    example: 'co_organizer_user',
-  })
+  @ApiProperty({ description: 'Username of the co-organizer to invite', example: 'co_organizer_user' })
   @IsString()
+  @MaxLength(60)
   organizerId: string;
+}
+
+export class ApprovalDecisionDto {
+  @ApiProperty({ enum: ['approved', 'rejected', 'pending'] })
+  @IsIn(['approved', 'rejected', 'pending'])
+  decision: string;
 }
 
 export class UpdateCompetitionDto {
@@ -199,6 +242,7 @@ export class UpdateCompetitionDto {
     required: false,
   })
   @IsString()
+  @MaxLength(MAX_NAME_LENGTH)
   @IsOptional()
   name?: string;
 
@@ -207,16 +251,17 @@ export class UpdateCompetitionDto {
     required: false,
   })
   @IsString()
+  @MaxLength(MAX_DESCRIPTION_LENGTH)
   @IsOptional()
   description?: string;
 
   @ApiProperty({ required: false })
-  @IsString()
+  @IsIn(SUPPORTED_GAMES, { message: `game must be one of: ${SUPPORTED_GAMES.join(', ')}` })
   @IsOptional()
   game?: string;
 
   @ApiProperty({ required: false })
-  @IsString()
+  @IsIn(COMPETITION_TYPES)
   @IsOptional()
   type?: string;
 
@@ -254,17 +299,22 @@ export class UpdateCompetitionDto {
 
   /** §3.3 — capacity may not decrease; validated against current values + registered teams/rosters */
   @ApiProperty({ required: false })
-  @IsNumber()
+  @IsInt()
+  @Min(2)
+  @Max(MAX_TEAMS_LIMIT)
   @IsOptional()
   maxTeams?: number;
 
   @ApiProperty({ required: false })
-  @IsNumber()
+  @IsInt()
+  @Min(1)
+  @Max(MAX_PLAYERS_LIMIT)
   @IsOptional()
   maxPlayersPerTeam?: number;
 
   @ApiProperty({ required: false })
-  @IsNumber()
+  @IsInt()
+  @Min(0)
   @IsOptional()
   entryFeeAmount?: number;
 
@@ -277,6 +327,7 @@ export class UpdateCompetitionDto {
   /** coOrganizers — validated to exist, no self-assignment, no duplicates (§2.1) */
   @ApiProperty({ type: [String], required: false })
   @IsArray()
+  @ArrayMaxSize(10)
   @IsString({ each: true })
   @IsOptional()
   coOrganizers?: string[];

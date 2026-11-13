@@ -7,7 +7,8 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { LocalReportsAPI as ReportsAPI, prepareEvidenceFile } from '../services/local/reporting.js';
+import { ReportsAPI } from '../services/api.js';
+import { prepareEvidenceFile } from '../lib/evidence.js';
 import { reasonsFor, capitalise } from '../lib/reporting.js';
 import { showToast } from '../lib/toast.js';
 import '../styles/pages/reports.css';

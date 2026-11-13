@@ -1,105 +1,71 @@
 /**
- * NEXUS ESPORTS — Organizer Revenue
+ * NEXUS ESPORTS — Organizer transactions
  *
- * totals +
- * paid count + entry fee, and the payment ledger derived from the competition's
- * teams / members / join requests per the competition fee model.
+ * The competition's real escrow ledger from the backend: every registration
+ * fee, refund, payout and release, with totals. Nothing here is estimated.
  */
-import { useMemo } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import NexusData from '../services/data.js';
-import '../styles/pages/admin/dashboard.css';
-
-const INLINE_CSS = `
-.rev-page { padding:40px 60px 80px 100px; min-height:100vh; }
-.rev-header { margin-bottom:28px; }
-.rev-title { font-family:var(--font-display); font-size:34px; text-transform:uppercase; color:var(--text-white); }
-.rev-sub { color:var(--text-muted); margin-top:6px; font-size:14px; }
-.rev-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:28px; }
-.rev-card { background:var(--bg-card); border:1px solid rgba(255,255,255,0.07); border-radius:14px; padding:20px; }
-.rev-num { font-family:var(--font-display); font-size:26px; color:var(--accent); }
-.rev-label { margin-top:4px; color:var(--text-muted); font-size:12px; text-transform:uppercase; letter-spacing:0.5px; }
-@media (max-width:800px) { .rev-page { padding:28px 18px; } .rev-grid { grid-template-columns:1fr; } }
-`;
-
-const money = (value) => `Rs.${(Number(value) || 0).toLocaleString('en-IN')}`;
-const paymentStatusLabel = (item) => (((item && item.paymentStatus === 'paid') || Number((item && item.feePaid) || 0) > 0) ? 'paid' : 'not_paid');
+import { paymentRequest, money, formatDateTime, txType, competitionState } from '../services/payments.js';
+import { EmptyState, ErrorState, LoadingState, PageHeader } from '../components/ui.jsx';
 
 export default function OrganizerRevenue() {
   const [params] = useSearchParams();
-  const compId = params.get('id') || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('last_comp_id') : '');
-  const comp = (NexusData && compId) ? NexusData.getCompetitionById(compId) : null;
+  const id = params.get('id') || '';
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
 
-  const rows = useMemo(() => {
-    const out = [];
-    if (!comp || !Array.isArray(comp.teams)) return out;
-    comp.teams.forEach((team) => {
-      if ((comp.feeType || 'free') === 'per_team') {
-        out.push({ name: team.name || 'Team', type: 'Team', team: team.name || '-', amount: Number(team.feePaid || comp.entryFeeAmount || 0), paymentStatus: paymentStatusLabel(team) });
-      }
-      const joinRequests = team.joinRequests || [];
-      const memberNames = new Set((team.members || []).map((m) => String(m.username || '').toLowerCase()));
-      (team.members || []).forEach((member) => {
-        if ((comp.feeType || 'free') === 'per_player') {
-          const requestPayment = joinRequests.find((req) => String(req.username || '').toLowerCase() === String(member.username || '').toLowerCase());
-          const paymentSource = requestPayment || member;
-          out.push({ name: member.username || member.displayName || 'Player', type: 'Player', team: team.name || '-', amount: Number(paymentSource.feePaid || comp.entryFeeAmount || 0), paymentStatus: paymentStatusLabel(paymentSource) });
-        }
-      });
-      joinRequests.forEach((req) => {
-        if ((comp.feeType || 'free') === 'per_player' && !memberNames.has(String(req.username || '').toLowerCase())) {
-          out.push({ name: req.username || req.displayName || 'Player', type: 'Player', team: team.name || '-', amount: Number(req.feePaid || comp.entryFeeAmount || 0), paymentStatus: paymentStatusLabel(req) });
-        }
-      });
-    });
-    return out;
-  }, [comp, compId]);
+  const load = useCallback(async () => {
+    if (!id) return;
+    try { setData(await paymentRequest(`/competitions/${encodeURIComponent(id)}/ledger`)); setError(''); } catch (err) { setError(err.message); }
+  }, [id]);
+  useEffect(() => { load(); }, [load]);
 
-  const total = rows.reduce((sum, row) => sum + (row.paymentStatus === 'paid' ? row.amount : 0), 0);
-  const paidCount = rows.filter((row) => row.paymentStatus === 'paid').length;
+  if (!id) return <main className="main-content"><ErrorState message="Open Transactions from a competition." /></main>;
+  if (error) return <main className="main-content"><ErrorState message={error} onRetry={load} /></main>;
+  if (!data) return <main className="main-content"><LoadingState label="Loading transactions…" /></main>;
+
+  const tx = data.transactions || [];
+  const registrations = tx.filter((t) => t.type === 'REGISTRATION');
+  const held = registrations.filter((t) => t.status === 'ESCROWED').reduce((s, t) => s + t.amountMinor, 0);
+  const refunded = tx.filter((t) => t.type === 'REFUND').reduce((s, t) => s + t.amountMinor, 0);
+  const released = tx.filter((t) => t.type === 'REG_FEE_RELEASED' && t.status !== 'REVERSED').reduce((s, t) => s + t.amountMinor, 0);
+  const state = competitionState(data.paymentStatus);
 
   return (
-    <main className="rev-page">
-      <style>{INLINE_CSS}</style>
-      <Link to={comp ? `/pages/competition-detail.html?id=${comp.id}` : '/pages/competitions.html'} className="btn-table-secondary" style={{ marginBottom: 24 }}>Back to Competition</Link>
-      <div className="rev-header">
-        <h1 className="rev-title" id="rev-title">{comp ? `${comp.name} Revenue` : 'Revenue'}</h1>
-        <p className="rev-sub" id="rev-sub">Teams and players who paid entry fees.</p>
+    <main className="main-content">
+      <PageHeader
+        title="Transactions"
+        subtitle={`${data.competition} · ${state.label}`}
+        actions={<Link className="btn-cancel" to={`/pages/competition-detail.html?id=${encodeURIComponent(id)}`}>Back to competition</Link>}
+      />
+      <div className="ui-grid" style={{ marginBottom: 24 }}>
+        <div className="ui-card"><div className="ui-row-meta">Registration fees held in escrow</div><div className="page-title" style={{ fontSize: 26 }}>{money(held)}</div></div>
+        <div className="ui-card"><div className="ui-row-meta">Released to you</div><div className="page-title" style={{ fontSize: 26 }}>{money(released)}</div></div>
+        <div className="ui-card"><div className="ui-row-meta">Refunded to players</div><div className="page-title" style={{ fontSize: 26 }}>{money(refunded)}</div></div>
+        <div className="ui-card"><div className="ui-row-meta">Paid registrations</div><div className="page-title" style={{ fontSize: 26 }}>{registrations.length}</div></div>
       </div>
+      <p className="ui-row-meta" style={{ marginBottom: 14 }}>Registration revenue stays in escrow until the competition ends, the dispute window closes and a finance moderator settles it.</p>
 
-      <div className="rev-grid">
-        <div className="rev-card"><div className="rev-num" id="rev-total">{money(total)}</div><div className="rev-label">Total Collected</div></div>
-        <div className="rev-card"><div className="rev-num" id="rev-paid">{paidCount}</div><div className="rev-label">Paid Entries</div></div>
-        <div className="rev-card"><div className="rev-num" id="rev-fee">{comp ? (comp.entryFee || 'Free') : 'Free'}</div><div className="rev-label">Entry Fee</div></div>
-      </div>
-
-      <div className="table-container-card">
-        <div className="table-header-between">
-          <h2 className="table-title-md">Payments</h2>
-        </div>
-        <div className="table-scroll-wrap">
-          <table className="admin-table">
-            <thead>
-              <tr><th>Name</th><th>Type</th><th>Team</th><th>Amount</th><th>Status</th></tr>
-            </thead>
-            <tbody id="rev-rows">
-              {rows.length ? rows.map((row, i) => (
-                <tr key={`${row.name}-${i}`}>
-                  <td>{row.name}</td>
-                  <td>{row.type}</td>
-                  <td>{row.team}</td>
-                  <td className="text-accent-bold">{money(row.amount)}</td>
-                  <td><span className={`status-pill ${row.paymentStatus === 'paid' ? 'approved' : 'pending'}`}>{row.paymentStatus === 'paid' ? 'PAID' : 'NOT PAID'}</span></td>
+      {tx.length === 0 ? <EmptyState title="No transactions yet" message="Fees appear here as teams register." /> : (
+        <div className="ui-table-wrap">
+          <table className="ui-table">
+            <thead><tr><th>Date</th><th>Type</th><th>Player</th><th>Amount</th><th>Status</th><th>Reference</th></tr></thead>
+            <tbody>
+              {tx.map((t) => (
+                <tr key={t.id}>
+                  <td>{formatDateTime(t.paidAt || t.createdAt)}</td>
+                  <td>{txType(t.type)}</td>
+                  <td>@{t.userUsername}</td>
+                  <td style={{ color: t.direction === 'OUT' ? '#fca5a5' : '#86efac' }}>{t.direction === 'OUT' ? '−' : '+'}{money(t.amountMinor)}</td>
+                  <td>{t.status}</td>
+                  <td style={{ fontSize: 12, color: 'var(--text-dimmer)' }}>{t.gatewayRefId || '—'}</td>
                 </tr>
-              )) : (
-                <tr><td colSpan="5" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 30 }}>No team or player payments yet.</td></tr>
-              )}
+              ))}
             </tbody>
           </table>
         </div>
-      </div>
+      )}
     </main>
   );
 }
-
-

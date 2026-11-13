@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { LocalReportsAPI as ReportsAPI } from '../services/local/reporting.js';
+import { ReportsAPI } from '../services/api.js';
 import useReportSync from '../hooks/useReportSync.js';
 import { DiscardModal, PlayerDecisionModal } from '../components/ReportActionModals.jsx';
 import EvidenceGallery from '../components/EvidenceGallery.jsx';

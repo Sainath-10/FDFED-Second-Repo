@@ -64,6 +64,8 @@ const SUBJECTS: Record<string, (name: string) => string> = {
   'competition-cancelled-player': n => `${n} has been cancelled`,
   'competition-cancelled-organizer': n => `Competition cancelled: ${n}`,
   'settlement-reversed-organizer': n => `Settlement reversed for ${n}`,
+  'competition-ended-early': n => `${n} was ended early`,
+  'unregistered-no-refund': n => `You unregistered from ${n}`,
 };
 
 export function mailSubject(template: string, competitionName: string): string {

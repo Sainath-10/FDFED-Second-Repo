@@ -1,248 +1,150 @@
 /**
  * NEXUS ESPORTS — Team Roster
  *
- * captain-aware roster with
- * remove-player, empty slots, the active-competitions card, permission-gated tabs
- * and the ended-competition view-only lock.
+ * The team dashboard's home: who is on the team, open slots, and the
+ * competition at a glance. The captain removes players (before the start) and
+ * invites more; any player can unregister from the header. Loaded from the
+ * backend, so it is the same on every device.
  */
-import { useEffect, useState } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
-import { useTeamContext, hasCompetitionStarted } from '../../hooks/useTeamContext.js';
-import NexusTeamWorkflow from '../../services/teamWorkflow.js';
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useTeamContext } from '../../hooks/useTeamContext.js';
 import { TeamsAPI } from '../../services/api.js';
-import TeamTabs from '../../components/TeamTabs.jsx';
+import TeamHeader, { TeamAvatar } from '../../components/TeamHeader.jsx';
+import CompetitionResults from '../../components/CompetitionResults.jsx';
 import ReportButton from '../../components/ReportButton.jsx';
+import { EmptyState, ErrorState, LoadingState, Notice, PageHeader, ReasonDialog, RemovedFromCompetition, copyText, formatDate } from '../../components/ui.jsx';
 import { showToast } from '../../lib/toast.js';
-import { assetUrl } from '../../lib/assets.js';
-import '../../styles/pages/team/team-roster.css';
 
 export default function TeamRoster() {
-  const { ctx, refresh, canManage, canChat, isTeamPlayer, isRemoved } = useTeamContext();
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    if (!ctx || !ctx.comp || !ctx.team) return;
-    if (NexusTeamWorkflow && NexusTeamWorkflow.refreshTeamManagementUI) {
-      NexusTeamWorkflow.refreshTeamManagementUI(ctx.comp.id, ctx.team.id);
-    }
-  }, [ctx]);
-
-  if (!ctx || !ctx.comp || !ctx.team) {
-    return <main className="main-content"><h1 className="page-title">Team</h1></main>;
-  }
-
-  const { comp, team, session, context } = ctx;
-  const members = NexusTeamWorkflow.getTeamRoster(comp.id, team.id) || [];
-  const maxPlayers = comp.maxPlayersPerTeam || 5;
-  const isEnded = !!(comp.ended || comp.status === 'completed');
-  // §6.2 — one shared competition-started check across all roster rules
-  const isStarted = hasCompetitionStarted(comp);
-  const rosterLocked = isEnded || isStarted;
-  const openSlots = Math.max(0, maxPlayers - members.length);
-  const hasRoom = members.length < maxPlayers;
-  const captain = team.leader || team.createdBy || 'Captain';
-  const addHref = `/pages/team/add-players.html?compId=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(team.id)}`;
-  const reportHref = `/pages/submit-report.html?compId=${encodeURIComponent(comp.id)}`;
-  const reportPlayerHref = (username) => `${reportHref}&against=${encodeURIComponent(username)}`;
-  const isMe = (username) => username.toLowerCase() === String((session && session.username) || '').toLowerCase();
-  // §6 — once the competition is running, reporting is the only roster action left.
-  const canReportNow = isStarted && !isEnded;
-
-  // §6.1 — removal requires a meaningful reason (modal), backend is authoritative
+  const t = useTeamContext();
   const [removeTarget, setRemoveTarget] = useState(null);
-  const [removeReason, setRemoveReason] = useState('');
-  const [removing, setRemoving] = useState(false);
 
-  function askRemovePlayer(username) {
-    if (!canManage || rosterLocked) return;
-    const record = members.find((m) => (m.username || '').toLowerCase() === username.toLowerCase());
-    if (record && Number(record.feePaid) > 0) {
-      showToast(`${username} has paid the entry fee and cannot be removed. You can raise a report instead.`, 'error');
-      return;
-    }
-    setRemoveTarget(username);
-    setRemoveReason('');
-  }
-
-  async function confirmRemovePlayer() {
-    const reason = String(removeReason || '').trim();
-    if (!removeTarget) return;
-    if (reason.length < 5) { showToast('Please provide a meaningful removal reason (min 5 characters).', 'error'); return; }
-    if (removing) return;
-    setRemoving(true);
-    let backendNotified = false;
-    try {
-      const res = await TeamsAPI.removeMember(team.dbId || team.id, removeTarget, reason);
-      if (res.ok) backendNotified = true;
-      else if (!/backend|network|Failed to fetch|is the backend/i.test(String(res.error || ''))) {
-        setRemoving(false);
-        showToast(res.error || 'Unable to remove player.', 'error'); // e.g. paid-participant block from the backend
-        return;
-      }
-    } catch (err) { /* offline — fall back to local workflow below */ }
-
-    const result = NexusTeamWorkflow.removePlayer({ compId: comp.id, teamId: team.id, username: removeTarget, reason, backendNotified });
-    setRemoving(false);
-    if (!result.ok) { showToast(result.error || 'Unable to remove player.', 'error'); setRemoveTarget(null); return; }
-    showToast(`${removeTarget} removed from ${team.name}. The participant has been notified.`, 'error');
-    setRemoveTarget(null);
-    setRemoveReason('');
-    refresh();
-  }
-
-  // This page is the team leader's roster management screen. An ordinary team
-  // player always belongs on their own competition roster instead, so returning
-  // from Team Chat (or a refresh) can never swap in the leader's interface.
-  if (isRemoved) {
+  if (t.loading && !t.team) return <main className="main-content"><LoadingState label="Loading your team…" /></main>;
+  if (t.isRemoved) return <RemovedFromCompetition reason={t.removalReason} />;
+  if (!t.team || !t.comp) {
     return (
       <main className="main-content">
-        <h1 className="page-title">Access restricted</h1>
-        <p className="page-subtitle">
-          You have been removed from this competition. You can no longer access its team or competition management features.
-        </p>
-        <Link to="/pages/my-reports.html" className="btn-primary">View your reports</Link>
+        <PageHeader title="Team" />
+        {t.error ? <ErrorState message={t.error} onRetry={t.refresh} /> : (
+          <EmptyState
+            title="You are not on a team yet"
+            message="Create a team for a competition, or ask to join an existing one."
+            action={<Link to="/pages/competitions.html" className="btn-primary">Browse competitions</Link>}
+          />
+        )}
       </main>
     );
   }
 
-  if (isTeamPlayer) {
-    return <Navigate to={`/pages/comp-participant.html?id=${encodeURIComponent(comp.id)}`} replace />;
-  }
+  const { team, comp, members, canManage, isEnded, isStarted, isLeader, rosterLocked } = t;
+  const me = String(t.session?.username || '').toLowerCase();
+  const maxPlayers = comp.maxPlayersPerTeam || 5;
+  const openSlots = Math.max(0, maxPlayers - members.length);
+  const addHref = `/pages/team/add-players.html?compId=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(team.id)}`;
+  const perPlayerFee = comp.feeType === 'per_player' && Number(comp.entryFeeAmount) > 0;
+  const joinLink = `${window.location.origin}/pages/join-teams.html?id=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(team.id)}`;
+  const sorted = [...members].sort((a, b) => Number(b.role === 'captain') - Number(a.role === 'captain') || a.username.localeCompare(b.username));
 
-  const showAdd = canManage && hasRoom && !rosterLocked;
+  async function removePlayer(reason) {
+    const res = await TeamsAPI.removeMember(team.id, removeTarget, reason);
+    if (!res.ok) { showToast(res.error || 'Unable to remove this player.', 'error'); return; }
+    showToast(`${removeTarget} was removed${perPlayerFee ? ' and their entry fee refunded' : ''}.`);
+    setRemoveTarget(null);
+    t.refresh();
+  }
 
   return (
     <main className="main-content">
-      <h1 className="page-title">{team.name}</h1>
-      <p className="page-subtitle">{comp.game || 'Game'} - Captain: {captain}</p>
+      <TeamHeader t={t} active="roster" />
 
-      <TeamTabs active="roster" context={context} canManage={canManage} canChat={canChat} isEnded={isEnded} />
-
-      {isEnded && (
-        <div style={{ background: 'rgba(251,146,60,0.12)', border: '1px solid rgba(251,146,60,0.4)', color: '#fb923c', padding: '10px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700, textAlign: 'center', margin: '12px 0 16px', letterSpacing: '0.5px' }}>
-          🏁 Competition has ended — team roster is now view-only.
-        </div>
+      {isEnded && <CompetitionResults competitionId={comp.id} highlightTeamId={team.id} compact />}
+      {isEnded && <Notice tone="warning">This competition has ended. The roster is final.</Notice>}
+      {!isEnded && isStarted && (
+        <Notice tone="info">
+          The competition has started, so the roster is locked.
+          {isLeader ? ' You lead the team until the end.' : ' You can still unregister from the header, but no fee is refunded after the start.'}
+        </Notice>
       )}
 
-
-      <div className="layout-wrapper">
-        <div>
-          <div className="roster-header-row">
-            <div className="roster-stats-summary">
-              {members.length} / {maxPlayers} players - <span className="summary-accent">{openSlots} slot{openSlots !== 1 ? 's' : ''} open</span>
+      <div className="td-two-col">
+        <section className="td-section">
+          <div className="td-section-head">
+            <div>
+              <h2 className="td-section-title">Roster</h2>
+              <p className="td-section-sub">{members.length} of {maxPlayers} players · {openSlots} slot{openSlots === 1 ? '' : 's'} open</p>
             </div>
-            {showAdd && <Link to={addHref} className="btn-primary header-btn-primary">+ Add New Player</Link>}
+            {canManage && !rosterLocked && openSlots > 0 && <Link to={addHref} className="td-btn td-btn-primary">+ Add players</Link>}
           </div>
 
-          <div className="roster-grid">
-            {members.map((member) => {
-              const username = member.username || 'user';
-              const initial = username.charAt(0).toUpperCase();
-              const isCaptain = (member.role || '').toLowerCase() === 'captain' || username.toLowerCase() === (team.createdBy || '').toLowerCase();
-              if (isCaptain) {
-                return (
-                  <div className="player-card player-card-captain" key={username}>
-                    <div className="player-avatar-placeholder">{initial}</div>
-                    <div className="p-name">{member.displayName || username}</div>
-                    <div className="p-role">Captain</div>
-                    <div className="p-stats">Username: {username}</div>
-                    <div className="captain-pill-wrapper"><span className="captain-pill">Captain</span></div>
-                    {!isMe(username) && (
-                      <div className="captain-pill-wrapper">
-                        <ReportButton compId={comp.id} against={username} targetRole="team_leader" source="team-roster" />
-                      </div>
-                    )}
-                  </div>
-                );
-              }
-              const paidEntryFee = Number(member.feePaid) > 0;
+          <div className="td-roster">
+            {sorted.map((member) => {
+              const isCaptain = member.role === 'captain';
+              const isMe = member.username.toLowerCase() === me;
               return (
-                <div className="player-card" key={username}>
-                  <div className="player-avatar-placeholder">{initial}</div>
-                  <div className="p-name">{member.displayName || username}</div>
-                  <div className="p-role">Player</div>
-                  <div className="p-stats">Username: {username}</div>
-                  <div className="captain-pill-wrapper">
-                    {canManage && !rosterLocked && !paidEntryFee && (
-                      <button className="btn-table-danger btn-remove-alt" onClick={() => askRemovePlayer(username)}>Remove</button>
-                    )}
-                    {!isEnded && paidEntryFee && <span className="status-pill approved status-pill-sm">Paid</span>}
-                    {!isMe(username) && (
-                      <Link to={reportPlayerHref(username)} className="btn-table-secondary">Report issue</Link>
-                    )}
-                    {!isMe(username) && (
-                      <ReportButton compId={comp.id} against={username} targetRole="player" source="team-roster" />
-                    )}
+                <article className={`td-player${isCaptain ? ' is-captain' : ''}${isMe ? ' is-me' : ''}`} key={member.username}>
+                  {isCaptain && <span className="td-player-badge">CAPTAIN</span>}
+                  <div className="td-player-top">
+                    <TeamAvatar name={member.username} size="md" />
+                    <div style={{ minWidth: 0 }}>
+                      <div className="td-player-name">@{member.username}</div>
+                      <div className="td-player-role">{isCaptain ? 'Team captain' : 'Player'}{isMe ? ' · you' : ''}</div>
+                    </div>
                   </div>
-                </div>
+                  {(!isMe && !isEnded) || (canManage && !isCaptain && !rosterLocked) ? (
+                    <div className="td-player-actions">
+                      {canManage && !isCaptain && !rosterLocked && (
+                        <button type="button" className="td-btn td-btn-sm td-btn-danger" onClick={() => setRemoveTarget(member.username)}>Remove</button>
+                      )}
+                      {!isMe && !isEnded && (
+                        <ReportButton compId={comp.id} against={member.username} targetRole={isCaptain ? 'team_leader' : 'player'} source="team-roster" className="td-btn td-btn-sm" />
+                      )}
+                    </div>
+                  ) : null}
+                </article>
               );
             })}
 
-            {canManage && !rosterLocked && Array.from({ length: openSlots }).map((_, i) => (
-              <div className="player-card player-card-empty" key={`empty-${i}`} onClick={() => navigate(addHref)}>
-                <div className="empty-slot-icon">+</div>
-                <div className="p-name player-name-placeholder">Empty Slot</div>
-                <div className="p-role player-role-placeholder">Click to add player</div>
-                <div className="empty-slot-btn-wrapper">
-                  <Link to={addHref} className="btn-table-secondary btn-invite-mini">Invite Player</Link>
-                </div>
-              </div>
+            {canManage && !rosterLocked && Array.from({ length: Math.min(openSlots, 6) }).map((_, i) => (
+              <Link className="td-player td-player-empty" key={`empty-${i}`} to={addHref}>
+                <span className="td-plus" aria-hidden="true">+</span>
+                <span>Open slot</span>
+                <small>Invite a player</small>
+              </Link>
             ))}
           </div>
+        </section>
 
-          {canManage && hasRoom === false && !rosterLocked && (
-            <div style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.35)', color: '#f87171', padding: '10px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700, textAlign: 'center', marginTop: 16 }}>
-              🚫 Team is full — all {maxPlayers} slots are taken. The backend also enforces this limit on every invite and join-request approval.
+        <aside className="td-side">
+          <div className="td-panel">
+            <h3 className="td-section-title" style={{ fontSize: 16, marginBottom: 8 }}>Competition</h3>
+            <div className="td-kv"><span>Name</span><strong>{comp.name}</strong></div>
+            <div className="td-kv"><span>Starts</span><strong>{formatDate(comp.startDate)}</strong></div>
+            <div className="td-kv"><span>Ends</span><strong>{formatDate(comp.endDate)}</strong></div>
+            <div className="td-kv"><span>Prize pool</span><strong>{Number(comp.prize) > 0 ? `₹${Number(comp.prize).toLocaleString('en-IN')}` : 'None'}</strong></div>
+            <Link className="td-btn" style={{ width: '100%', marginTop: 12 }} to={`/pages/comp-info.html?id=${encodeURIComponent(comp.id)}`}>Open competition page</Link>
+          </div>
+
+          {canManage && !rosterLocked && (
+            <div className="td-panel">
+              <h3 className="td-section-title" style={{ fontSize: 16, marginBottom: 6 }}>Recruit players</h3>
+              <p className="td-section-sub" style={{ marginBottom: 12 }}>Share this link. Players who open it can ask to join; you approve them under Join requests.</p>
+              <button type="button" className="td-btn" style={{ width: '100%' }} onClick={async () => showToast((await copyText(joinLink)) ? 'Join link copied.' : 'Copy failed — copy it from the address bar of the join page.')}>Copy join link</button>
             </div>
           )}
-
-          <div className="active-comps-card">
-            <h2 className="active-comps-title">Active Competitions</h2>
-            <div className="comp-list-stack">
-              <div className="comp-item-mini">
-                <img src={assetUrl('b890c61489a080992ad7e99adabb1145e6d59606.png')} className="comp-img-mini" alt="Competition" />
-                <div className="comp-info-mini">
-                  <div className="comp-name-mini">{comp.name}</div>
-                  <div className="comp-meta-mini">{comp.game}</div>
-                </div>
-                <span className="status-pill ongoing">{String(comp.status || 'ongoing').toUpperCase()}</span>
-              </div>
-            </div>
-          </div>
-        </div>
+        </aside>
       </div>
 
-      {removeTarget && (
-        <div className="modal-overlay open" style={{ display: 'flex' }}>
-          <div className="modal-box" style={{ maxWidth: 460 }}>
-            <div className="modal-header">
-              <h3 className="modal-title" style={{ color: '#f87171' }}>Remove Player</h3>
-              <button className="modal-close" onClick={() => setRemoveTarget(null)}>✕</button>
-            </div>
-            <p style={{ color: '#9aa4b2', fontSize: 14, marginBottom: 10 }}>
-              You are removing <strong style={{ color: '#fff' }}>{removeTarget}</strong> from <strong style={{ color: '#c6ff33' }}>{team.name}</strong>.
-            </p>
-            <p style={{ color: '#9aa4b2', fontSize: 12, marginBottom: 12 }}>
-              A meaningful reason is mandatory and is shared with the participant and recorded in the audit log. If this participant has already paid a participation fee for this competition, direct removal is blocked — use the dispute/report workflow instead.
-            </p>
-            <textarea
-              className="form-input"
-              rows={3}
-              placeholder="e.g. Repeatedly missed scheduled matches without notice"
-              value={removeReason}
-              onChange={(e) => setRemoveReason(e.target.value)}
-              style={{ width: '100%', marginBottom: 16 }}
-              maxLength={500}
-            />
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-              <button className="btn-cancel" onClick={() => setRemoveTarget(null)}>Cancel</button>
-              <button className="btn-submit" style={{ background: '#ef4444' }} disabled={removing} onClick={confirmRemovePlayer}>{removing ? 'Removing…' : 'Remove Player'}</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ReasonDialog
+        open={!!removeTarget}
+        title="Remove player"
+        description={`You are removing @${removeTarget} from ${team.name}. The reason is shared with them and recorded.${perPlayerFee ? ' Their entry fee is refunded from escrow.' : ''}`}
+        placeholder="e.g. Repeatedly missed scheduled matches without notice"
+        minLength={5}
+        confirmLabel="Remove player"
+        onConfirm={removePlayer}
+        onClose={() => setRemoveTarget(null)}
+      />
     </main>
   );
 }
-
-

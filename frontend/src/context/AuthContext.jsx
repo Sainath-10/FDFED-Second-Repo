@@ -1,12 +1,9 @@
 /**
  * NEXUS ESPORTS — Auth context
  *
- * React state wrapper around src/services/auth.js. It keeps the same session
- * in localStorage (`nexus.auth.session`) as the client so existing users
- * remain logged in, and exposes session state to the component tree.
- *
- * Navigation is left to the caller/router: `login()` resolves to
- * { ok, redirectPath, revokedReason, ... }.
+ * Holds the signed-in session for the component tree. On load (and whenever the
+ * tab regains focus) the account is re-read from the server, so a role change,
+ * ban or revocation made elsewhere takes effect without a manual sign-out.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import * as AuthService from '../services/auth.js';
@@ -16,30 +13,30 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [session, setSessionState] = useState(() => AuthService.getSession());
 
- // Re-read once on mount (handles token written by a previous page load).
+  const refreshSession = useCallback(async () => {
+    const fresh = await AuthService.refreshFromServer();
+    setSessionState(fresh || AuthService.getSession());
+    return fresh;
+  }, []);
+
   useEffect(() => {
-    setSessionState(AuthService.getSession());
-  }, []);
+    if (!session) return undefined;
+    refreshSession();
+    const onFocus = () => refreshSession();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!session]);
 
-  const refreshSession = useCallback(() => {
-    const next = AuthService.getSession();
-    setSessionState(next);
-    return next;
-  }, []);
-
- /** options: { username, password, roleRoutes, fallbackPath } */
+  /** options: { username, password, roleRoutes, fallbackPath } */
   const login = useCallback(async (options) => {
     const result = await AuthService.login(options);
-    if (result.ok) {
-      setSessionState(result.user || AuthService.getSession());
-    }
+    if (result.ok) setSessionState(result.user);
     return result;
   }, []);
 
- /** options: { username, email, password, firstName, lastName } */
-  const signup = useCallback(async (options) => {
-    return AuthService.createAccount(options);
-  }, []);
+  /** options: { username, email, password } */
+  const signup = useCallback((options) => AuthService.createAccount(options), []);
 
   const logout = useCallback(() => {
     AuthService.clearSession();
@@ -57,13 +54,8 @@ export function AuthProvider({ children }) {
       signup,
       logout,
       refreshSession,
- // re-export constants/helpers used by pages/guards
       getRoleProfilePath: AuthService.getRoleProfilePath,
-      requireProfileAccess: AuthService.requireProfileAccess,
       SESSION_KEY: AuthService.SESSION_KEY,
-      ACCOUNTS_KEY: AuthService.ACCOUNTS_KEY,
-      getAccounts: AuthService.getAccounts,
-      DEMO_ACCOUNTS: AuthService.DEMO_ACCOUNTS,
     }),
     [session, login, signup, logout, refreshSession],
   );
@@ -73,12 +65,8 @@ export function AuthProvider({ children }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error('useAuth must be used within an <AuthProvider>');
-  }
+  if (!ctx) throw new Error('useAuth must be used within an <AuthProvider>');
   return ctx;
 }
 
 export default AuthContext;
-
-

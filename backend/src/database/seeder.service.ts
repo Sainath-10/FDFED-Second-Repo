@@ -15,7 +15,7 @@ export class SeederService implements OnApplicationBootstrap {
 
   async onApplicationBootstrap() {
     try {
-      console.log('⚡ Running PostgreSQL database seed check...');
+      console.log('Running database seed check...');
       await this.userRepo.seedDemoAccounts();
       await this.compRepo.seedDemoCompetitions();
       await this.policiesService.seedDefaultPolicies();
@@ -23,26 +23,7 @@ export class SeederService implements OnApplicationBootstrap {
       // Seed initial revenue configuration
       await this.revenueService.getConfig();
 
-      // Seed sample revenue transactions if table is empty
-      const txCheck = await this.revenueService.getTransactions({ limit: 1 });
-      if (txCheck.total === 0) {
-        await this.revenueService.createTransaction({
-          competitionId: 'comp-seed-1',
-          competitionName: 'Apex Legends Winter Clash',
-          organizerName: 'Nexus Operations',
-          grossAmount: 1000,
-          status: 'CONFIRMED',
-        });
-        await this.revenueService.createTransaction({
-          competitionId: 'comp-seed-2',
-          competitionName: 'Valorant Community Cup',
-          organizerName: 'Riot Nexus',
-          grossAmount: 500,
-          status: 'CONFIRMED',
-        });
-      }
-
-      console.log('✅ PostgreSQL database seeding completed successfully');
+      console.log('Database seed check complete');
     } catch (err) {
       console.error('⚠️ Seeding error (database may not be ready yet):', err.message);
     }

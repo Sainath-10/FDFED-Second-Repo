@@ -1,368 +1,246 @@
 /**
  * NEXUS ESPORTS — Create Team
  *
- * the team
- * name/tag inputs, logo picker (the avatar stored on the team is the logo SVG
- * markup, exactly as the `innerHTML`), the invite link (built from the
- * active team context), copy-to-clipboard, the per-team checkout modal, and the
- * 1.5s redirect to my-activity on success.
+ * Registers a team with the backend, which checks the registration window,
+ * capacity, the private join code, duplicate names, who may play, and takes the
+ * entry fee (simulated in mock payment mode). The page previews the team as it
+ * is named, and afterwards hands the captain a link to recruit players.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import NexusData from '../services/data.js';
-import NexusTeamWorkflow from '../services/teamWorkflow.js';
-import { CompetitionsAPI, TeamsAPI } from '../services/api.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { TeamsAPI } from '../services/api.js';
+import { isOrganizerOf, useCompetition } from '../services/competitions.js';
 import useJoinCodeGate from '../hooks/useJoinCodeGate.jsx';
+import { TeamAvatar } from '../components/TeamHeader.jsx';
+import { ConfirmDialog, ErrorState, LoadingState, Notice, copyText, formatDate, formatINR } from '../components/ui.jsx';
+import { competitionBanner } from '../lib/assets.js';
 import { showToast } from '../lib/toast.js';
-import { AVATAR_ACCEPT, fileToAvatarDataUrl } from '../lib/imageAvatar.js';
 import '../styles/pages/create-team.css';
 
-const LOGOS = [
-  { id: 'shield', svg: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>' },
-  { id: 'trophy', svg: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2z"></path></svg>' },
-  { id: 'gamepad', svg: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"></rect><path d="M6 12h4"></path><path d="M8 10v4"></path><line x1="15" y1="13" x2="15.01" y2="13"></line><line x1="18" y1="11" x2="18.01" y2="11"></line></svg>' },
-  { id: 'bolt', svg: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>' },
-  { id: 'star', svg: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>' },
-  { id: 'diamond', svg: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h12l4 6-10 12L2 9z"></path><path d="M11 3 8 9l3 12"></path><path d="M13 3l3 6-3 12"></path><path d="M2.2 9h19.6"></path></svg>' },
-];
+const STAFF_ROLES = ['admin', 'super-admin', 'super_admin', 'finance_moderator', 'community_moderator'];
 
-const UPLOADED_LOGO = 'upload';
+function Steps({ current }) {
+  const steps = ['Name your team', 'Register', 'Invite players'];
+  return (
+    <ol className="ct-steps" aria-label="Progress">
+      {steps.map((label, i) => (
+        <li key={label} className={i < current ? 'is-done' : i === current ? 'is-current' : ''} aria-current={i === current ? 'step' : undefined}>
+          <span className="ct-step-dot">{i < current ? '✓' : i + 1}</span>
+          <span>{label}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
 
-const UPLOAD_SVG = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>';
+function CompetitionSummary({ comp }) {
+  const max = comp.maxTeams || 0;
+  const registered = comp.activeTeams.length;
+  return (
+    <aside className="ct-summary">
+      <h2 className="ct-card-title">Competition</h2>
+      <div className="ct-kv"><span>Starts</span><strong>{formatDate(comp.startDate, true)}</strong></div>
+      <div className="ct-kv"><span>Registration closes</span><strong>{formatDate(comp.registrationCloseAt || comp.startDate, true)}</strong></div>
+      <div className="ct-kv"><span>Format</span><strong>{comp.format}</strong></div>
+      <div className="ct-kv"><span>Players per team</span><strong>Up to {comp.maxPlayersPerTeam || 5}</strong></div>
+      <div className="ct-kv"><span>Entry fee</span><strong>{comp.entryFee}</strong></div>
+      <div className="ct-kv"><span>Prize pool</span><strong className="ct-accent">{comp.prize > 0 ? comp.prizePool : 'None'}</strong></div>
+      <div className="ct-capacity">
+        <div className="ct-capacity-row"><span>Teams registered</span><strong>{registered}{max ? ` / ${max}` : ''}</strong></div>
+        {max > 0 && <div className="ct-meter"><span style={{ width: `${Math.min(100, (registered / max) * 100)}%` }} /></div>}
+      </div>
+      <Link className="ct-link" to={`/pages/comp-info.html?id=${encodeURIComponent(comp.id)}`}>View competition details →</Link>
+    </aside>
+  );
+}
 
 export default function CreateTeam() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const { session } = useAuth();
+  const id = params.get('id') || params.get('compId') || '';
+  const { loading, error, data: comp, reload } = useCompetition(id);
+  const joinCodeGate = useJoinCodeGate(comp);
 
   const [name, setName] = useState('');
-  const [tag, setTag] = useState('');
-  const [activeLogo, setActiveLogo] = useState('shield');
-  const [uploadedLogo, setUploadedLogo] = useState('');
-  const logoInputRef = useRef(null);
-  const [checkout, setCheckout] = useState(null); // { comp, teamName, feeAmount }
+  const [touched, setTouched] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(null);
+  const [created, setCreated] = useState(null);
 
-  function getCompIdFromPage() {
-    const fromQuery = params.get('id') || params.get('compId');
-    if (fromQuery) return fromQuery;
-    if (NexusTeamWorkflow && typeof NexusTeamWorkflow.getActiveTeamContext === 'function') {
-      const context = NexusTeamWorkflow.getActiveTeamContext();
-      if (context && context.compId) return context.compId;
-    }
-    return null;
+  if (!id) return <main className="main-content"><ErrorState message="Open Create Team from a competition page." /></main>;
+  if (loading && !comp) return <main className="main-content"><LoadingState label="Loading competition…" /></main>;
+  if (error || !comp) return <main className="main-content"><ErrorState message={error || 'That competition could not be found.'} onRetry={reload} /></main>;
+
+  const me = String(session?.username || '').toLowerCase();
+  const myTeam = comp.activeTeams.find((t) => t.members.some((m) => m.username.toLowerCase() === me));
+  const organizer = isOrganizerOf(comp, me) || (comp.pendingOrganizers || []).some((o) => String(o).toLowerCase() === me);
+  const staff = STAFF_ROLES.includes(String(session?.role || ''));
+  const fee = comp.feeType === 'free' ? 0 : comp.entryFeeAmount;
+  const trimmed = name.trim();
+  const taken = comp.activeTeams.some((t) => t.name.trim().toLowerCase() === trimmed.toLowerCase());
+  const nameError = !trimmed ? 'Give your team a name.'
+    : trimmed.length < 3 ? 'At least 3 characters.'
+      : trimmed.length > 40 ? 'At most 40 characters.'
+        : /[<>]/.test(trimmed) ? 'Cannot contain < or >.'
+          : taken ? 'Another team in this competition already uses this name.' : '';
+  const blocked = !comp.registration.open || organizer || staff || !!myTeam;
+  const maxPlayers = comp.maxPlayersPerTeam || 5;
+
+  async function register(joinCode) {
+    setBusy(true);
+    const res = await TeamsAPI.create({ name: trimmed, competitionId: comp.id, ...(joinCode ? { joinCode } : {}) });
+    setBusy(false);
+    if (!res.ok) { showToast(res.error || 'Unable to create the team.', 'error'); return false; }
+    setCreated(res.data);
+    showToast(`Team "${res.data.name}" is registered.`);
+    return true;
   }
 
-  function buildInviteLink(compId, teamId) {
-    const base = window.location.href.split('?')[0].replace('create-team.html', 'join-teams.html');
-    const p = new URLSearchParams();
-    if (compId) p.set('id', compId);
-    if (teamId) p.set('teamId', teamId);
-    const query = p.toString();
-    return query ? `${base}?${query}` : base;
+  async function submit(event) {
+    event.preventDefault();
+    setTouched(true);
+    if (blocked || nameError) return;
+    const code = await joinCodeGate.requireCode();
+    if (code === null) return;
+    if (fee > 0) setConfirming({ joinCode: code });
+    else await register(code);
   }
 
-  const context = NexusTeamWorkflow && typeof NexusTeamWorkflow.getActiveTeamContext === 'function'
-    ? NexusTeamWorkflow.getActiveTeamContext()
-    : null;
+  const banner = (
+    <header className="ct-hero" style={{ '--cover': `url("${competitionBanner(comp)}")` }}>
+      <Link to={`/pages/comp-info.html?id=${encodeURIComponent(comp.id)}`} className="ct-back">← {comp.name}</Link>
+      <div className="ct-hero-copy">
+        <span className="ct-eyebrow">{comp.game} · {comp.format}</span>
+        <h1>{created ? 'Your team is in' : 'Create your team'}</h1>
+        <p>{created ? `${created.name} is registered for ${comp.name}.` : `Register a team for ${comp.name}. You become its captain.`}</p>
+      </div>
+    </header>
+  );
 
-  // §12.4 / §2.4 — direct create-team.html URLs are gated too.
-  const gateCompId = getCompIdFromPage();
-  const localComp = gateCompId && NexusData ? NexusData.getCompetitionById(gateCompId) : null;
-  const [serverComp, setServerComp] = useState(null);
-  const [accessChecked, setAccessChecked] = useState(false);
-  const [unlocked, setUnlocked] = useState(false);
-  const accessStartedRef = useRef(false);
-  // The backend decides visibility; the local copy can be stale or missing it.
-  const gateComp = localComp || serverComp
-    ? { ...serverComp, ...localComp, visibility: serverComp?.visibility || localComp?.visibility }
-    : null;
-  // Prefer the fresh server copy: the cached one may predate a date change or cancellation.
-  const registration = NexusData?.registrationState
-    ? NexusData.registrationState(serverComp ? NexusData.mapApiCompetition(serverComp) : localComp)
-    : { open: true };
-  const registrationBlocked = accessChecked && (serverComp || localComp) && !registration.open;
-  const joinCodeGate = useJoinCodeGate(gateComp);
-
-  const backendCompId = localComp?.dbId || gateCompId;
-  useEffect(() => {
-    if (!backendCompId) { setAccessChecked(true); return undefined; }
-    let cancelled = false;
-    CompetitionsAPI.getById(backendCompId)
-      .then((res) => {
-        if (cancelled || !res.ok || !res.data) return;
-        // Team creation reads the local copy, which a new browser may not have yet.
-        if (!NexusData.getCompetitionById(res.data.id)) {
-          NexusData.updateCompetition(NexusData.mapApiCompetition(res.data));
-        }
-        setServerComp(res.data);
-      })
-      .catch(() => { /* backend still enforces the code when the team is created */ })
-      .finally(() => { if (!cancelled) setAccessChecked(true); });
-    return () => { cancelled = true; };
-  }, [backendCompId]);
-
-  // §2.4 — a private competition's join code comes before the team form.
-  useEffect(() => {
-    if (!accessChecked || accessStartedRef.current) return;
-    accessStartedRef.current = true;
-    if (!gateComp || gateComp.visibility !== 'private') { setUnlocked(true); return; }
-    if (!session) { navigate('/pages/login.html'); return; }
-    const leave = () => navigate('/pages/competitions.html');
-    const requestCode = async () => {
-      const code = await joinCodeGate.requireCode();
-      if (code === null) leave();
-      else setUnlocked(true);
-    };
-    requestCode();
-  }, [accessChecked]);
-  const [inviteLink, setInviteLink] = useState(() => buildInviteLink(getCompIdFromPage(), context && context.teamId ? context.teamId : ''));
-
-  function selectedLogo() {
-    if (activeLogo === UPLOADED_LOGO && uploadedLogo) return uploadedLogo;
-    return (LOGOS.find((l) => l.id === activeLogo) || LOGOS[0]).svg;
-  }
-
-  function onUploadTile() {
-    // An earlier upload can be reselected; clicking it again picks a new file.
-    if (uploadedLogo && activeLogo !== UPLOADED_LOGO) setActiveLogo(UPLOADED_LOGO);
-    else if (logoInputRef.current) logoInputRef.current.click();
-  }
-
-  async function onLogoFile(event) {
-    const file = event.target.files && event.target.files[0];
-    event.target.value = ''; // lets the same file be chosen again
-    if (!file) return;
-    try {
-      setUploadedLogo(await fileToAvatarDataUrl(file));
-      setActiveLogo(UPLOADED_LOGO);
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
-  }
-
-  function copyInviteLink() {
-    navigator.clipboard.writeText(inviteLink).then(() => showToast('Invite link copied to clipboard!'));
-  }
-
-  function proceedCreateTeam(compId, teamName, teamTag, logoSvg, joinCode = '', backendTeam = null) {
-    const result = NexusTeamWorkflow.createTeam({
-      compId,
-      name: teamName,
-      tag: teamTag,
-      avatar: logoSvg,
-      joinCode,
-      dbId: backendTeam?.id,
-      backendSynced: !!backendTeam?.id,
-    });
-    if (!result.ok) { showToast(result.error || 'Failed to create team.', 'error'); return; }
-    showToast(`Team "${teamName}" registered successfully!`);
-    if (result.team && result.team.id) setInviteLink(buildInviteLink(compId, result.team.id));
-    setTimeout(() => navigate('/pages/my-activity.html'), 1500);
-  }
-
-  /** §16 — confirm with the backend before reporting success (local fallback when offline). */
-  async function submitTeam(compId, teamName, teamTag, logoSvg, joinCode) {
-    const comp = NexusData ? NexusData.getCompetitionById(compId) : null;
-    let backendTeam = null;
-    try {
-      const res = await TeamsAPI.create({
-        name: teamName,
-        competitionId: comp?.dbId || compId,
-        members: session?.username ? [session.username] : [],
-        joinCode: joinCode || undefined,
-      });
-      if (res.ok && res.data?.id) {
-        backendTeam = res.data;
-      } else if (res.error && !/backend|network|Failed to fetch|is the backend/i.test(String(res.error))) {
-        showToast(res.error, 'error');
-        return;
-      }
-    } catch (err) { /* backend unavailable — local workflow below */ }
-    proceedCreateTeam(compId, teamName, teamTag, logoSvg, joinCode || '', backendTeam);
-  }
-
-  function createTeam() {
-    const compId = getCompIdFromPage();
-    if (!compId) { showToast('Tournament context missing. Open this from a competition page.', 'error'); return; }
-    if (registrationBlocked) { showToast(`${registration.label}. ${registration.detail || ''}`.trim(), 'error'); return; }
-    const teamName = name.trim();
-    const teamTag = tag.trim();
-    if (!teamName || !teamTag) { showToast('Please fill in both Team Name and Team Tag!', 'error'); return; }
-
-    const logoSvg = selectedLogo();
-
-    if (!NexusTeamWorkflow || typeof NexusTeamWorkflow.createTeam !== 'function') {
-      showToast('Team service is unavailable.', 'error');
-      return;
-    }
-
-    // §2.4 — private join code, then creation.
-    (async () => {
-      const joinCode = await joinCodeGate.requireCode();
-      if (joinCode === null) return;
-
-      const comp = NexusData ? NexusData.getCompetitionById(compId) : null;
-      const entryFeeAmount = comp ? (comp.entryFeeAmount || 0) : 0;
-      const feeType = comp ? (comp.feeType || 'free') : 'free';
-
-      if (comp && feeType === 'per_team' && entryFeeAmount > 0) {
-        setCheckout({ comp, teamName, feeAmount: entryFeeAmount, joinCode: joinCode || '' });
-      } else {
-        await submitTeam(compId, teamName, teamTag, logoSvg, joinCode || '');
-      }
-    })();
-  }
-
-  if (!unlocked) {
+  if (created) {
+    const link = `${window.location.origin}/pages/join-teams.html?id=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(created.id)}`;
+    const ctx = `compId=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(created.id)}`;
     return (
-      <main className="create-team-page">
-        <Link to="/pages/competitions.html" className="back-btn">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-            <path d="M12 8H4M4 8L8 12M4 8L8 4" />
-          </svg>
-          Back to Competitions
-        </Link>
-
-        <div className="header-center">
-          <h1 className="page-title-neon">Create Your Team</h1>
-          <p className="page-subtitle-alt">
-            {accessChecked && gateComp?.visibility === 'private'
-              ? 'This is a private competition. Enter the join code from the organizer to continue.'
-              : 'Checking competition access…'}
-          </p>
+      <main className="main-content ct-page">
+        {banner}
+        <Steps current={2} />
+        <div className="ct-layout">
+          <section className="ct-card ct-success">
+            <div className="ct-success-badge" aria-hidden="true">✓</div>
+            <div className="ct-preview">
+              <TeamAvatar name={created.name} />
+              <div>
+                <h2>{created.name}</h2>
+                <p>Captain @{session?.username} · 1 of {maxPlayers} players</p>
+              </div>
+            </div>
+            <label className="ct-label" htmlFor="invite-link">Share this link — players who open it can ask to join</label>
+            <div className="ct-copy-row">
+              <input id="invite-link" type="text" value={link} readOnly className="form-input" onFocus={(e) => e.target.select()} />
+              <button type="button" className="td-btn td-btn-primary" onClick={async () => showToast((await copyText(link)) ? 'Link copied.' : 'Copy failed — select the link and copy it.')}>Copy link</button>
+            </div>
+            <div className="ct-next">
+              <Link className="ct-next-card" to={`/pages/team/add-players.html?${ctx}`}>
+                <strong>Invite players</strong>
+                <span>Search players by username and send invitations.</span>
+              </Link>
+              <Link className="ct-next-card" to={`/pages/team/team-roster.html?${ctx}`}>
+                <strong>Open team dashboard</strong>
+                <span>Roster, fixtures, standings and team chat.</span>
+              </Link>
+            </div>
+          </section>
+          <CompetitionSummary comp={comp} />
         </div>
-
-        {joinCodeGate.modal}
       </main>
     );
   }
 
   return (
-    <main className="create-team-page">
-      <Link to="/pages/competitions.html" className="back-btn">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-          <path d="M12 8H4M4 8L8 12M4 8L8 4" />
-        </svg>
-        Back to Competitions
-      </Link>
+    <main className="main-content ct-page">
+      {banner}
+      <Steps current={0} />
 
-      {registrationBlocked && (
-        <div role="alert" id="registration-closed-notice" style={{ maxWidth: 720, margin: '0 auto 20px', padding: '14px 18px', borderRadius: 12, border: '1px solid rgba(251,191,36,0.45)', background: 'rgba(251,191,36,0.08)', color: 'var(--text-light)', fontSize: 14, lineHeight: 1.55 }}>
-          <strong style={{ color: '#fbbf24' }}>{registration.label}.</strong> {registration.detail ? `${registration.detail}. ` : ''}New teams can't be registered for {serverComp?.name || localComp?.name || 'this competition'}.
-        </div>
+      {!comp.registration.open && <Notice tone="warning">{comp.registration.label}{comp.registration.detail ? ` · ${comp.registration.detail}` : ''}. New teams cannot be registered.</Notice>}
+      {organizer && <Notice tone="info">You organise this competition, so you cannot play in it.</Notice>}
+      {staff && <Notice tone="info">Staff accounts cannot register teams.</Notice>}
+      {myTeam && (
+        <Notice tone="success">
+          You are already on {myTeam.name}. <Link to={`/pages/team/team-roster.html?compId=${encodeURIComponent(comp.id)}&teamId=${encodeURIComponent(myTeam.id)}`}>Open your team</Link>
+        </Notice>
       )}
 
-      <div className="header-center">
-        <h1 className="page-title-neon">Create Your Team</h1>
-        <p className="page-subtitle-alt">Build your squad and dominate the tournament.</p>
-      </div>
+      <div className="ct-layout">
+        <form className="ct-card" onSubmit={submit} noValidate>
+          <h2 className="ct-card-title">Name your team</h2>
+          <p className="ct-help">This is how other teams, the organiser and the bracket will show you.</p>
 
-      <div className="create-team-container">
-        <div className="design-card">
-          <label className="design-label">Team Name</label>
-          <div className="design-input-wrapper">
-            <input type="text" id="team-name" placeholder="Enter your team name" className="design-input" value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-        </div>
-
-        <div className="design-card">
-          <label className="design-label">Team Tag</label>
-          <div className="design-input-wrapper">
-            <input type="text" id="team-tag" placeholder="Enter your team tag (e.g. NAVI)" className="design-input" maxLength={5} value={tag} onChange={(e) => setTag(e.target.value)} />
-          </div>
-        </div>
-
-        <div className="design-card">
-          <label className="design-label">Team Logo</label>
-          <div className="logo-grid">
-            {LOGOS.map((l) => (
-              <div key={l.id} className={`logo-option${activeLogo === l.id ? ' active' : ''}`} data-logo={l.id} onClick={() => setActiveLogo(l.id)} dangerouslySetInnerHTML={{ __html: l.svg }} />
-            ))}
-            <div
-              className={`logo-option upload-btn${activeLogo === UPLOADED_LOGO ? ' active' : ''}`}
-              id="logo-upload"
-              role="button"
-              tabIndex={0}
-              aria-label={uploadedLogo ? 'Uploaded team logo. Activate to select or replace it.' : 'Upload a team logo'}
-              title={uploadedLogo ? 'Click to select, or click again to replace' : 'PNG, JPG, WEBP or GIF, up to 5MB'}
-              onClick={onUploadTile}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onUploadTile(); } }}
-            >
-              {uploadedLogo ? (
-                <img src={uploadedLogo} alt="Uploaded team logo" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
-              ) : (
-                <div className="upload-content">
-                  <span dangerouslySetInnerHTML={{ __html: UPLOAD_SVG }} />
-                  <span>UPLOAD</span>
-                </div>
-              )}
-              <input ref={logoInputRef} type="file" accept={AVATAR_ACCEPT} onChange={onLogoFile} style={{ display: 'none' }} />
+          <div className="ct-field">
+            <label className="ct-label" htmlFor="team-name">Team name</label>
+            <input
+              id="team-name"
+              type="text"
+              placeholder="e.g. Midnight Raiders"
+              className={`form-input ct-input${touched && nameError ? ' has-error' : ''}`}
+              maxLength={40}
+              value={name}
+              autoFocus
+              onChange={(e) => setName(e.target.value)}
+              onBlur={() => setTouched(true)}
+              disabled={blocked || busy}
+            />
+            <div className="ct-field-foot">
+              <span className={touched && nameError ? 'ui-field-error' : 'ui-field-help'}>{touched && nameError ? nameError : '3–40 characters, unique in this competition.'}</span>
+              <span className="ui-field-help">{trimmed.length}/40</span>
             </div>
           </div>
-        </div>
 
-        <div className="design-card">
-          <label className="design-label">Share Invite Link</label>
-          <div className="invite-link-wrapper">
-            <input type="text" id="invite-link" value={inviteLink} readOnly className="invite-input" />
-            <button className="btn-copy-link" onClick={copyInviteLink}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-              </svg>
-              Copy
+          <div className="ct-preview" aria-label="Preview">
+            <TeamAvatar name={trimmed || '?'} />
+            <div style={{ minWidth: 0 }}>
+              <h3>{trimmed || 'Your team name'}</h3>
+              <p>Captain @{session?.username || 'you'}</p>
+              <div className="ct-slots" aria-label={`1 of ${maxPlayers} players`}>
+                {Array.from({ length: Math.min(maxPlayers, 12) }).map((_, i) => <span key={i} className={i === 0 ? 'is-filled' : ''} />)}
+                <small>1 / {maxPlayers} players</small>
+              </div>
+            </div>
+          </div>
+
+          <ul className="ct-rules">
+            <li>You become the captain: you invite players, approve join requests and manage the roster until play starts.</li>
+            <li>{fee > 0
+              ? comp.feeType === 'per_player'
+                ? `Each player pays their own ${formatINR(fee)} entry fee — you pay yours now.`
+                : `You pay the ${formatINR(fee)} team entry fee now.`
+              : 'This competition is free to enter.'}
+              {fee > 0 && ' Fees are held in escrow and refunded in full if you unregister before the start or the competition is cancelled.'}</li>
+            <li>Organisers and staff accounts can never be added to a team.</li>
+          </ul>
+
+          <div className="ct-actions">
+            <button type="button" className="td-btn" onClick={() => navigate(-1)}>Cancel</button>
+            <button type="submit" className="td-btn td-btn-primary ct-submit" disabled={blocked || busy}>
+              {busy ? 'Registering…' : fee > 0 ? `Continue to payment · ${formatINR(fee)}` : 'Create team'}
             </button>
           </div>
-        </div>
+        </form>
 
-        <div className="footer-actions">
-          <button className="btn-action discard" onClick={() => window.history.back()}>DISCARD</button>
-          <button className="btn-action create" onClick={createTeam} disabled={registrationBlocked} style={registrationBlocked ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}>CREATE TEAM</button>
-        </div>
+        <CompetitionSummary comp={comp} />
       </div>
 
-      {checkout && (
-        <div id="team-checkout-modal" style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#0f172a', border: '1px solid #c6ff33', borderRadius: 16, width: 'min(90vw,460px)', padding: 32, boxShadow: '0 20px 60px #000a', color: '#f1f5f9' }}>
-            <h3 style={{ margin: '0 0 4px', fontSize: 20, color: '#f1f5f9' }}>🛡️ Team Registration Payment</h3>
-            <p style={{ margin: '0 0 20px', fontSize: 13, color: '#94a3b8' }}>Team Registration Fee for "{checkout.comp.name}".</p>
-            <div style={{ background: '#1e293b', borderRadius: 12, padding: 16, marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#cbd5e1' }}>
-                <span>Team Name:</span>
-                <strong>{checkout.teamName}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#cbd5e1' }}>
-                <span>Participation Fee Model:</span>
-                <span style={{ color: '#c6ff33', fontWeight: 600 }}>Per Team (Team Lead Pays)</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, color: '#f1f5f9', borderTop: '1px dashed rgba(198,255,51,0.3)', paddingTop: 10, marginTop: 2 }}>
-                <strong>Total Registration Fee:</strong>
-                <strong style={{ color: '#c6ff33', fontSize: 20 }}>₹{checkout.feeAmount.toLocaleString('en-IN')}</strong>
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 12 }}>
-              <button onClick={() => setCheckout(null)} style={{ flex: 1, padding: 12, background: 'none', border: '1px solid #334155', color: '#94a3b8', borderRadius: 8, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
-              <button
-                onClick={() => {
-                  const compId = getCompIdFromPage();
-                  const logoSvg = selectedLogo();
-                  const pending = checkout;
-                  setCheckout(null);
-                  submitTeam(compId, pending.teamName, tag.trim(), logoSvg, pending.joinCode || '');
-                }}
-                style={{ flex: 2, padding: 12, background: '#c6ff33', border: 'none', color: '#000', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}
-              >
-                ✔ Mock pay ₹{checkout.feeAmount.toLocaleString('en-IN')} &amp; Register Team
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
+      <ConfirmDialog
+        open={!!confirming}
+        title="Confirm registration fee"
+        tone="primary"
+        message={`Pay ${formatINR(fee)} to register "${trimmed}" for ${comp.name}. The fee is held in escrow and refunded in full if you unregister before the start or the competition is cancelled. (Mock mode: no real money moves.)`}
+        confirmLabel={`Pay ${formatINR(fee)} and register`}
+        onConfirm={async () => { const ok = await register(confirming.joinCode); if (ok) setConfirming(null); }}
+        onClose={() => setConfirming(null)}
+      />
       {joinCodeGate.modal}
     </main>
   );
 }
-
-
