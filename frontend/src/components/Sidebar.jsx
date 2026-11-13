@@ -5,10 +5,10 @@
  * injected into `#sidebar-mount`, using the role-based nav config. Active state
  * comes from NavLink instead of a passed-in `activePage` string.
  */
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { getSidebarNav } from '../config/nav.js';
-import { LoginIcon, LogoutIcon } from './icons.jsx';
+import { LoginIcon } from './icons.jsx';
 import logo from '../assets/f03e2b11537e425d8544ee3ca732bf73af5137c0.png';
 
 function NavItem({ item }) {
@@ -26,14 +26,8 @@ function NavItem({ item }) {
 }
 
 export default function Sidebar() {
-  const { session, logout } = useAuth();
-  const navigate = useNavigate();
+  const { session } = useAuth();
   const { top, bottom, showLogin } = getSidebarNav(session);
-
-  function handleLogout() {
-    logout();
-    navigate('/pages/login.html', { replace: true });
-  }
 
   return (
     <aside className="sidebar">
@@ -60,17 +54,6 @@ export default function Sidebar() {
             <LoginIcon />
             <span style={{ color: '#c6ff33' }}>Login</span>
           </NavLink>
-        )}
-        {session && (
-          <button
-            type="button"
-            className="nav-item"
-            onClick={handleLogout}
-            style={{ background: 'none', border: 'none', font: 'inherit' }}
-          >
-            <LogoutIcon />
-            <span>Log out</span>
-          </button>
         )}
       </div>
     </aside>

@@ -1,7 +1,8 @@
 /**
  * NEXUS ESPORTS — AppLayout
  *
- * The shared chrome for signed-in/standard pages: sidebar + content + footer.
+ * The shared chrome for signed-in/standard pages: sidebar + account menu
+ * (top right) + content + footer.
  * It reproduces the DOM contract exactly (`#sidebar-mount`,
  * `.page-with-sidebar`, `#footer-mount`) so the stylesheet applies
  * unchanged.
@@ -12,8 +13,11 @@
 import Sidebar from '../components/Sidebar.jsx';
 import SiteFooter from '../components/SiteFooter.jsx';
 import UnreadPopup from '../components/UnreadPopup.jsx';
+import UserMenu from '../components/UserMenu.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 
 export default function AppLayout({ children, offset = true }) {
+  const { session } = useAuth();
   return (
     <>
       <div id="sidebar-mount">
@@ -22,6 +26,7 @@ export default function AppLayout({ children, offset = true }) {
       <UnreadPopup />
       {offset ? (
         <div className="page-with-sidebar">
+          {session && <div className="app-topbar"><UserMenu /></div>}
           {/* Each page supplies its own <main class="…">. */}
           {children}
           <div id="footer-mount">
@@ -30,6 +35,7 @@ export default function AppLayout({ children, offset = true }) {
         </div>
       ) : (
         <>
+          <UserMenu floating />
           {children}
           <div id="footer-mount" className="footer-offset">
             <SiteFooter />

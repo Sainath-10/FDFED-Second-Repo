@@ -54,7 +54,11 @@ function canReportOrganiser(report, session) {
   return !report.originalReportId;
 }
 
-export default function MyReports() {
+/**
+ * `embedded` renders just the reports content (no page shell or heading) so the
+ * Disputes page can show it as its "Reports" view.
+ */
+export default function MyReports({ embedded = false }) {
   const { session } = useAuth();
   const navigate = useNavigate();
   const [view, setView] = useState('reports');
@@ -93,20 +97,23 @@ export default function MyReports() {
     navigate(`/pages/case-discussion.html?discussionId=${encodeURIComponent(res.data.discussionId)}`);
   }
 
+  const Shell = embedded ? 'div' : 'main';
   const countFor = (status) => reports.filter((report) => report.status === status).length;
   const filtered = tab === 'all' ? reports : reports.filter((report) => report.status === tab);
 
   return (
-    <main className="main-content reports-page">
-      <div className="reports-head">
-        <div>
-          <h1 className="reports-title">Reports</h1>
-          <p className="reports-subtitle">
-            Track what you filed and what was filed about you. Case discussions appear here as soon as a
-            reviewer opens one.
-          </p>
+    <Shell className={embedded ? 'reports-page' : 'main-content reports-page'}>
+      {!embedded && (
+        <div className="reports-head">
+          <div>
+            <h1 className="reports-title">Reports</h1>
+            <p className="reports-subtitle">
+              Track what you filed and what was filed about you. Case discussions appear here as soon as a
+              reviewer opens one.
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       {error && <div className="report-inline-error">{error}</div>}
 
@@ -229,6 +236,6 @@ export default function MyReports() {
           )}
         </>
       )}
-    </main>
+    </Shell>
   );
 }

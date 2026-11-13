@@ -55,7 +55,8 @@ import SuperDashboard from './super-admin/SuperDashboard.jsx';
 import SuperUsers from './super-admin/SuperUsers.jsx';
 import SuperProfile from './super-admin/SuperProfile.jsx';
 import ReportForm from './ReportForm.jsx';
-import MyReports from './MyReports.jsx';
+import { createElement } from 'react';
+import { Navigate } from 'react-router-dom';
 import CaseDiscussion from './CaseDiscussion.jsx';
 import OrganizerReports from './OrganizerReports.jsx';
 import OrganizerReportDetail from './OrganizerReportDetail.jsx';
@@ -121,7 +122,8 @@ export const PAGE_COMPONENTS = {
   '/pages/watch-live.html': WatchLive,
   '/pages/about.html': About,
   '/pages/report.html': ReportForm,
-  '/pages/my-reports.html': MyReports,
+  // Reports now live inside Disputes; the old address opens that view.
+  '/pages/my-reports.html': () => createElement(Navigate, { to: '/pages/disputes.html?view=reports', replace: true }),
   '/pages/case-discussion.html': CaseDiscussion,
   '/pages/organizer-reports.html': OrganizerReports,
   '/pages/organizer-report-detail.html': OrganizerReportDetail,

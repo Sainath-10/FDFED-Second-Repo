@@ -1,15 +1,21 @@
 /**
- * NEXUS ESPORTS — My disputes
+ * NEXUS ESPORTS — Disputes (player)
  *
- * Disputes the signed-in player raised or that involve their teams, from the
- * backend. Evidence opens through the authenticated upload endpoint.
+ * One page for everything a player raises or receives:
+ *  - Reports: reports filed by or about the player, and their case discussions
+ *    (the former "Reports" page, embedded).
+ *  - Raised disputes: disputes the player raised or that involve their teams,
+ *    with their status, plus raising or escalating a dispute.
+ * The view is kept in `?view=` (reports | raised) so links can open either one.
+ * Evidence opens through the authenticated upload endpoint.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { DisputesAPI, UploadAPI } from '../services/api.js';
 import { EmptyState, ErrorState, LoadingState, PageHeader, formatDate } from '../components/ui.jsx';
 import useReportSync from '../hooks/useReportSync.js';
+import MyReports from './MyReports.jsx';
 import { showToast } from '../lib/toast.js';
 import '../styles/pages/disputes.css';
 
@@ -34,7 +40,52 @@ export function canEscalate(d, username) {
   return waiting || organizerDecided;
 }
 
+const VIEWS = [
+  { id: 'reports', label: 'Reports', subtitle: 'Reports you filed or that were filed about you, and their case discussions.' },
+  { id: 'raised', label: 'Raised disputes', subtitle: 'Disputes you raised or that involve your teams. Track their status or raise a new one.' },
+];
+
 export default function Disputes() {
+  const [params, setParams] = useSearchParams();
+  const view = params.get('view') === 'raised' ? 'raised' : 'reports';
+  const current = VIEWS.find((v) => v.id === view);
+
+  function switchView(id) {
+    const next = new URLSearchParams(params);
+    next.set('view', id);
+    setParams(next, { replace: true });
+  }
+
+  return (
+    <main className="main-content">
+      <PageHeader
+        title="Disputes"
+        subtitle={current.subtitle}
+        actions={view === 'raised' ? <>
+          <Link className="btn-cancel" to="/pages/dispute-escalation.html">Escalate a dispute</Link>
+          <Link className="btn-primary" to="/pages/submit-report.html">+ Raise a dispute</Link>
+        </> : null}
+      />
+      <div className="ui-tabs" role="tablist" aria-label="Disputes views">
+        {VIEWS.map((v) => (
+          <button
+            type="button"
+            role="tab"
+            key={v.id}
+            aria-selected={view === v.id}
+            className={`ui-tab${view === v.id ? ' active' : ''}`}
+            onClick={() => switchView(v.id)}
+          >
+            {v.label}
+          </button>
+        ))}
+      </div>
+      {view === 'reports' ? <MyReports embedded /> : <RaisedDisputes />}
+    </main>
+  );
+}
+
+function RaisedDisputes() {
   const { session } = useAuth();
   const [rows, setRows] = useState(null);
   const [error, setError] = useState('');
@@ -55,15 +106,7 @@ export default function Disputes() {
   const visible = (rows || []).filter(active.test);
 
   return (
-    <main className="main-content">
-      <PageHeader
-        title="Disputes"
-        subtitle="Disputes you raised or that involve your teams."
-        actions={<>
-          <Link className="btn-cancel" to="/pages/dispute-escalation.html">Escalate a dispute</Link>
-          <Link className="btn-primary" to="/pages/submit-report.html">+ Raise a dispute</Link>
-        </>}
-      />
+    <>
       <div className="ui-tabs">
         {FILTERS.map((f) => (
           <button type="button" key={f.id} className={`ui-tab${filter === f.id ? ' active' : ''}`} onClick={() => setFilter(f.id)}>
@@ -108,6 +151,6 @@ export default function Disputes() {
           );
         })}
       </div>
-    </main>
+    </>
   );
 }

@@ -29,7 +29,6 @@ const MAIN_NAV = [
   { id: 'competitions', label: 'Competitions', to: '/pages/competitions.html', icon: TrophyIcon },
   { id: 'activity', label: 'Activity', to: '/pages/my-activity.html', icon: ActivityIcon, protected: true },
   { id: 'disputes', label: 'Disputes', to: '/pages/disputes.html', icon: CheckCircleIcon, protected: true },
-  { id: 'reports', label: 'Reports', to: '/pages/my-reports.html', icon: ShieldIcon, protected: true },
   { id: 'payments', label: 'Payments', to: '/pages/my-payments.html', icon: MoneyIcon, protected: true },
   { id: 'notifications', label: 'Alerts', to: '/pages/notifications.html', icon: BellIcon, protected: true },
   { id: 'profile', label: 'Profile', to: '/pages/profile.html', icon: ProfileIcon, protected: true },
@@ -38,7 +37,7 @@ const MAIN_NAV = [
 
 const ALERTS = { id: 'notifications', label: 'Alerts', to: '/pages/notifications.html', icon: BellIcon };
 
-/** Community Moderator sidebar: Reports, Activity, and Profile (Profile at the bottom). */
+/** Community Moderator sidebar: Reports and Activity (Profile is in the account menu). */
 const MODERATOR_NAV = [
   { id: 'reports', label: 'Reports', to: '/pages/moderator/reports.html', icon: ShieldIcon, end: true },
   { id: 'activity', label: 'Activity', to: '/pages/moderator/activity.html', icon: ActivityIcon },
@@ -80,12 +79,19 @@ const SUPER_ADMIN_NAV = [
 ];
 
 
-/** Every role has the same shape: main items on top; Alerts, Profile and About at the bottom. */
+/**
+ * Every role has the same shape: main items on top; Alerts and About at the
+ * bottom. Profile is not a sidebar item: it lives in the top-right account menu
+ * (see UserMenu), so it is returned separately as `profileTo`.
+ */
 function split(items) {
-  const bottomIds = ['notifications', 'profile', 'about'];
+  const bottomIds = ['notifications', 'about'];
+  const profile = items.find((i) => i.id === 'profile');
+  const rest = items.filter((i) => i.id !== 'profile');
   return {
-    top: items.filter((i) => !bottomIds.includes(i.id)),
-    bottom: items.filter((i) => bottomIds.includes(i.id)),
+    top: rest.filter((i) => !bottomIds.includes(i.id)),
+    bottom: rest.filter((i) => bottomIds.includes(i.id)),
+    profileTo: profile ? profile.to : null,
   };
 }
 
