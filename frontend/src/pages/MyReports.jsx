@@ -77,12 +77,6 @@ export default function MyReports() {
     else load();
   }
 
-  async function viewAppeal(report) {
-    const res = await ReportsAPI.organiserAppealRoom(report.id);
-    if (!res.ok) { showToast(res.error || 'Unable to open the appeal discussion.', 'error'); return; }
-    navigate(`/pages/case-discussion.html?discussionId=${encodeURIComponent(res.data.discussionId)}`);
-  }
-
   const countFor = (status) => reports.filter((report) => report.status === status).length;
   const filtered = tab === 'all' ? reports : reports.filter((report) => report.status === tab);
 
@@ -170,8 +164,12 @@ export default function MyReports() {
                           {APPEAL_PILL[appealState(report)].label}
                         </span>
                       )}
-                      {report.appealKind === 'organiser' && appealState(report) === 'pending' && sameUser(report.reportedUsername, session?.username) && (
-                        <button className="report-btn" onClick={() => viewAppeal(report)}>View appeal</button>
+                      {/* Shown only once a reviewer has chosen Discuss (the room exists); the
+                          room itself checks that this user is an authorised participant. */}
+                      {report.discussionId && (
+                        <Link className="report-btn primary" to={`/pages/case-discussion.html?discussionId=${encodeURIComponent(report.discussionId)}`}>
+                          Enter Discussion
+                        </Link>
                       )}
                       {canAppeal(report, session) && (
                         <button className="report-btn danger" onClick={() => setAppealTarget(report)}>Appeal</button>

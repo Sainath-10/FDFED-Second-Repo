@@ -64,6 +64,7 @@ import ModeratorReports from './moderator/ModeratorReports.jsx';
 import ModeratorActivity from './moderator/ModeratorActivity.jsx';
 import ModeratorReportDetail from './moderator/ModeratorReportDetail.jsx';
 import AppealDetail from './moderator/AppealDetail.jsx';
+import ReportCaseView from './moderator/ReportCaseView.jsx';
 import ModeratorProfile from './moderator/ModeratorProfile.jsx';
 
 export const PAGE_COMPONENTS = {
@@ -132,6 +133,7 @@ export const PAGE_COMPONENTS = {
   '/pages/moderator/activity.html': ModeratorActivity,
   '/pages/moderator/report-detail.html': ModeratorReportDetail,
   '/pages/moderator/appeal.html': AppealDetail,
+  '/pages/moderator/report-view.html': ReportCaseView,
   '/pages/moderator/profile.html': ModeratorProfile,
 };
 

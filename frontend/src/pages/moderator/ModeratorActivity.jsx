@@ -279,8 +279,8 @@ export default function ModeratorActivity() {
 
                           <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 12 }}>
                             {canOpenReport ? (
-                              <Link to={`/pages/moderator/report-detail.html?id=${encodeURIComponent(row.id)}`} className="btn-table-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 16px', fontSize: 12, fontWeight: 800, borderRadius: 6, background: '#c6ff33', color: '#000', textDecoration: 'none' }}>
-                                Open report ↗
+                              <Link to={`/pages/moderator/report-view.html?id=${encodeURIComponent(row.id)}&from=activity`} className="btn-table-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 16px', fontSize: 12, fontWeight: 800, borderRadius: 6, background: '#c6ff33', color: '#000', textDecoration: 'none' }}>
+                                View Report ↗
                               </Link>
                             ) : <span style={{ fontSize: 11, color: '#64748b' }}>Read-only administrator view</span>}
                             <button type="button" className="btn-table-secondary" onClick={() => toggle(key)} style={{ padding: '6px 14px', fontSize: 12 }}>Close ✕</button>

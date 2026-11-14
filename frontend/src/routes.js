@@ -130,6 +130,7 @@ export const PROTECTED_ROUTES = [
   route('/pages/moderator/activity.html', 'Activity', 'moderator', [...MODERATOR_ROLES, ...SUPER_ADMIN_ROLES]),
   route('/pages/moderator/report-detail.html', 'Report investigation', 'moderator', MODERATOR_ROLES),
   route('/pages/moderator/appeal.html', 'Appeal details', 'moderator', MODERATOR_ROLES),
+  route('/pages/moderator/report-view.html', 'Report details', 'moderator', MODERATOR_ROLES),
   route('/pages/moderator/profile.html', 'Profile', 'moderator', MODERATOR_ROLES),
 ];
 

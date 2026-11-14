@@ -54,7 +54,9 @@ export default function CaseDiscussion() {
     }
     const res = await ReportsAPI.postMessage(discussionId, body.trim(), evidence);
     setBusy(false);
-    if (!res.ok) { showToast(res.error || 'Unable to send the message.', 'error'); return; }
+    // A refusal may mean a decision just closed the room: reload so the
+    // composer is replaced by the read-only state straight away.
+    if (!res.ok) { showToast(res.error || 'Unable to send the message.', 'error'); load(); return; }
     setBody('');
     setFiles([]);
     load();
@@ -144,7 +146,7 @@ export default function CaseDiscussion() {
         );
       })()}
 
-      {readOnly && <div className="report-inline-ok">This discussion has ended. The history is preserved and cannot be modified.</div>}
+      {readOnly && <div className="report-inline-ok">This discussion is closed. The history is preserved and read-only; only a reviewer choosing Discuss can reopen it.</div>}
 
       <div className="discussion-room-grid">
         <section className="discussion-room-chat">

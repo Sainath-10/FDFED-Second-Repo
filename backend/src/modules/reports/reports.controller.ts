@@ -236,6 +236,14 @@ export class ReportsController {
     return this.reports.appealDetails(id, req.user);
   }
 
+  @Get(':id/case')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.COMMUNITY_MODERATOR)
+  @ApiOperation({ summary: 'Report details: its discussion and the competition timeline (any report)' })
+  async reportCase(@Param('id') id: string, @Request() req: any) {
+    return this.reports.reportCase(id, req.user);
+  }
+
   @Post(':id/uplift')
   @UseGuards(RolesGuard)
   @Roles(UserRole.COMMUNITY_MODERATOR)

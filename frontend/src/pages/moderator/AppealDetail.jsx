@@ -9,17 +9,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ReportsAPI } from '../../services/api.js';
 import useReportSync from '../../hooks/useReportSync.js';
-import EvidenceGallery from '../../components/EvidenceGallery.jsx';
+import CaseHistoryTabs from '../../components/CaseHistoryTabs.jsx';
 import { AppealDecisionModal } from '../../components/ReportActionModals.jsx';
 import { ErrorState, LoadingState } from '../../components/ui.jsx';
 import { capitalise, formatDate } from '../../lib/reporting.js';
 import { showToast } from '../../lib/toast.js';
 import '../../styles/pages/reports.css';
-
-const TABS = [
-  { id: 'discussion', label: 'Previous Discussion' },
-  { id: 'timeline', label: 'Timeline' },
-];
 
 export default function AppealDetail() {
   const [params] = useSearchParams();
@@ -27,7 +22,6 @@ export default function AppealDetail() {
   const id = params.get('id') || '';
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
-  const [tab, setTab] = useState('discussion');
   const [deciding, setDeciding] = useState(false);
 
   const load = useCallback(async () => {
@@ -49,8 +43,6 @@ export default function AppealDetail() {
 
   const { report, discussion, evidence, timeline } = data;
   const pending = ['submitted', 'deciding'].includes(report.appealStatus);
-  const messages = discussion?.messages || [];
-  const roleOf = (name) => (discussion?.participants || []).find((p) => String(p.username).toLowerCase() === String(name).toLowerCase())?.role || '';
   const latest = report.latestDecision || {};
 
   return (
@@ -89,59 +81,7 @@ export default function AppealDetail() {
         {report.appealDecisionReason && <p className="report-context-note"><strong>Moderator decision:</strong> {report.appealDecisionReason} — @{report.appealDecidedBy}</p>}
       </div>
 
-      <div className="reports-tabs page-tabs" role="tablist" aria-label="Appeal details">
-        {TABS.map((t) => (
-          <button type="button" role="tab" key={t.id} aria-selected={tab === t.id} className={`reports-tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
-            {t.label}{t.id === 'discussion' ? <span className="count">{messages.length}</span> : <span className="count">{timeline.length}</span>}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'discussion' ? (
-        <section>
-          {!discussion && <div className="report-empty">The organiser decided this report without opening a discussion. Use Discuss to open one with everyone involved.</div>}
-          {discussion && messages.length === 0 && <div className="report-empty">The discussion was opened but no messages were posted.</div>}
-          <div className="reports-list">
-            {messages.map((message) => {
-              const files = Array.isArray(message.evidence) && message.evidence.length ? message.evidence : message.evidenceUrls;
-              return (
-                <article className="report-card" key={message.id}>
-                  <div className="report-card-top">
-                    <span className="report-code">@{message.authorUsername}</span>
-                    {roleOf(message.authorUsername) && <span className="report-pill" style={{ color: '#94a3b8', border: '1px solid #334155' }}>{capitalise(roleOf(message.authorUsername))}</span>}
-                    <span className="report-meta" style={{ marginLeft: 'auto' }}>{formatDate(message.createdAt)}</span>
-                  </div>
-                  <p className="report-context-note" style={{ whiteSpace: 'pre-wrap' }}>{message.body}</p>
-                  <EvidenceGallery files={files} compact />
-                </article>
-              );
-            })}
-          </div>
-          {evidence?.length > 0 && (
-            <>
-              <h3 style={{ color: '#fff', fontSize: 15, margin: '22px 0 10px' }}>Evidence attached to the report</h3>
-              <EvidenceGallery files={evidence} />
-            </>
-          )}
-        </section>
-      ) : (
-        <section className="report-card">
-          {timeline.length === 0 && <div className="report-empty">No recorded activity for this competition yet.</div>}
-          <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 12 }}>
-            {timeline.map((row, index) => (
-              <li key={`${row.at}-${index}`} style={{ display: 'grid', gridTemplateColumns: '10px 1fr', gap: 12 }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: row.source === 'report' ? '#60a5fa' : '#c6ff33', marginTop: 7 }} aria-hidden="true" />
-                <div>
-                  <div style={{ color: '#fff', fontWeight: 600, fontSize: 14 }}>
-                    {String(row.type || '').replace(/_/g, ' ')} <span style={{ color: '#94a3b8', fontWeight: 400 }}>— {row.details}</span>
-                  </div>
-                  <div style={{ color: '#64748b', fontSize: 12, marginTop: 2 }}>{formatDate(row.at)} · @{row.actor || 'system'}</div>
-                </div>
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
+      <CaseHistoryTabs discussion={discussion} evidence={evidence} timeline={timeline} discussionLabel="Previous Discussion" reportCode={report.code} />
 
       {deciding && (
         <AppealDecisionModal
