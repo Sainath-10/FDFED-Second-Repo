@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CompetitionsAPI, MatchesAPI } from '../services/api.js';
-import { PRIORITY_META, STATUS_LABEL, capitalise, formatDate, reportCode } from '../lib/reporting.js';
 import { ReportsAPI } from '../services/api.js';
 import useReportSync from '../hooks/useReportSync.js';
 import EvidenceGallery from './EvidenceGallery.jsx';
@@ -11,6 +10,7 @@ import CompetitionOutcome from './CompetitionOutcome.jsx';
 import '../styles/pages/reports.css';
 import '../styles/pages/report-workspace.css';
 import UsernameSearch from './UsernameSearch.jsx';
+import ReportCard from './ReportCard.jsx';
 
 function Initial({ name }) {
   return <span className="cd-inline-avatar">{String(name || '?').replace(/^@/, '').slice(0, 1).toUpperCase()}</span>;
@@ -78,39 +78,14 @@ const DISPUTE_FILTERS = [
  * evidence are grouped, and the actions sit in a footer so nothing overlaps.
  */
 function DisputeReportCard({ report, onDiscuss, onAct, onDiscard }) {
-  const priority = PRIORITY_META[report.priority] || PRIORITY_META.medium;
   const open = OPEN_REPORT_STATUSES.includes(report.status);
   return (
-    <article className="cd-dispute-card">
-      <header className="cd-dispute-card-head">
-        <span className="cd-dispute-code">{reportCode(report)}</span>
-        <span className="cd-dispute-badge" style={{ color: priority.color, background: priority.bg, borderColor: priority.border }}>
-          {priority.label} priority
-        </span>
-        <span className="cd-dispute-badge">{capitalise(report.reasonCode)}</span>
-        <span className="cd-dispute-badge is-status">{STATUS_LABEL[report.status] || capitalise(report.status)}</span>
-      </header>
-
-      <p className="cd-dispute-people">
-        <span>@{report.reporterUsername}</span>
-        <span className="cd-dispute-arrow">→</span>
-        <span>@{report.reportedUsername}</span>
-        {report.reportedRole && <span className="cd-dispute-role">· {capitalise(report.reportedRole)}</span>}
-      </p>
-
-      <dl className="cd-dispute-facts">
-        <div><dt>Competition</dt><dd>{report.competitionName || '—'}</dd></div>
-        <div><dt>Submitted</dt><dd>{formatDate(report.createdAt)}</dd></div>
-        <div><dt>Reporter history</dt><dd>{report.reporterPriorSubstantiated ?? 0} prior substantiated</dd></div>
-        <div><dt>Accused history</dt><dd>{report.accusedPriorSubstantiated ?? 0} prior substantiated</dd></div>
-      </dl>
-
-      <p className="cd-dispute-desc">{report.description}</p>
-
-      <EvidenceGallery files={report.evidence} compact />
-
-      <footer className="cd-dispute-actions">
-        {open ? (
+    <article className="cd-dispute-report">
+      {/* Same complete card as the Reports queue, so both surfaces stay in sync. */}
+      <ReportCard
+        report={report}
+        detailHref={`/pages/organizer-report-detail.html?id=${report.id}`}
+        actions={open ? (
           <>
             <button type="button" className="report-btn" onClick={onDiscuss}>Discuss</button>
             <button type="button" className="report-btn primary" onClick={onAct}>Act</button>
@@ -121,10 +96,12 @@ function DisputeReportCard({ report, onDiscuss, onAct, onDiscard }) {
             {report.status === 'discarded' ? 'Report discarded' : 'Case closed'} — actions are no longer available.
           </span>
         )}
-        <Link className="report-btn ghost cd-dispute-open" to={`/pages/organizer-report-detail.html?id=${report.id}`}>
-          Open details
-        </Link>
-      </footer>
+      />
+      {Array.isArray(report.evidence) && report.evidence.length > 0 && (
+        <div className="cd-dispute-evidence">
+          <EvidenceGallery files={report.evidence} compact />
+        </div>
+      )}
     </article>
   );
 }
@@ -161,7 +138,7 @@ export function DisputesSection({ competitionId }) {
   const [filter, setFilter] = useState('all');
   const visibleReports = filter === 'all' ? reports : reports.filter((report) => report.status === filter);
 
-  return <section className="cd-content-panel">
+  return <section className="cd-content-panel cd-disputes-panel">
     <div className="cd-section-heading">
       <div><h2>Player reports</h2><p>Reports about players in this competition — the same records shown in your reports queue.</p></div>
       <select value={filter} onChange={(event) => setFilter(event.target.value)} aria-label="Filter participant reports">

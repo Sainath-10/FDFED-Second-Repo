@@ -4,10 +4,12 @@
  */
 
 .reports-page {
-  --report-bg: #0e1726;
-  --report-card: #111c2e;
-  --report-border: #1e293b;
-  --report-muted: #94a3b8;
+  /* Charcoal surfaces: report cards belong to the black NEXUS theme, not a
+     separate blue panel system. */
+  --report-bg: #050505;
+  --report-card: #121212;
+  --report-border: #2a2a2a;
+  --report-muted: #9ca3af;
   padding-bottom: 60px;
 }
 
@@ -131,6 +133,13 @@
   padding: 16px;
 }
 
+/* Competition Disputes uses the same report surfaces as the Reports page. */
+.cd-disputes-panel,
+.cd-disputes-panel .cd-content-panel {
+  background: #080808;
+  border-color: #262626;
+}
+
 .report-card-top {
   display: flex;
   flex-wrap: wrap;
@@ -173,6 +182,37 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* Versioned decision history: original decision, uplift, corrected decisions. */
+.report-history {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  background: rgba(148, 163, 184, 0.05);
+  border: 1px solid var(--report-border);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--report-muted);
+}
+.report-history summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #cbd5e1;
+}
+.report-history-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+}
+.report-history-row:first-of-type { border-top: 0; }
+.report-history-version {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #c6ff33;
+  font-weight: 700;
+}
+.report-history-note { color: #fb923c; }
 
 /* One clean action row: review actions grouped left, Open details pinned right. */
 .report-actions {
@@ -564,7 +604,7 @@
   width: min(560px, 100%);
   max-height: 90vh;
   overflow-y: auto;
-  background: #0f1a2b;
+  background: #141414;
   border: 1px solid var(--report-border);
   border-radius: 14px;
   padding: 20px;

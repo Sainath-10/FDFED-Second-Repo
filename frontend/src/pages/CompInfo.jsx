@@ -379,10 +379,13 @@ export default function CompInfo() {
               ) : (
               <div className="comp-info-block">
                 <h2 id="teams-heading">Registered Teams ({approvedTeams.length} / {comp.maxTeams || '—'})</h2>
-                <div className="teams-grid" id="comp-teams-grid" style={isCompetitionParticipant ? { gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' } : undefined}>
+                {/* One roster view for every role. Organisers used to get a
+                    reduced card (name + count) while players got rosters; the
+                    data was there, the organiser simply could not see it. */}
+                <div className="teams-grid" id="comp-teams-grid">
                   {approvedTeams.length === 0 ? (
                     <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>No teams have been accepted yet.</p>
-                  ) : isCompetitionParticipant ? (
+                  ) : (
                     teamRosters.map((t) => (
                       <div className="team-card team-roster-card" key={t.key} style={{ textAlign: 'left', height: 'auto' }}>
                         <div className="name">{t.name}</div>
@@ -394,19 +397,13 @@ export default function CompInfo() {
                                 {m.username}
                                 {m.isLead && <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>(Lead)</span>}
                               </span>
-                              {normalize(m.username) !== userKey && (
+                              {/* Reporting stays a participant action; organisers can see the same roster. */}
+                              {isCompetitionParticipant && normalize(m.username) !== userKey && (
                                 <ReportButton compId={comp.id} against={m.username} targetRole="player" source="comp-info-roster" className="btn-table-secondary" />
                               )}
                             </div>
                           ))}
                         </div>
-                      </div>
-                    ))
-                  ) : (
-                    approvedTeams.map((t) => (
-                      <div className="team-card" key={t.id}>
-                        <div className="name">{t.name}</div>
-                        <div className="players">{t.members.length} player{t.members.length === 1 ? '' : 's'}</div>
                       </div>
                     ))
                   )}

@@ -20,12 +20,14 @@ import '../../styles/pages/reports.css';
 // Resolved decisions live in Activity; an appealed decision is still work in
 // progress, so it gets its own Reports tab instead of disappearing.
 const ACTIVE_STATUS_KEYS = ['new', 'under_review', 'awaiting_response'];
+// "Awaiting Response" is not a separate queue here: a case waiting on a
+// participant is still under review, so it belongs in that tab.
 const TABS = [
   { key: 'new', label: 'New' },
   { key: 'under_review', label: 'Under Review' },
-  { key: 'awaiting_response', label: 'Awaiting Response' },
   { key: 'appealed', label: 'Appealed' },
 ];
+const UNDER_REVIEW_STATUSES = ['under_review', 'awaiting_response'];
 const isAppealed = (report) => report.status === 'resolved'
   && ['submitted', 'deciding'].includes(report.appealStatus)
   && !report.uplifted;
@@ -71,7 +73,11 @@ export default function ModeratorReports() {
   const appealedReports = reports.filter(isAppealed);
   const visibleReports = [...activeReports, ...appealedReports];
   const counts = visibleReports.reduce((acc, report) => {
-    const key = isAppealed(report) ? 'appealed' : report.status;
+    const key = isAppealed(report)
+      ? 'appealed'
+      : report.status === 'awaiting_response'
+        ? 'under_review'
+        : report.status;
     acc[key] = (acc[key] || 0) + 1;
     return acc;
   }, {});
@@ -79,7 +85,9 @@ export default function ModeratorReports() {
     ? visibleReports
     : tab === 'appealed'
       ? appealedReports
-      : activeReports.filter((report) => report.status === tab);
+      : tab === 'under_review'
+        ? activeReports.filter((report) => UNDER_REVIEW_STATUSES.includes(report.status))
+        : activeReports.filter((report) => report.status === tab);
 
   return (
     <main className="admin-page reports-page">

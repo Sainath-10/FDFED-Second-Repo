@@ -846,6 +846,9 @@ export const ReportsAPI = {
   async investigation(id) {
     return makeRequest(`/reports/${id}/investigation`, { method: 'GET' });
   },
+  async caseView(id) {
+    return makeRequest(`/reports/${id}/case-view`, { method: 'GET' });
+  },
   async myDiscussions() {
     return makeRequest('/reports/discussions/mine', { method: 'GET' });
   },
@@ -894,10 +897,6 @@ export const ReportsAPI = {
   },
   async appealDetails(id) {
     return makeRequest(`/reports/${id}/appeal-details`, { method: 'GET' });
-  },
-  /** Any report: its discussion and the competition timeline (Community Moderator). */
-  async reportCase(id) {
-    return makeRequest(`/reports/${id}/case`, { method: 'GET' });
   },
   async uplift(id, payload = {}) {
     return makeRequest(`/reports/${id}/uplift`, { method: 'POST', body: JSON.stringify(payload) });

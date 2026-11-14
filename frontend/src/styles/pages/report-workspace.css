@@ -5,6 +5,44 @@
 
 /* ── Disputes report cards ────────────────────────────────────────── */
 
+/* Charcoal surfaces for the competition Disputes tab; no olive/green panels. */
+.cd-disputes-panel {
+  --report-card: #121212;
+  --report-border: #2a2a2a;
+  --report-muted: #9ca3af;
+  background: #080808 !important;
+  border: 1px solid #262626 !important;
+}
+.cd-disputes-panel .cd-section-heading h2 {
+  color: #ffffff;
+}
+.cd-disputes-panel .cd-section-heading p {
+  color: #9ca3af;
+}
+.cd-disputes-panel select {
+  background: #111111;
+  border: 1px solid #2a2a2a;
+  color: #e5e5e5;
+}
+.cd-dispute-report {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cd-dispute-report .report-card {
+  background: #121212;
+  border-color: #2a2a2a;
+}
+.cd-dispute-evidence {
+  padding: 0 16px 4px;
+}
+.cd-disputes-panel .report-empty,
+.cd-disputes-panel .cd-inline-empty {
+  background: #101010;
+  border-color: #262626;
+  color: #9ca3af;
+}
+
 .cd-dispute-report-list {
   display: flex;
   flex-direction: column;

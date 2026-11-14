@@ -179,11 +179,7 @@ export default function MyActivity() {
       {!state.loading && !state.error && sections.map((s) => (
         <section className="act-section" key={s.key}>
           <div className="act-section-heading">
-            <div>
-              <h2 className="act-section-title">{s.title}</h2>
-              <p className="act-section-count">{s.items.length}</p>
-            </div>
-            {s.key === 'organized' && s.items.length > 0 && <Link className="btn-table-secondary" to="/pages/organizer-reports.html">Report queue</Link>}
+            <h2 className="act-section-title">{s.title}</h2>
           </div>
           {s.items.length === 0 ? (
             <EmptyState

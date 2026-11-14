@@ -236,14 +236,6 @@ export class ReportsController {
     return this.reports.appealDetails(id, req.user);
   }
 
-  @Get(':id/case')
-  @UseGuards(RolesGuard)
-  @Roles(UserRole.COMMUNITY_MODERATOR)
-  @ApiOperation({ summary: 'Report details: its discussion and the competition timeline (any report)' })
-  async reportCase(@Param('id') id: string, @Request() req: any) {
-    return this.reports.reportCase(id, req.user);
-  }
-
   @Post(':id/uplift')
   @UseGuards(RolesGuard)
   @Roles(UserRole.COMMUNITY_MODERATOR)
@@ -264,6 +256,14 @@ export class ReportsController {
   @ApiOperation({ summary: 'Reporter or organiser opens the report discussion room' })
   async organiserAppealRoom(@Param('id') id: string, @Request() req: any) {
     return this.reports.organiserAppealRoom(id, req.user);
+  }
+
+  @Get(':id/case-view')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.COMMUNITY_MODERATOR)
+  @ApiOperation({ summary: 'Moderator case view: discussion, discussion activity and competition timeline' })
+  async caseView(@Param('id') id: string, @Request() req: any) {
+    return this.reports.caseView(id, req.user);
   }
 
   @Get(':id/investigation')
