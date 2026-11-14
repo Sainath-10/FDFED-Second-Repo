@@ -107,6 +107,53 @@ export default function ModeratorReportDetail() {
         )}
       </div>
 
+      {Array.isArray(report.decisionHistory) && report.decisionHistory.length > 0 && (
+        <div className="report-card" style={{ marginTop: 12 }}>
+          <div className="report-card-top">
+            <span className="report-pill" style={{ color: '#cbd5e1', border: '1px solid #334155' }}>
+              Decision history
+            </span>
+            <span className="report-meta" style={{ margin: 0 }}>
+              The original decision is preserved when an action is uplifted or corrected.
+            </span>
+          </div>
+          <div style={{ display: 'grid', gap: 8 }}>
+            {report.decisionHistory.map((decision) => (
+              <div
+                key={decision.version}
+                style={{
+                  display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center',
+                  padding: '8px 12px', background: 'rgba(148,163,184,0.05)',
+                  border: '1px solid rgba(148,163,184,0.16)', borderRadius: 8, fontSize: 12,
+                }}
+              >
+                <strong style={{ color: '#c6ff33' }}>v{decision.version}</strong>
+                <span style={{ color: '#e2e8f0' }}>{capitalise(decision.finding)} · {capitalise(decision.action)}</span>
+                <span
+                  className="report-pill"
+                  style={decision.status === 'active'
+                    ? { color: '#86efac', border: '1px solid rgba(134,239,172,0.4)' }
+                    : decision.status === 'uplifted' || decision.status === 'reverted'
+                      ? { color: '#fb923c', border: '1px solid rgba(251,146,60,0.4)' }
+                      : { color: '#94a3b8', border: '1px solid #334155' }}
+                >
+                  {decision.status === 'active' ? 'Active' : decision.status === 'superseded' ? 'Superseded' : 'Uplifted'}
+                </span>
+                <span style={{ color: '#94a3b8' }}>@{decision.decidedBy || 'system'} · {formatDate(decision.decidedAt)}</span>
+                {decision.upliftReason && (
+                  <span style={{ color: '#fb923c' }}>
+                    Uplifted by @{decision.upliftedBy || '—'} · {formatDate(decision.upliftedAt)} · {decision.upliftReason}
+                  </span>
+                )}
+                {decision.conclusion && (
+                  <span style={{ flexBasis: '100%', color: '#94a3b8' }}>{decision.conclusion}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="investigation-tabs" style={{ marginTop: 18 }}>
         {TABS.map((entry) => (
           <button

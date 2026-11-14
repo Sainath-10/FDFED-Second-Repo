@@ -63,6 +63,7 @@ import OrganizerReportDetail from './OrganizerReportDetail.jsx';
 import ModeratorReports from './moderator/ModeratorReports.jsx';
 import ModeratorActivity from './moderator/ModeratorActivity.jsx';
 import ModeratorReportDetail from './moderator/ModeratorReportDetail.jsx';
+import ModeratorCaseView from './moderator/ModeratorCaseView.jsx';
 import AppealDetail from './moderator/AppealDetail.jsx';
 import ModeratorProfile from './moderator/ModeratorProfile.jsx';
 
@@ -131,6 +132,7 @@ export const PAGE_COMPONENTS = {
   '/pages/moderator/reports.html': ModeratorReports,
   '/pages/moderator/activity.html': ModeratorActivity,
   '/pages/moderator/report-detail.html': ModeratorReportDetail,
+  '/pages/moderator/report-view.html': ModeratorCaseView,
   '/pages/moderator/appeal.html': AppealDetail,
   '/pages/moderator/profile.html': ModeratorProfile,
 };

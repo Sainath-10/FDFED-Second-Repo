@@ -352,7 +352,7 @@ export function AppealDecisionModal({ report, onClose, onDone }) {
           {action === 'revert'
             ? (player
               ? "Undoes the organiser's decision completely — a removed player returns to the same team, position and role."
-              : 'Removes the restrictions from that decision and returns the report to Under Review for a new decision.')
+              : 'Removes the restrictions from that decision and reopens the original report as New for a fresh decision.')
             : action === 'discard'
               ? 'Keeps the original decision and its consequences. The appeal is closed.'
               : 'The original report and its history are always kept.'}

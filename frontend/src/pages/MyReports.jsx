@@ -13,7 +13,7 @@ import { AppealModal } from '../components/ReportActionModals.jsx';
 import useReportSync from '../hooks/useReportSync.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import ReportCard from '../components/ReportCard.jsx';
-import { STATUS_TABS, formatDate, capitalise } from '../lib/reporting.js';
+import { STATUS_TABS } from '../lib/reporting.js';
 import { showToast } from '../lib/toast.js';
 import '../styles/pages/reports.css';
 
@@ -83,8 +83,14 @@ export default function MyReports() {
     navigate(`/pages/case-discussion.html?discussionId=${encodeURIComponent(res.data.discussionId)}`);
   }
 
-  const countFor = (status) => reports.filter((report) => report.status === status).length;
-  const filtered = tab === 'all' ? reports : reports.filter((report) => report.status === tab);
+  // "Awaiting response" is not a separate view for the player: those reports
+  // are still under review, so they stay reachable under that filter.
+  const playerTabs = STATUS_TABS.filter((status) => status.key !== 'awaiting_response');
+  const inTab = (report, key) => key === 'under_review'
+    ? ['under_review', 'awaiting_response'].includes(report.status)
+    : report.status === key;
+  const countFor = (status) => reports.filter((report) => inTab(report, status)).length;
+  const filtered = tab === 'all' ? reports : reports.filter((report) => inTab(report, tab));
 
   return (
     <main className="main-content reports-page">
@@ -131,7 +137,7 @@ export default function MyReports() {
             <button className={`reports-tab ${tab === 'all' ? 'active' : ''}`} onClick={() => setTab('all')}>
               All <span className="count">{reports.length}</span>
             </button>
-            {STATUS_TABS.map((status) => (
+            {playerTabs.map((status) => (
               <button
                 key={status.key}
                 className={`reports-tab ${tab === status.key ? 'active' : ''}`}
@@ -159,6 +165,14 @@ export default function MyReports() {
                     <>
                       {report.status !== 'discarded' && report.status !== 'resolved' && report.queue === 'organiser' && (
                         <Link className="report-btn" to={`/pages/comp-info.html?id=${report.competitionId}`}>Competition</Link>
+                      )}
+                      {report.discussionId && (
+                        <Link
+                          className="report-btn primary"
+                          to={`/pages/case-discussion.html?discussionId=${report.discussionId}`}
+                        >
+                          Enter Discussion
+                        </Link>
                       )}
                       {report.uplifted && report.appealKind === 'organiser' && (
                         <span className="report-pill" style={{ color: '#c6ff33', background: 'rgba(198,255,51,0.1)', border: '1px solid rgba(198,255,51,0.4)' }}>
@@ -191,31 +205,33 @@ export default function MyReports() {
             <div className="report-empty">No case discussions involve you yet.</div>
           ) : (
             <div className="reports-list">
-              {discussions.map((thread) => (
-                <div className="report-card" key={thread.discussionId}>
-                  <div className="report-card-top">
-                    <span className="report-code">{thread.code}</span>
-                    <span
-                      className="report-pill"
-                      style={{ color: thread.status === 'open' ? '#c6ff33' : '#94a3b8', border: '1px solid #334155' }}
-                    >
-                      {thread.status === 'open' ? 'Open' : 'Read-only'}
-                    </span>
-                    <span className="report-pill" style={{ color: '#94a3b8', border: '1px solid #334155' }}>
-                      You are the {capitalise(thread.as)}
-                    </span>
-                  </div>
-                  <div className="report-meta">
-                    <span>{thread.reasonCode ? capitalise(thread.reasonCode) : 'Case discussion'}</span>
-                    <span>Opened {formatDate(thread.createdAt)}</span>
-                  </div>
-                  <div className="report-actions">
-                    <Link className="report-btn primary" to={`/pages/case-discussion.html?discussionId=${thread.discussionId}`}>
-                      Enter discussion
-                    </Link>
-                  </div>
-                </div>
-              ))}
+              {discussions.map((thread) => {
+                // The API returns the full decorated report with each room, so the
+                // Case Discussions tab shows the same card as the Reports tab.
+                const report = thread.report || {
+                  id: thread.reportId,
+                  code: thread.code,
+                  reasonCode: thread.reasonCode,
+                  priority: thread.priority,
+                  status: thread.reportStatus,
+                  createdAt: thread.createdAt,
+                };
+                return (
+                  <ReportCard
+                    key={thread.discussionId}
+                    report={report}
+                    direction={thread.as === 'accused' ? 'filed-against' : thread.as === 'reporter' ? 'filed-by' : null}
+                    actions={(
+                      <Link
+                        className="report-btn primary"
+                        to={`/pages/case-discussion.html?discussionId=${thread.discussionId}`}
+                      >
+                        Enter discussion
+                      </Link>
+                    )}
+                  />
+                );
+              })}
             </div>
           )}
         </>

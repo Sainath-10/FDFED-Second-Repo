@@ -846,6 +846,9 @@ export const ReportsAPI = {
   async investigation(id) {
     return makeRequest(`/reports/${id}/investigation`, { method: 'GET' });
   },
+  async caseView(id) {
+    return makeRequest(`/reports/${id}/case-view`, { method: 'GET' });
+  },
   async myDiscussions() {
     return makeRequest('/reports/discussions/mine', { method: 'GET' });
   },

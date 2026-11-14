@@ -258,6 +258,14 @@ export class ReportsController {
     return this.reports.organiserAppealRoom(id, req.user);
   }
 
+  @Get(':id/case-view')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.COMMUNITY_MODERATOR)
+  @ApiOperation({ summary: 'Moderator case view: discussion, discussion activity and competition timeline' })
+  async caseView(@Param('id') id: string, @Request() req: any) {
+    return this.reports.caseView(id, req.user);
+  }
+
   @Get(':id/investigation')
   @UseGuards(RolesGuard)
   @Roles(UserRole.COMMUNITY_MODERATOR)
