@@ -26,7 +26,7 @@ export function linkOf(item) {
   const m = item?.meta || {};
   if (m.link) return { to: m.link, label: 'Open' };
   if (item.type === 'password-reset-request') return { to: '/pages/admin/users.html', label: 'Open Users' };
-  if (m.disputeId) return { to: '/pages/disputes.html', label: 'View disputes' };
+  if (m.disputeId) return { to: '/pages/my-reports.html', label: 'View reports' };
   if (m.reportId) return { to: '/pages/my-reports.html', label: 'View reports' };
   if (ORGANIZER_TYPES.includes(item.type) && m.compId) return { to: `/pages/competition-payment.html?id=${encodeURIComponent(m.compId)}`, label: 'Open payments and escrow' };
   if (MONEY_TYPES.includes(item.type)) return { to: '/pages/my-payments.html', label: 'View my payments' };

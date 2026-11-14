@@ -31,43 +31,45 @@
   padding: 8px 18px;
 }
 
-/* ── Search Bar ── */
+/* ── Search Bar ── (same look as the other page search inputs) */
 .search-wrap {
-  margin-bottom: 32px;
+  margin-bottom: 24px;
 }
 
 .search-inner {
   position: relative;
   width: 100%;
-  max-width: 1200px;
 }
 
 .search-icon {
   position: absolute;
-  left: 18px;
+  left: 16px;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--text-muted);
+  color: #9aa4b2;
   pointer-events: none;
 }
 
 #notif-search {
   width: 100%;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  height: 52px;
+  box-sizing: border-box;
+  background: #121212;
+  border: 1px solid #1f2a3a;
   border-radius: 12px;
-  padding: 18px 18px 18px 54px;
+  padding: 14px 16px 14px 46px;
   color: var(--text-white);
   font-size: 15px;
-  outline: none;
-  transition: all 0.2s;
+  font-family: var(--font-body);
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
-
+#notif-search::placeholder { color: #6b7280; }
 #notif-search:focus {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(198, 255, 51, 0.3);
-  box-shadow: 0 0 20px rgba(198, 255, 51, 0.05);
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(198, 255, 51, 0.12);
 }
+.search-inner:focus-within .search-icon { color: var(--accent); }
 
 /* ── Tabs ── */
 .tabs-row-high {

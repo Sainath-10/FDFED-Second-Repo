@@ -61,7 +61,9 @@ export default function Notifications() {
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return (items || []).filter((i) => (tab === 'all' || bucketOf(i) === tab) && (!q || `${i.title} ${i.body}`.toLowerCase().includes(q)));
+    // Matches the title, message, raw status/type and the tab label ("needs action", "declined", …).
+    const haystack = (i) => `${i.title || ''} ${i.body || ''} ${i.status || ''} ${String(i.type || '').replace(/[-_]/g, ' ')} ${TABS.find((t) => t.id === bucketOf(i))?.label || ''}`.toLowerCase();
+    return (items || []).filter((i) => (tab === 'all' || bucketOf(i) === tab) && (!q || haystack(i).includes(q)));
   }, [items, tab, query]);
 
   async function finish(item, status) {
@@ -130,7 +132,11 @@ export default function Notifications() {
 
       <div className="search-wrap">
         <div className="search-inner">
-          <input type="search" aria-label="Search notifications" placeholder="Search notifications…" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <svg className="search-icon" width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+            <circle cx="9" cy="9" r="6" />
+            <path d="M13.5 13.5L18 18" />
+          </svg>
+          <input id="notif-search" type="search" aria-label="Search notifications" placeholder="Search by title, message or status…" value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
       </div>
 

@@ -13,7 +13,7 @@ import { CompetitionsAPI, PlatformAPI, ReputationAPI } from '../services/api.js'
 import { calculatePlatformFee, useRevenueConfig } from '../services/competitions.js';
 import {
   FORMATS, GAMES, LARGE_PRIZE_POOL, MAX_ENTRY_FEE, MAX_PLAYERS, MAX_PRIZE_POOL, MIN_ENTRY_FEE,
-  defaultSchedule, parseRupees, readBanner, scheduleToIso, todayInput, validateContact, validateDescription, validateName, validatePrizes, validateSchedule,
+  parseRupees, readBanner, scheduleToIso, todayInput, validateContact, validateDescription, validateName, validatePrizes, validateSchedule,
 } from '../lib/competitionForm.js';
 import { UsernameChips } from '../components/UsernameSearch.jsx';
 import { competitionBanner } from '../lib/assets.js';
@@ -43,10 +43,11 @@ function Field({ id, label, children, error, help }) {
   );
 }
 
+/** Every field starts empty: the organizer chooses each value (only the banner has a default image). */
 const initialForm = () => ({
-  name: '', game: '', format: '', description: '', visibility: 'public',
-  ...defaultSchedule(),
-  maxTeams: '16', maxPlayers: '5', feeType: 'free', entryFee: '',
+  name: '', game: '', format: '', description: '', visibility: '',
+  regOpen: '', regClose: '', start: '', end: '',
+  maxTeams: '', maxPlayers: '', feeType: '', entryFee: '',
   p1: '', p2: '', p3: '', coOrganizers: [],
   contact: { fullName: '', phone: '', email: '', organisation: '', purpose: '' },
 });
@@ -111,12 +112,14 @@ export default function CreateCompetition() {
     const d = validateDescription(form.description); if (d) next.description = d;
     if (!form.game) next.game = 'Choose a game.';
     if (!form.format) next.format = 'Choose a format.';
+    if (!form.visibility) next.visibility = 'Choose who can register.';
+    if (!form.feeType) next.feeType = 'Choose an entry fee option.';
     Object.assign(next, validateSchedule(form));
     const mt = Number(form.maxTeams);
     if (!Number.isInteger(mt) || mt < 2 || mt > platform.maxTeams) next.maxTeams = `Whole number from 2 to ${platform.maxTeams}.`;
     const mp = Number(form.maxPlayers);
     if (!Number.isInteger(mp) || mp < 1 || mp > MAX_PLAYERS) next.maxPlayers = `Whole number from 1 to ${MAX_PLAYERS}.`;
-    if (form.feeType !== 'free') {
+    if (form.feeType && form.feeType !== 'free') {
       const fee = parseRupees(form.entryFee, { label: 'Entry fee', allowEmpty: false });
       if (fee.error) next.entryFee = fee.error;
       else if (fee.value < MIN_ENTRY_FEE) next.entryFee = `The entry fee must be at least ${formatINR(MIN_ENTRY_FEE)}.`;
@@ -244,8 +247,9 @@ export default function CreateCompetition() {
             {banner && <button type="button" className="btn-cancel" style={{ marginTop: 8 }} onClick={() => setBanner('')}>Remove upload</button>}
 
             <div className="form-section-title">Visibility</div>
-            <Field id="comp-visibility" label="Who can register" help={form.visibility === 'private' ? 'A join code is generated when you publish. You will see it on the competition page.' : 'Anyone eligible can register without a code.'}>
+            <Field id="comp-visibility" label="Who can register *" error={err('visibility')} help={form.visibility === 'private' ? 'A join code is generated when you publish. You will see it on the competition page.' : form.visibility === 'public' ? 'Anyone eligible can register without a code.' : ''}>
               <select className="form-select" id="comp-visibility" value={form.visibility} onChange={set('visibility')}>
+                <option value="" disabled>Choose who can register</option>
                 <option value="public">Public — anyone can join</option>
                 <option value="private">Private — join code required</option>
               </select>
@@ -265,14 +269,15 @@ export default function CreateCompetition() {
               <Field id="max-players" label={`Players per team (1–${MAX_PLAYERS}) *`} error={err('maxPlayers')}><input className="form-input" type="number" id="max-players" min="1" max={MAX_PLAYERS} step="1" value={form.maxPlayers} onChange={set('maxPlayers')} /></Field>
             </div>
             <div className="form-row">
-              <Field id="fee-type" label="Entry fee">
+              <Field id="fee-type" label="Entry fee *" error={err('feeType')}>
                 <select className="form-select" id="fee-type" value={form.feeType} onChange={set('feeType')}>
+                  <option value="" disabled>Choose an entry fee option</option>
                   <option value="free">Free</option>
                   <option value="per_team">Per team (captain pays)</option>
                   <option value="per_player">Per player (each player pays)</option>
                 </select>
               </Field>
-              {form.feeType !== 'free' && (
+              {form.feeType && form.feeType !== 'free' && (
                 <Field id="entry-fee" label="Entry fee amount (₹) *" error={err('entryFee')}><input className="form-input" type="number" id="entry-fee" min={MIN_ENTRY_FEE} step="1" value={form.entryFee} onChange={set('entryFee')} /></Field>
               )}
             </div>

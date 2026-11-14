@@ -28,7 +28,7 @@ const MAIN_NAV = [
   { id: 'home', label: 'Home', to: '/', icon: HomeIcon, end: true },
   { id: 'competitions', label: 'Competitions', to: '/pages/competitions.html', icon: TrophyIcon },
   { id: 'activity', label: 'Activity', to: '/pages/my-activity.html', icon: ActivityIcon, protected: true },
-  { id: 'disputes', label: 'Disputes', to: '/pages/disputes.html', icon: CheckCircleIcon, protected: true },
+  { id: 'reports', label: 'Reports', to: '/pages/my-reports.html', icon: ShieldIcon, protected: true },
   { id: 'payments', label: 'Payments', to: '/pages/my-payments.html', icon: MoneyIcon, protected: true },
   { id: 'notifications', label: 'Alerts', to: '/pages/notifications.html', icon: BellIcon, protected: true },
   { id: 'profile', label: 'Profile', to: '/pages/profile.html', icon: ProfileIcon, protected: true },

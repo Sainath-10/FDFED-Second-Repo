@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { mapCompetition, isOrganizerOf } from '../services/competitions.js';
 import { copyText } from '../components/ui.jsx';
 import { showToast } from '../lib/toast.js';
-import { CompetitionsAPI, MatchesAPI, TeamsAPI } from '../services/api.js';
+import { AuditAPI, CompetitionsAPI, MatchesAPI, TeamsAPI } from '../services/api.js';
+import ActivityTimeline from '../components/ActivityTimeline.jsx';
 import { competitionBanner } from '../lib/assets.js';
 import { groupFixtures, isFixtureWinner, normalizeFixture } from '../lib/fixtures.mjs';
 import { competitionOutcome } from '../lib/competitionOutcome.mjs';
@@ -58,6 +59,7 @@ export default function CompetitionDetail() {
   const [revision, setRevision] = useState(0);
   const cached = null;
   const apiId = id;
+  const competitionActivity = useCallback(() => AuditAPI.competition(apiId), [apiId]);
   const [joinCode, setJoinCode] = useState(null);
   const [remote, setRemote] = useState({ id: '', competition: null, matches: null, teams: null, errors: [], loading: true });
   const [stage, setStage] = useState('league');
@@ -126,7 +128,7 @@ export default function CompetitionDetail() {
   const organizers = [...new Set([creator, ...(comp?.organizers || [])].filter(Boolean))];
   const canManage = isOrganizerOf(comp, session?.username) || ['admin', 'super-admin', 'super_admin'].includes(session?.role);
   const eligibleTeams = teams.filter((team) => !['rejected', 'banned', 'disbanded'].includes(String(team.status || '').toLowerCase()));
-  const availableTabs = canManage ? ['fixtures', 'teams', 'overview', 'standings', 'organizers', 'disputes'] : ['fixtures', 'teams', 'overview', 'standings'];
+  const availableTabs = canManage ? ['fixtures', 'teams', 'overview', 'standings', 'organizers', 'disputes', 'activity'] : ['fixtures', 'teams', 'overview', 'standings'];
   const activeTab = availableTabs.includes(params.get('tab')) ? params.get('tab') : 'fixtures';
   const singleElimination = !isLeague && !/double/i.test(comp?.format || '');
   const storedSeeds = matches.filter((match) => match.bracket?.version === 2 && match.bracket.round === 1).flatMap((match) => match.bracket.slots).filter((slot) => slot.teamId).sort((a, b) => a.seed - b.seed).map((slot) => slot.teamId);
@@ -233,5 +235,6 @@ export default function CompetitionDetail() {
     {activeTab === 'standings' && <StandingsSection competitionId={apiId} teams={teams} matches={matches} outcome={outcome} />}
     {activeTab === 'organizers' && canManage && <OrganizersSection competition={{ ...comp, id: apiId }} onChanged={() => setRevision((value) => value + 1)} />}
     {activeTab === 'disputes' && canManage && <DisputesSection competitionId={apiId} competition={comp} />}
+    {activeTab === 'activity' && canManage && <section className="cd-content-panel"><div className="cd-section-heading"><div><h2>Activity timeline</h2><p>Every recorded action in this competition: changes, teams, matches, payments, reports and decisions.</p></div></div><ActivityTimeline load={competitionActivity} emptyMessage="No activity recorded for this competition yet." /></section>}
   </main>;
 }

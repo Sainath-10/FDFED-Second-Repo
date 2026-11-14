@@ -4,12 +4,14 @@
  * Everything the signed-in user is involved in, loaded from the backend so it
  * is identical on every device: competitions they organize (including unpaid
  * drafts), teams they lead, teams they play on, and co-organizer invitations
- * waiting for an answer.
+ * waiting for an answer. The Action log tab lists what the user did on the
+ * platform (and actions that affected them) from the backend audit log.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import { CompetitionsAPI } from '../services/api.js';
+import { AuditAPI, CompetitionsAPI } from '../services/api.js';
+import ActivityTimeline from '../components/ActivityTimeline.jsx';
 import { fetchAllTeams, fetchCompetitions, isCancelledCompetition, mapCompetition } from '../services/competitions.js';
 import { EmptyState, ErrorState, LoadingState, formatINR } from '../components/ui.jsx';
 import useReportSync from '../hooks/useReportSync.js';
@@ -36,6 +38,8 @@ export default function MyActivity() {
   const navigate = useNavigate();
   const [state, setState] = useState({ loading: true, error: '', comps: [], teams: [], mine: [] });
   const [query, setQuery] = useState('');
+  const [view, setView] = useState('overview');
+  const loadLog = useCallback(() => AuditAPI.mine(), []);
   const [responding, setResponding] = useState('');
   const username = session?.username || '';
 
@@ -137,6 +141,14 @@ export default function MyActivity() {
         </div>
       </div>
 
+      <div className="ui-tabs" role="tablist" aria-label="Activity views">
+        <button type="button" role="tab" aria-selected={view === 'overview'} className={`ui-tab${view === 'overview' ? ' active' : ''}`} onClick={() => setView('overview')}>Competitions &amp; teams</button>
+        <button type="button" role="tab" aria-selected={view === 'log'} className={`ui-tab${view === 'log' ? ' active' : ''}`} onClick={() => setView('log')}>Action log</button>
+      </div>
+
+      {view === 'log' ? (
+        <ActivityTimeline load={loadLog} showActor emptyMessage="Your actions on the platform will appear here." />
+      ) : (<>
       <div className="act-search-wrapper">
         <input type="search" className="act-search-input" aria-label="Search your activity" placeholder="Search by name, game or location…" value={query} onChange={(e) => setQuery(e.target.value)} />
       </div>
@@ -184,6 +196,7 @@ export default function MyActivity() {
           )}
         </section>
       ))}
+      </>)}
     </main>
   );
 }

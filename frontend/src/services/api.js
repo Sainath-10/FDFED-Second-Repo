@@ -163,6 +163,16 @@ export const ChatAPI = {
 };
 
 // ============ AUTH API ============
+/** Activity log (backend audit records). */
+export const AuditAPI = {
+  async mine(limit = 200) {
+    return makeRequest(`/audit/mine?limit=${limit}`, { method: 'GET' });
+  },
+  async competition(id, limit = 300) {
+    return makeRequest(`/audit/competition/${encodeURIComponent(id)}?limit=${limit}`, { method: 'GET' });
+  },
+};
+
 export const AuthAPI = {
   /** Username autocomplete. scope: 'players' (default) or 'all' (administrators only). */
   async searchUsers(q, scope = 'players') {
@@ -250,6 +260,12 @@ export const AuthAPI = {
       method: 'PATCH',
       body: JSON.stringify({ currentPassword, newPassword }),
     });
+  },
+
+  /** Records an explicit sign-out in the activity log; call before the token is cleared. */
+  recordLogout() {
+    if (!getToken()) return Promise.resolve();
+    return makeRequest('/auth/logout', { method: 'POST', body: JSON.stringify({}) }).catch(() => {});
   },
 
   logout() {
@@ -868,8 +884,16 @@ export const ReportsAPI = {
     const q = username ? `?username=${encodeURIComponent(username)}` : '';
     return makeRequest(`/reports/moderator-activity${q}`, { method: 'GET' });
   },
-  async appeal(id) {
-    return makeRequest(`/reports/${id}/appeal`, { method: 'POST', body: JSON.stringify({}) });
+  /** The affected organiser or player appeals a decision once; a reason is required. */
+  async appeal(id, reason) {
+    return makeRequest(`/reports/${id}/appeal`, { method: 'POST', body: JSON.stringify({ reason }) });
+  },
+  /** Community Moderator: action is 'revert' or 'discard'. */
+  async decideAppeal(id, action, reason) {
+    return makeRequest(`/reports/${id}/appeal-decision`, { method: 'POST', body: JSON.stringify({ action, reason }) });
+  },
+  async appealDetails(id) {
+    return makeRequest(`/reports/${id}/appeal-details`, { method: 'GET' });
   },
   async uplift(id, payload = {}) {
     return makeRequest(`/reports/${id}/uplift`, { method: 'POST', body: JSON.stringify(payload) });

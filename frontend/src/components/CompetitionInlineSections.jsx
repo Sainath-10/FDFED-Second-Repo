@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { CompetitionsAPI, DisputesAPI, MatchesAPI } from '../services/api.js';
-import { ReasonDialog } from './ui.jsx';
+import { CompetitionsAPI, MatchesAPI } from '../services/api.js';
 import { PRIORITY_META, STATUS_LABEL, capitalise, formatDate, reportCode } from '../lib/reporting.js';
 import { ReportsAPI } from '../services/api.js';
 import useReportSync from '../hooks/useReportSync.js';
@@ -135,76 +134,6 @@ function DisputeReportCard({ report, onDiscuss, onAct, onDiscard }) {
  * records the organiser reports queue renders (same ids, same statuses) for
  * this competition only. The status filter narrows the same records.
  */
-const DISPUTE_STATUS = {
-  open_organizer: 'Waiting for organizer',
-  under_review: 'Under review',
-  open_admin: 'With platform staff',
-  escalated_to_admin: 'Escalated to platform staff',
-  resolved: 'Resolved',
-};
-
-/** Result disputes raised by players. The organizer resolves them or escalates them to staff. */
-function ResultDisputes({ competitionId }) {
-  const [rows, setRows] = useState(null);
-  const [error, setError] = useState('');
-  const [acting, setActing] = useState(null);
-  const load = useCallback(async () => {
-    const res = await DisputesAPI.getByCompetition(competitionId);
-    if (res.ok) { setRows(res.data || []); setError(''); } else setError(res.error || 'Could not load disputes.');
-  }, [competitionId]);
-  useEffect(() => { load(); }, [load]);
-  useReportSync(load);
-
-  async function review(notes) {
-    const res = await DisputesAPI.organizerReview(acting.dispute.id, acting.action, notes, false);
-    if (!res.ok) { showToast(res.error || 'Unable to update the dispute.', 'error'); return; }
-    showToast(acting.action === 'resolve' ? 'Dispute resolved. The player was notified.' : 'Dispute escalated to platform staff.');
-    setActing(null);
-    load();
-  }
-
-  const open = (rows || []).filter((d) => d.status !== 'resolved');
-  return <div style={{ marginBottom: 28 }}>
-    <h3 style={{ color: '#fff', fontSize: 16, margin: '4px 0 10px' }}>Result disputes {rows ? `(${open.length} open)` : ''}</h3>
-    {error && <p className="cd-editor-error" role="alert">{error}</p>}
-    {rows === null && !error && <div className="cd-inline-empty">Loading disputes…</div>}
-    {rows && rows.length === 0 && <div className="cd-inline-empty">No result disputes. Open disputes block prize settlement, so they appear here first.</div>}
-    <div className="cd-dispute-report-list">
-      {(rows || []).map((d) => {
-        const canReview = ['open_organizer', 'under_review'].includes(d.status);
-        return <article className="cd-dispute-card" key={d.id}>
-          <header className="cd-dispute-card-head">
-            <span className="cd-dispute-code">DSP-{String(d.id).slice(0, 8).toUpperCase()}</span>
-            <span className="cd-dispute-badge">{capitalise(d.category || d.targetType)}</span>
-            <span className="cd-dispute-badge is-status">{DISPUTE_STATUS[d.status] || capitalise(d.status)}</span>
-          </header>
-          <p className="cd-dispute-people"><span>@{d.reportedBy}</span><span className="cd-dispute-arrow">→</span><span>{d.targetUserOrTeam}</span></p>
-          <p className="cd-dispute-desc">{d.reason}</p>
-          {(d.organizerNotes || d.adminNotes) && <p className="cd-dispute-desc" style={{ opacity: 0.8 }}>Notes: {d.adminNotes || d.organizerNotes}{d.resolvedBy ? ` — @${d.resolvedBy}` : ''}</p>}
-          <footer className="cd-dispute-actions">
-            {canReview ? <>
-              <button type="button" className="report-btn primary" onClick={() => setActing({ dispute: d, action: 'resolve' })}>Resolve</button>
-              {d.targetType !== 'opponent_team' && <button type="button" className="report-btn" onClick={() => setActing({ dispute: d, action: 'escalate_to_admin' })}>Escalate to staff</button>}
-            </> : <span className="cd-dispute-closed">{d.status === 'resolved' ? 'Resolved' : 'Handled by platform staff'}</span>}
-            <span className="cd-dispute-closed">Filed {formatDate(d.createdAt)}</span>
-          </footer>
-        </article>;
-      })}
-    </div>
-    <ReasonDialog
-      open={!!acting}
-      tone={acting?.action === 'resolve' ? 'primary' : 'danger'}
-      title={acting?.action === 'resolve' ? 'Resolve dispute' : 'Escalate dispute'}
-      description={acting?.action === 'resolve' ? 'Explain your decision. The player who raised the dispute sees these notes.' : 'Explain why platform staff should review this dispute.'}
-      placeholder="Your notes"
-      minLength={5}
-      confirmLabel={acting?.action === 'resolve' ? 'Resolve' : 'Escalate'}
-      onConfirm={review}
-      onClose={() => setActing(null)}
-    />
-  </div>;
-}
-
 export function DisputesSection({ competitionId }) {
   const navigate = useNavigate();
   const [reports, setReports] = useState([]);
@@ -233,7 +162,6 @@ export function DisputesSection({ competitionId }) {
   const visibleReports = filter === 'all' ? reports : reports.filter((report) => report.status === filter);
 
   return <section className="cd-content-panel">
-    <ResultDisputes competitionId={competitionId} />
     <div className="cd-section-heading">
       <div><h2>Player reports</h2><p>Reports about players in this competition — the same records shown in your reports queue.</p></div>
       <select value={filter} onChange={(event) => setFilter(event.target.value)} aria-label="Filter participant reports">

@@ -113,6 +113,31 @@ export class ReportEntity {
   @Column({ type: 'varchar', nullable: true, default: null })
   appealDiscussionId: string | null;
 
+  /**
+   * Which appeal workflow this report uses, fixed by the backend from the
+   * original report: 'organiser' (player vs organiser, Community Moderator
+   * decision appealed by the organiser) or 'player' (player vs player / team
+   * leader, organiser decision appealed by the accused player).
+   */
+  @Column({ type: 'varchar', nullable: true, default: null })
+  appealType: 'organiser' | 'player' | null;
+
+  @Column({ type: 'text', nullable: true, default: null })
+  appealReason: string | null;
+
+  /** null while pending | reverted | discarded */
+  @Column({ type: 'varchar', nullable: true, default: null })
+  appealOutcome: 'reverted' | 'discarded' | null;
+
+  @Column({ type: 'text', nullable: true, default: null })
+  appealDecisionReason: string | null;
+
+  @Column({ type: 'varchar', nullable: true, default: null })
+  appealDecidedBy: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true, default: null })
+  appealDecidedAt: Date | null;
+
   @Column({ default: false })
   uplifted: boolean;
 

@@ -129,6 +129,7 @@ export const PROTECTED_ROUTES = [
   // Super Admins may open a specific moderator's activity from the directory.
   route('/pages/moderator/activity.html', 'Activity', 'moderator', [...MODERATOR_ROLES, ...SUPER_ADMIN_ROLES]),
   route('/pages/moderator/report-detail.html', 'Report investigation', 'moderator', MODERATOR_ROLES),
+  route('/pages/moderator/appeal.html', 'Appeal details', 'moderator', MODERATOR_ROLES),
   route('/pages/moderator/profile.html', 'Profile', 'moderator', MODERATOR_ROLES),
 ];
 

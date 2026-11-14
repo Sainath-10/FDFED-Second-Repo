@@ -141,3 +141,20 @@ export class UpliftDto {
   @IsIn(['reopen', 'remain_terminated'])
   competitionDisposition?: string;
 }
+
+export class AppealDto {
+  @IsString()
+  @MinLength(10)
+  @MaxLength(2000)
+  reason: string;
+}
+
+export class AppealDecisionDto {
+  @IsIn(['revert', 'discard'])
+  action: 'revert' | 'discard';
+
+  @IsString()
+  @MinLength(10)
+  @MaxLength(2000)
+  reason: string;
+}

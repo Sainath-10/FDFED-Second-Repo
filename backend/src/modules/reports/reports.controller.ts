@@ -25,6 +25,8 @@ import {
   PlayerDecisionDto,
   PriorityDto,
   UpliftDto,
+  AppealDto,
+  AppealDecisionDto,
 } from './dto/report.dto';
 
 @ApiTags('Reports')
@@ -213,9 +215,25 @@ export class ReportsController {
   }
 
   @Post(':id/appeal')
-  @ApiOperation({ summary: 'Organiser appeals a restrictive decision (once per report)' })
-  async appeal(@Param('id') id: string, @Request() req: any) {
-    return this.reports.appeal(id, req.user);
+  @ApiOperation({ summary: 'The affected organiser or player appeals a decision once, with a reason' })
+  async appeal(@Param('id') id: string, @Body() dto: AppealDto, @Request() req: any) {
+    return this.reports.appeal(id, req.user, dto.reason);
+  }
+
+  @Post(':id/appeal-decision')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.COMMUNITY_MODERATOR)
+  @ApiOperation({ summary: 'Community Moderator decides an appeal: revert the decision or discard the appeal' })
+  async decideAppeal(@Param('id') id: string, @Body() dto: AppealDecisionDto, @Request() req: any) {
+    return this.reports.decideAppeal(id, dto, req.user);
+  }
+
+  @Get(':id/appeal-details')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.COMMUNITY_MODERATOR)
+  @ApiOperation({ summary: 'Appeal view: original discussion, evidence and competition timeline' })
+  async appealDetails(@Param('id') id: string, @Request() req: any) {
+    return this.reports.appealDetails(id, req.user);
   }
 
   @Post(':id/uplift')

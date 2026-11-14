@@ -275,6 +275,102 @@ export function UpliftModal({ report, onClose, onDone }) {
   );
 }
 
+/**
+ * The affected organiser or accused player appeals a decision. One appeal per
+ * decision; the server decides which workflow applies.
+ */
+export function AppealModal({ report, onClose, onDone }) {
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function submit() {
+    setError('');
+    if (reason.trim().length < 10) { setError('Explain the reason for your appeal (at least 10 characters).'); return; }
+    setBusy(true);
+    const res = await ReportsAPI.appeal(report.id, reason.trim());
+    setBusy(false);
+    if (!res.ok) { setError(res.error || 'Unable to submit the appeal.'); return; }
+    onDone && onDone(res.data);
+  }
+
+  return (
+    <Backdrop onClose={onClose}>
+      <h2>Appeal decision</h2>
+      <p className="sub">{report.code || report.id} · {capitalise(report.action)}</p>
+      <div className="report-field">
+        <label htmlFor="appeal-reason">Reason for appeal (required)</label>
+        <textarea id="appeal-reason" rows={5} maxLength={2000} value={reason} onChange={(e) => setReason(e.target.value)} autoFocus />
+        <span className="hint">A Community Moderator reviews your appeal. The decision stays in force until then, and each decision can be appealed only once.</span>
+      </div>
+      {error && <div className="report-inline-error">{error}</div>}
+      <div className="report-modal-actions">
+        <button className="report-btn ghost" onClick={onClose}>Cancel</button>
+        <button className="report-btn primary" disabled={busy} onClick={submit}>{busy ? 'Submitting…' : 'Submit Appeal'}</button>
+      </div>
+    </Backdrop>
+  );
+}
+
+/** Community Moderator decides an appeal: revert the original decision or discard the appeal. */
+export function AppealDecisionModal({ report, onClose, onDone }) {
+  const [action, setAction] = useState('');
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const player = report.appealKind === 'player' || report.queue === 'organiser';
+
+  async function submit() {
+    setError('');
+    if (!action) { setError('Choose an action.'); return; }
+    if (reason.trim().length < 10) { setError('Explain your decision (at least 10 characters).'); return; }
+    setBusy(true);
+    const res = await ReportsAPI.decideAppeal(report.id, action, reason.trim());
+    setBusy(false);
+    if (!res.ok) { setError(res.error || 'Unable to record the decision.'); return; }
+    onDone && onDone(res.data, action);
+  }
+
+  return (
+    <Backdrop onClose={onClose}>
+      <h2>Appeal decision</h2>
+      <p className="sub">{report.code || report.id} · @{report.reportedUsername} · {player ? 'Player appeal' : 'Organiser appeal'}</p>
+      {report.appealReason && (
+        <div className="report-field">
+          <label>Appeal reason</label>
+          <textarea rows={3} value={report.appealReason} readOnly disabled />
+        </div>
+      )}
+      <div className="report-field">
+        <label htmlFor="appeal-action">Action</label>
+        <select id="appeal-action" value={action} onChange={(e) => setAction(e.target.value)}>
+          <option value="" disabled>Choose an action</option>
+          <option value="revert">Revert the Decision</option>
+          <option value="discard">Discard</option>
+        </select>
+        <span className="hint">
+          {action === 'revert'
+            ? (player
+              ? "Undoes the organiser's decision completely — a removed player returns to the same team, position and role."
+              : 'Removes the restrictions from that decision and returns the report to Under Review for a new decision.')
+            : action === 'discard'
+              ? 'Keeps the original decision and its consequences. The appeal is closed.'
+              : 'The original report and its history are always kept.'}
+        </span>
+      </div>
+      <div className="report-field">
+        <label htmlFor="appeal-decision-reason">Reason (required)</label>
+        <textarea id="appeal-decision-reason" rows={4} maxLength={2000} value={reason} onChange={(e) => setReason(e.target.value)} />
+      </div>
+      {error && <div className="report-inline-error">{error}</div>}
+      <div className="report-modal-actions">
+        <button className="report-btn ghost" onClick={onClose}>Cancel</button>
+        <button className={`report-btn ${action === 'discard' ? 'danger' : 'primary'}`} disabled={busy} onClick={submit}>{busy ? 'Submitting…' : 'Submit'}</button>
+      </div>
+    </Backdrop>
+  );
+}
+
 export async function changePriority(reportId, priority) {
   return ReportsAPI.priority(reportId, priority);
 }

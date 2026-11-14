@@ -7,6 +7,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import * as AuthService from '../services/auth.js';
+import { AuthAPI } from '../services/api.js';
 
 const AuthContext = createContext(null);
 
@@ -39,6 +40,8 @@ export function AuthProvider({ children }) {
   const signup = useCallback((options) => AuthService.createAccount(options), []);
 
   const logout = useCallback(() => {
+    // The request captures the token synchronously, so clearing right after is safe.
+    AuthAPI.recordLogout();
     AuthService.clearSession();
     setSessionState(null);
   }, []);

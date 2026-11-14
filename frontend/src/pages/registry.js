@@ -34,7 +34,7 @@ import ParticipantRedirect, { CompetitionCenterRedirect, DisputeFormRedirect } f
 import OrganizerRevenue from './OrganizerRevenue.jsx';
 import CreateCompetition from './CreateCompetition.jsx';
 import EditCompetition from './EditCompetition.jsx';
-import Disputes from './Disputes.jsx';
+import MyReports from './MyReports.jsx';
 import SubmitReport from './SubmitReport.jsx';
 import DisputeEscalation from './DisputeEscalation.jsx';
 import AdminDisputeReview from './admin/AdminDisputeReview.jsx';
@@ -63,6 +63,7 @@ import OrganizerReportDetail from './OrganizerReportDetail.jsx';
 import ModeratorReports from './moderator/ModeratorReports.jsx';
 import ModeratorActivity from './moderator/ModeratorActivity.jsx';
 import ModeratorReportDetail from './moderator/ModeratorReportDetail.jsx';
+import AppealDetail from './moderator/AppealDetail.jsx';
 import ModeratorProfile from './moderator/ModeratorProfile.jsx';
 
 export const PAGE_COMPONENTS = {
@@ -87,7 +88,8 @@ export const PAGE_COMPONENTS = {
   '/pages/admin/dispute-review.html': AdminDisputeReview,
   '/pages/create-competition.html': CreateCompetition,
   '/pages/edit-competition.html': EditCompetition,
-  '/pages/disputes.html': Disputes,
+  // Disputes and reports are one page now (Reports); the old address opens it.
+  '/pages/disputes.html': () => createElement(Navigate, { to: '/pages/my-reports.html', replace: true }),
   '/pages/submit-report.html': SubmitReport,
   '/pages/dispute-escalation.html': DisputeEscalation,
   '/pages/comp-participant.html': ParticipantRedirect,
@@ -122,14 +124,14 @@ export const PAGE_COMPONENTS = {
   '/pages/watch-live.html': WatchLive,
   '/pages/about.html': About,
   '/pages/report.html': ReportForm,
-  // Reports now live inside Disputes; the old address opens that view.
-  '/pages/my-reports.html': () => createElement(Navigate, { to: '/pages/disputes.html?view=reports', replace: true }),
+  '/pages/my-reports.html': MyReports,
   '/pages/case-discussion.html': CaseDiscussion,
   '/pages/organizer-reports.html': OrganizerReports,
   '/pages/organizer-report-detail.html': OrganizerReportDetail,
   '/pages/moderator/reports.html': ModeratorReports,
   '/pages/moderator/activity.html': ModeratorActivity,
   '/pages/moderator/report-detail.html': ModeratorReportDetail,
+  '/pages/moderator/appeal.html': AppealDetail,
   '/pages/moderator/profile.html': ModeratorProfile,
 };
 

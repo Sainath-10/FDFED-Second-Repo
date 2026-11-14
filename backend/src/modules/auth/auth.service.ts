@@ -67,6 +67,11 @@ export class AuthService {
     }
 
     const user = await this.userRepository.createWithPassword(email, username, registerDto.password, UserRole.PARTICIPANT);
+    await this.auditLog.record('ACCOUNT_REGISTERED', {
+      actor: user.username, entityType: 'user', entityId: user.id,
+      details: `Account @${user.username} registered.`,
+      metadata: { username: user.username },
+    });
 
     return {
       user: { id: user.id, email: user.email, username: user.username, role: user.role },
@@ -83,8 +88,16 @@ export class AuthService {
       throw new UnauthorizedException(INVALID_CREDENTIALS);
     }
     if (user.banned) {
+      await this.auditLog.record('LOGIN_BLOCKED', {
+        actor: user.username, entityType: 'user', entityId: user.id,
+        details: 'Sign-in refused: the account is banned.', metadata: { username: user.username },
+      });
       throw new UnauthorizedException('Your account has been banned from this platform.');
     }
+    await this.auditLog.record('LOGIN', {
+      actor: user.username, entityType: 'user', entityId: user.id,
+      details: `@${user.username} signed in.`, metadata: { username: user.username },
+    });
 
     const revokedReason = user.revokedReason || null;
     if (revokedReason) {
@@ -345,7 +358,31 @@ export class AuthService {
     const clean: Partial<{ bio: string; profilePicUrl: string }> = {};
     if (updates.bio !== undefined) clean.bio = updates.bio.trim();
     if (updates.profilePicUrl !== undefined) clean.profilePicUrl = updates.profilePicUrl.trim() || null;
-    return this.userRepository.update(id, clean as any);
+    const before: any = await this.userRepository.findById(id);
+    const updated = await this.userRepository.update(id, clean as any);
+    // Before/after values, except image data (only whether it changed).
+    const changes: Record<string, { from: any; to: any }> = {};
+    if (clean.bio !== undefined && clean.bio !== (before?.bio || '')) changes.bio = { from: before?.bio || '', to: clean.bio };
+    if (clean.profilePicUrl !== undefined && clean.profilePicUrl !== (before?.profilePicUrl || null)) {
+      changes.profilePicture = { from: before?.profilePicUrl ? 'set' : 'none', to: clean.profilePicUrl ? 'set' : 'none' };
+    }
+    if (Object.keys(changes).length) {
+      await this.auditLog.record('PROFILE_UPDATED', {
+        actor: before?.username || id, entityType: 'user', entityId: id,
+        details: `Profile updated: ${Object.keys(changes).join(', ')}.`,
+        metadata: { username: before?.username, changes },
+      });
+    }
+    return updated;
+  }
+
+  /** Sign-out is client-side (the JWT is discarded); this records it in the activity log. */
+  async recordLogout(user: any) {
+    await this.auditLog.record('LOGOUT', {
+      actor: user?.username, entityType: 'user', entityId: user?.sub || user?.id || user?.userId,
+      details: `@${user?.username} signed out.`, metadata: { username: user?.username },
+    });
+    return { ok: true };
   }
 
   async changeEmail(id: string, email: string, currentPassword: string) {
@@ -379,5 +416,9 @@ export class AuthService {
     }
 
     await this.userRepository.updatePassword(id, await bcrypt.hash(newPassword, 10));
+    await this.auditLog.record('PASSWORD_CHANGED', {
+      actor: user.username, entityType: 'user', entityId: id,
+      details: 'Password changed by the account owner.', metadata: { username: user.username },
+    });
   }
 }

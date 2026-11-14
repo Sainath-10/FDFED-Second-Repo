@@ -174,6 +174,14 @@ export class AuthController {
     return this.authService.resetPassword(id, req.user);
   }
 
+  @Post('logout')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Record a sign-out in the activity log (the client discards its token)' })
+  async logout(@Request() req: any) {
+    return this.authService.recordLogout(req.user);
+  }
+
   @Patch('profile')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

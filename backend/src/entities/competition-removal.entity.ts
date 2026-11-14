@@ -34,6 +34,13 @@ export class CompetitionRemovalEntity {
   @Column({ type: 'text', nullable: true })
   reason: string | null;
 
+  /**
+   * What the removal changed, so a reverted decision can put everything back:
+   * { teamId, index, wasLeader, previousRole, successor, successorPreviousRole }.
+   */
+  @Column({ type: 'jsonb', nullable: true, default: null })
+  restoreSnapshot: Record<string, any> | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }

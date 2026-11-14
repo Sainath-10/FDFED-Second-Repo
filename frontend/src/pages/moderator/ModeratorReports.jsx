@@ -1,13 +1,18 @@
 /**
  * NEXUS ESPORTS — Community Moderator Reports
- * Reports against organisers, with the five queue tabs and decision actions.
+ * Reports against organisers, with the queue tabs and decision actions.
+ *
+ * The Appealed tab holds both appeal workflows, each with its own operations
+ * (the server sets `appealKind` from the original report):
+ *  - organiser appeal: Enter Discussion (existing room + uplift flow) and Decision;
+ *  - player appeal:    View, Act and Discuss (the organiser's original room).
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ReportsAPI } from '../../services/api.js';
 import useReportSync from '../../hooks/useReportSync.js';
 import ReportCard from '../../components/ReportCard.jsx';
-import { DiscardModal, ModeratorDecisionModal } from '../../components/ReportActionModals.jsx';
+import { AppealDecisionModal, DiscardModal, ModeratorDecisionModal } from '../../components/ReportActionModals.jsx';
 import { showToast } from '../../lib/toast.js';
 import '../../styles/pages/admin/dashboard.css';
 import '../../styles/pages/reports.css';
@@ -22,8 +27,9 @@ const TABS = [
   { key: 'appealed', label: 'Appealed' },
 ];
 const isAppealed = (report) => report.status === 'resolved'
-  && report.appealStatus === 'submitted'
+  && ['submitted', 'deciding'].includes(report.appealStatus)
   && !report.uplifted;
+const isPlayerAppeal = (report) => report.appealKind === 'player';
 
 export default function ModeratorReports() {
   const navigate = useNavigate();
@@ -33,9 +39,10 @@ export default function ModeratorReports() {
   const [error, setError] = useState('');
   const [discardTarget, setDiscardTarget] = useState(null);
   const [decisionTarget, setDecisionTarget] = useState(null);
+  const [appealDecisionTarget, setAppealDecisionTarget] = useState(null);
 
+  // Background refreshes keep the list on screen; only the first load shows "Loading".
   const load = useCallback(async () => {
-    setLoading(true);
     setError('');
     const res = await ReportsAPI.moderation();
     if (!res.ok) setError(res.error || 'Unable to load organiser reports.');
@@ -59,7 +66,8 @@ export default function ModeratorReports() {
     navigate(`/pages/case-discussion.html?discussionId=${res.data.discussionId}`);
   }
 
-  const activeReports = reports.filter((report) => ACTIVE_STATUS_KEYS.includes(report.status));
+  // Player-appeal rows come from the organiser queue and only belong in the Appealed tab.
+  const activeReports = reports.filter((report) => !isPlayerAppeal(report) && ACTIVE_STATUS_KEYS.includes(report.status));
   const appealedReports = reports.filter(isAppealed);
   const visibleReports = [...activeReports, ...appealedReports];
   const counts = visibleReports.reduce((acc, report) => {
@@ -110,11 +118,20 @@ export default function ModeratorReports() {
               key={report.id}
               report={report}
               statusLabel={isAppealed(report) ? 'Appealed' : null}
-              detailHref={`/pages/moderator/report-detail.html?id=${report.id}`}
-              actions={isAppealed(report) ? (
-                <button className="report-btn primary" onClick={() => enterAppeal(report)}>
-                  Enter Discussion
-                </button>
+              detailHref={isPlayerAppeal(report) ? null : `/pages/moderator/report-detail.html?id=${report.id}`}
+              actions={isAppealed(report) && isPlayerAppeal(report) ? (
+                <>
+                  <button className="report-btn" onClick={() => navigate(`/pages/moderator/appeal.html?id=${report.id}`)}>View</button>
+                  <button className="report-btn primary" onClick={() => setAppealDecisionTarget(report)}>Act</button>
+                  <button className="report-btn" onClick={() => enterAppeal(report)}>Discuss</button>
+                </>
+              ) : isAppealed(report) ? (
+                <>
+                  <button className="report-btn primary" onClick={() => enterAppeal(report)}>
+                    Enter Discussion
+                  </button>
+                  <button className="report-btn" onClick={() => setAppealDecisionTarget(report)}>Decision</button>
+                </>
               ) : ['new', 'under_review', 'awaiting_response'].includes(report.status) ? (
                 <>
                   <button className="report-btn" onClick={() => discuss(report)}>Discuss</button>
@@ -132,6 +149,17 @@ export default function ModeratorReports() {
           report={discardTarget}
           onClose={() => setDiscardTarget(null)}
           onDone={() => { setDiscardTarget(null); showToast('Report discarded.', 'success'); load(); }}
+        />
+      )}
+      {appealDecisionTarget && (
+        <AppealDecisionModal
+          report={appealDecisionTarget}
+          onClose={() => setAppealDecisionTarget(null)}
+          onDone={(_, action) => {
+            setAppealDecisionTarget(null);
+            showToast(action === 'revert' ? 'Decision reverted.' : 'Appeal discarded. The original decision stands.', 'success');
+            load();
+          }}
         />
       )}
       {decisionTarget && (

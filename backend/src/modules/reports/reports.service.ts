@@ -55,6 +55,8 @@ import {
 const REVIEW_STATUSES: ReportStatus[] = ['new', 'under_review', 'awaiting_response'];
 /** Organiser decisions with a real restriction can be appealed once and uplifted. */
 const APPEALABLE_ACTIONS = new Set(['reputation_downgrade', 'creation_restriction', 'competition_suspension', 'formal_warning', 'final_warning']);
+/** Organiser decisions against a player that the player can appeal to the Community Moderator. */
+const PLAYER_APPEALABLE_ACTIONS = new Set(['remove_from_competition', 'warning', 'formal_warning', 'final_warning']);
 const lower = (v: unknown) => String(v ?? '').trim().toLowerCase();
 const MAX_EVIDENCE = 5;
 const MAX_EVIDENCE_BYTES = 5 * 1024 * 1024;
@@ -439,12 +441,10 @@ export class ReportsService implements OnModuleInit {
       decisionHistory: history,
       latestDecision,
       appealUsed,
-      canAppeal: report.queue === 'moderator'
-        && report.status === 'resolved'
-        && APPEALABLE_ACTIONS.has(String(report.action || ''))
-        && !report.uplifted
-        && !appealUsed
-        && (!latestDecision || latestDecision.status === 'active'),
+      // The affected person (organiser or accused player) may appeal once; the
+      // workflow is fixed by the report's queue, not by the client.
+      canAppeal: this.appealBlocker(report) === null,
+      appealKind: this.appealTypeFor(report),
       competitionName: comp?.name || report.competitionId,
       reporterPriorSubstantiated: reporterPrior,
       accusedPriorSubstantiated: accusedPrior,
@@ -478,8 +478,12 @@ export class ReportsService implements OnModuleInit {
   async listForModeration(status?: string) {
     const where: Record<string, any> = { queue: 'moderator' };
     if (status && status !== 'all') where.status = status;
-    const rows = await this.reports.find({ where, order: { createdAt: 'DESC' }, take: 200 });
-    return Promise.all(rows.map((row) => this.decorate(row)));
+    const [rows, playerAppeals] = await Promise.all([
+      this.reports.find({ where, order: { createdAt: 'DESC' }, take: 200 }),
+      // Player appeals (organiser-queue reports) reach the Community Moderator only through an appeal.
+      this.reports.find({ where: { queue: 'organiser', appealType: 'player', appealStatus: In(['submitted', 'deciding']) }, order: { appealedAt: 'DESC' }, take: 200 }),
+    ]);
+    return Promise.all([...rows, ...playerAppeals].map((row) => this.decorate(row)));
   }
 
   async listMine(username: string) {
@@ -814,6 +818,15 @@ export class ReportsService implements OnModuleInit {
             }),
           ),
       );
+    } else {
+      // Every other participant hears about a new message (once per message).
+      const others = await this.participants.find({ where: { discussionId } });
+      await this.notifyMany(
+        others.map((p) => p.username).filter((name) => lower(name) !== lower(user.username)),
+        `New message in ${this.reportCode(report.id)}`,
+        `@${user.username}: ${body.slice(0, 160)}`,
+        { reportId: report.id, discussionId, link: `/pages/case-discussion.html?discussionId=${discussionId}` },
+      );
     }
     await this.audit(report.id, 'DISCUSSION_MESSAGE', user.username, `Message posted in case ${discussionId}.`, {
       discussionId,
@@ -951,6 +964,20 @@ export class ReportsService implements OnModuleInit {
       action: dto.action,
       reportedUsername: report.reportedUsername,
     });
+    await this.auditLog.record('REPORT_DECIDED', {
+      actor: user.username, entityType: 'report', entityId: id,
+      details: `Organiser decision on ${this.reportCode(id)}: ${dto.finding} / ${String(dto.action).replace(/_/g, ' ')}.`,
+      metadata: { competitionId: report.competitionId, reportId: id, finding: dto.finding, action: dto.action, reportedUsername: report.reportedUsername },
+    });
+    const code = this.reportCode(id);
+    const link = '/pages/my-reports.html';
+    await this.notifyUser(report.reporterUsername, 'Decision on your report',
+      `${code}: ${dto.finding} — ${String(dto.action).replace(/_/g, ' ')}.`, { reportId: id, compId: report.competitionId, link });
+    if (dto.action !== 'remove_from_competition') {
+      await this.notifyUser(report.reportedUsername, 'Decision on a report about you',
+        `${code}: ${dto.finding} — ${String(dto.action).replace(/_/g, ' ')}.${PLAYER_APPEALABLE_ACTIONS.has(dto.action) ? ' You can appeal it once from your Reports page.' : ''}`,
+        { reportId: id, compId: report.competitionId, link });
+    }
     if (dto.action !== 'no_action') {
       await this.reputation
         .evaluate(
@@ -991,6 +1018,8 @@ export class ReportsService implements OnModuleInit {
     let remaining: string[] = [];
     let leaderLeaving = false;
     let successor: any = null;
+    // Everything this removal changes, so a reverted decision can restore it exactly.
+    const snapshot: Record<string, any> = { teamId: team.id, index: -1, wasLeader: false, previousRole: null, successor: null, successorPreviousRole: null };
 
     await this.dataSource.transaction(async (manager) => {
       const repo = manager.getRepository(TeamEntity);
@@ -999,6 +1028,9 @@ export class ReportsService implements OnModuleInit {
 
       const currentLeader = String(fresh.leaderId || '').toLowerCase();
       leaderLeaving = currentLeader === removedKey;
+      snapshot.index = (fresh.memberUsernames || []).findIndex((m) => String(m).toLowerCase() === removedKey);
+      snapshot.wasLeader = leaderLeaving;
+      snapshot.previousRole = allUsers.find((u: any) => String(u.username).toLowerCase() === removedKey)?.role || null;
       remaining = (fresh.memberUsernames || []).filter((m) => String(m).toLowerCase() !== removedKey);
       fresh.memberUsernames = remaining;
 
@@ -1025,6 +1057,10 @@ export class ReportsService implements OnModuleInit {
       const existing = await removalRepo.findOne({
         where: { competitionId: report.competitionId, username: report.reportedUsername },
       });
+      if (successor) {
+        snapshot.successor = successor.username;
+        snapshot.successorPreviousRole = successor.role || null;
+      }
       if (!existing) {
         await removalRepo.save(removalRepo.create({
           competitionId: report.competitionId,
@@ -1032,6 +1068,7 @@ export class ReportsService implements OnModuleInit {
           removedBy: actor,
           reportId: report.id,
           reason: report.conclusion || `Removed by organiser decision on report ${report.id}.`,
+          restoreSnapshot: snapshot,
         }));
       }
 
@@ -1091,7 +1128,7 @@ export class ReportsService implements OnModuleInit {
     await this.notifyUser(
       report.reportedUsername,
       'Removed from competition',
-      `You were removed from "${report.competitionId}" following report ${this.reportCode(report.id)}. You can no longer access its team or competition management features, but you can still view your reports and report the organiser.`,
+      `You were removed from "${report.competitionId}" following report ${this.reportCode(report.id)}. You can no longer access its team or competition management features, but you can still view your reports and appeal this decision once from your Reports page.`,
       { reportId: report.id, compId: report.competitionId },
     );
     if (successor) {
@@ -1251,54 +1288,147 @@ export class ReportsService implements OnModuleInit {
     return room;
   }
 
-  /** The organiser appeals a restrictive decision once; the decision stays active meanwhile. */
-  async appeal(id: string, user: any) {
-    const report = await this.reports.findOne({ where: { id } });
-    if (!report) throw new NotFoundException('Report not found.');
-    if (report.queue !== 'moderator') throw new BadRequestException('Only decisions against an organiser can be appealed.');
-    if (lower(report.reportedUsername) !== lower(user?.username)) {
-      throw new ForbiddenException('Only the organiser affected by this decision can appeal it.');
-    }
-    if (report.status !== 'resolved') throw new BadRequestException('This decision is not active.');
-    if (!APPEALABLE_ACTIONS.has(String(report.action || ''))) {
-      throw new BadRequestException('A normal warning or a no-action decision cannot be appealed.');
-    }
-    if (this.appealUsed(report)) throw new BadRequestException('This report has already used its one appeal.');
+  // ─── Appeals ────────────────────────────────────────────────────────────────
+  //
+  // Two independent workflows share the moderator's Appealed tab. The type is
+  // derived on the server from the original report — never from the UI:
+  //   organiser appeal: report.queue === 'moderator' (player vs organiser); the
+  //     organiser appeals the Community Moderator's decision.
+  //   player appeal:    report.queue === 'organiser' (player vs player / team
+  //     leader); the accused player appeals the organiser's decision.
+  // An organiser appeal never reaches the reinstatement code, and a player
+  // appeal never reaches the organiser uplift code.
 
-    const reviewer = report.resolvedBy || user.username;
-    const room = await this.ensureRoom(report, reviewer, [
-      { username: report.reportedUsername, role: 'accused' },
-      { username: report.reporterUsername, role: 'reporter' },
-    ], user.username);
-    report.appealStatus = 'submitted';
-    report.appealCount = Number(report.appealCount || 0) + 1;
-    report.appealedAt = new Date();
-    report.appealDiscussionId = room.id;
-    await this.reports.save(report);
-    await this.recordStatus(report, 'resolved', user.username, 'Appeal submitted. The decision remains active while it is reviewed.');
-    await this.audit(id, 'APPEAL_SUBMITTED', user.username, 'Appeal submitted; the active sanction was not changed.', { discussionId: room.id });
-    const link = `/pages/case-discussion.html?discussionId=${room.id}`;
-    if (report.resolvedBy) {
-      await this.notifyUser(report.resolvedBy, 'Organiser appealed a decision',
-        `The organiser appealed the decision on ${this.reportCode(report.id)}. Open the Appealed tab to join the discussion.`,
-        { reportId: report.id, discussionId: room.id, link: '/pages/moderator/reports.html' });
+  private appealTypeFor(report: ReportEntity): 'organiser' | 'player' {
+    return report.queue === 'moderator' ? 'organiser' : 'player';
+  }
+
+  private async moderatorUsernames(): Promise<string[]> {
+    const all = await this.users.findAll();
+    return all
+      .filter((u: any) => !u.banned && ['community_moderator', 'super_admin'].includes(String(u.role || '').toLowerCase()))
+      .map((u: any) => u.username);
+  }
+
+  /** Notifies each username once per call (case-insensitive), skipping blanks. */
+  private async notifyMany(usernames: string[], title: string, body: string, meta: Record<string, any> = {}) {
+    const seen = new Set<string>();
+    for (const name of usernames) {
+      const key = lower(name);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      await this.notifyUser(name, title, body, meta);
     }
-    await this.notifyUser(user.username, 'Appeal submitted',
-      `Your appeal for ${this.reportCode(report.id)} was sent to the Community Moderator. The decision stays active until it is reviewed.`,
-      { reportId: report.id, discussionId: room.id, link });
-    return { discussionId: room.id, discussion: room, report: await this.decorate(report) };
+  }
+
+  /** Why the affected person cannot appeal this report now, or null when they can. */
+  private appealBlocker(report: ReportEntity, username?: string): string | null {
+    if (username && lower(report.reportedUsername) !== lower(username)) {
+      return report.queue === 'moderator'
+        ? 'Only the organiser affected by this decision can appeal it.'
+        : 'Only the player affected by this decision can appeal it.';
+    }
+    if (report.status !== 'resolved') return 'This decision is not active.';
+    if (this.appealUsed(report)) return 'This decision has already been appealed once.';
+    const history = this.decisionHistoryOf(report);
+    const latest = history.length ? history[history.length - 1] : null;
+    if (latest && latest.status !== 'active') return 'This decision is no longer active.';
+    if (report.queue === 'moderator') {
+      if (report.uplifted) return 'This decision was already uplifted.';
+      if (!APPEALABLE_ACTIONS.has(String(report.action || ''))) return 'A normal warning or a no-action decision cannot be appealed.';
+      return null;
+    }
+    if (!PLAYER_APPEALABLE_ACTIONS.has(String(report.action || ''))) return 'Only a warning or a removal from the competition can be appealed.';
+    return null;
   }
 
   /**
-   * A Community Moderator reverses the current decision: only what that
-   * decision created is undone, the history is kept, and the report reopens.
+   * The affected person appeals a decision once, with a reason. The decision
+   * stays in force until a Community Moderator decides the appeal. Submission
+   * is claimed atomically, so a double click or a retry cannot file twice.
    */
-  async uplift(id: string, dto: { reason: string; competitionDisposition?: string }, user: any) {
-    if (!this.isModerator(user)) throw new ForbiddenException('Only a Community Moderator can uplift an action.');
-    const reason = String(dto?.reason || '').trim();
-    if (reason.length < 15) throw new BadRequestException('Give a reason of at least 15 characters to uplift an action.');
+  async appeal(id: string, user: any, reasonInput?: string) {
+    const reason = String(reasonInput || '').trim();
+    if (reason.length < 10) throw new BadRequestException('Explain the reason for your appeal (at least 10 characters).');
+    if (reason.length > 2000) throw new BadRequestException('The reason is too long (max 2000 characters).');
     const report = await this.reports.findOne({ where: { id } });
     if (!report) throw new NotFoundException('Report not found.');
+    const blocker = this.appealBlocker(report, user?.username);
+    if (blocker) throw (blocker.startsWith('Only the') ? new ForbiddenException(blocker) : new BadRequestException(blocker));
+
+    const type = this.appealTypeFor(report);
+    const claimed = await this.reports.createQueryBuilder()
+      .update(ReportEntity)
+      .set({
+        appealStatus: 'submitted',
+        appealType: type,
+        appealReason: reason,
+        appealCount: () => '"appealCount" + 1',
+        appealedAt: () => 'now()',
+      } as any)
+      .where('id = :id AND "appealStatus" IS NULL AND "appealCount" = 0 AND "appealedAt" IS NULL AND status = :status', { id, status: 'resolved' })
+      .execute();
+    if (!claimed.affected) throw new BadRequestException('This decision has already been appealed once.');
+    const fresh = await this.reports.findOneOrFail({ where: { id } });
+    const code = this.reportCode(report.id);
+    const moderators = await this.moderatorUsernames();
+
+    if (type === 'organiser') {
+      // Existing organiser workflow: the appeal opens the report's one discussion room.
+      const reviewer = report.resolvedBy || user.username;
+      const room = await this.ensureRoom(fresh, reviewer, [
+        { username: report.reportedUsername, role: 'accused' },
+        { username: report.reporterUsername, role: 'reporter' },
+      ], user.username);
+      fresh.appealDiscussionId = room.id;
+      await this.reports.save(fresh);
+      await this.recordStatus(fresh, 'resolved', user.username, 'Appeal submitted. The decision remains active while it is reviewed.');
+      await this.audit(id, 'APPEAL_SUBMITTED', user.username, `Organiser appeal submitted: ${reason}`, { appealType: type, discussionId: room.id });
+      await this.auditLog.record('APPEAL_SUBMITTED', {
+        actor: user.username, entityType: 'report', entityId: id, details: `Organiser appealed the decision on ${code}.`,
+        metadata: { competitionId: report.competitionId, reportId: id, appealType: type, reason },
+      });
+      await this.notifyMany(moderators, 'Organiser appealed a decision',
+        `@${user.username} appealed the decision on ${code}: "${reason.slice(0, 160)}". It is in the Appealed tab.`,
+        { reportId: id, discussionId: room.id, link: '/pages/moderator/reports.html' });
+      await this.notifyUser(user.username, 'Appeal submitted',
+        `Your appeal for ${code} was sent to the Community Moderator. The decision stays active until it is reviewed.`,
+        { reportId: id, discussionId: room.id, link: `/pages/case-discussion.html?discussionId=${room.id}` });
+      return { discussionId: room.id, discussion: room, report: await this.decorate(fresh) };
+    }
+
+    // Player appeal: routed to the Community Moderator. The organiser's room is
+    // reused (never duplicated) when the moderator chooses Discuss.
+    await this.recordStatus(fresh, 'resolved', user.username, "Appeal submitted. The organiser's decision remains in force while it is reviewed.");
+    await this.audit(id, 'APPEAL_SUBMITTED', user.username, `Player appeal submitted: ${reason}`, { appealType: type });
+    await this.auditLog.record('APPEAL_SUBMITTED', {
+      actor: user.username, entityType: 'report', entityId: id, details: `@${user.username} appealed the organiser decision on ${code}.`,
+      metadata: { competitionId: report.competitionId, reportId: id, appealType: type, reason },
+    });
+    await this.notifyMany(moderators, 'Player appealed an organiser decision',
+      `@${user.username} appealed the organiser's decision on ${code}: "${reason.slice(0, 160)}". It is in the Appealed tab.`,
+      { reportId: id, link: '/pages/moderator/reports.html' });
+    await this.notifyMany(await this.organizersOf(report.competitionId).catch(() => []), 'A decision was appealed',
+      `@${user.username} appealed your decision on ${code}. A Community Moderator will review it; the decision stays in force meanwhile.`,
+      { reportId: id, compId: report.competitionId, link: '/pages/my-reports.html' });
+    await this.notifyUser(user.username, 'Appeal submitted',
+      `Your appeal for ${code} was sent to the Community Moderator. The decision stays in force until it is reviewed.`,
+      { reportId: id, link: '/pages/my-reports.html' });
+    return { discussionId: null, discussion: null, report: await this.decorate(fresh) };
+  }
+
+  /**
+   * Reverses an organiser-workflow decision: only what that decision created
+   * is undone, the history is kept, and the report reopens as `reopenAs`.
+   * Shared by Uplift (reopens as 'new') and the appeal Decision ('under_review').
+   */
+  private async revertOrganiserDecision(
+    report: ReportEntity,
+    reason: string,
+    user: any,
+    reopenAs: ReportStatus,
+    competitionDisposition: string | undefined,
+  ) {
     if (report.queue !== 'moderator') throw new BadRequestException('Only decisions against an organiser can be uplifted.');
     if (report.status !== 'resolved') throw new BadRequestException('This decision is no longer active.');
     const history = this.decisionHistoryOf(report);
@@ -1316,7 +1446,7 @@ export class ReportsService implements OnModuleInit {
 
     let disposition: string | null = null;
     if (active.action === 'competition_suspension') {
-      disposition = dto.competitionDisposition === 'reopen' ? 'reopen' : 'remain_terminated';
+      disposition = competitionDisposition === 'reopen' ? 'reopen' : 'remain_terminated';
       if (disposition === 'reopen') {
         await this.competitions.update(report.competitionId, { status: active.suspendedFrom && active.suspendedFrom !== 'suspended' ? active.suspendedFrom : 'active' } as any).catch(() => undefined);
       }
@@ -1338,34 +1468,373 @@ export class ReportsService implements OnModuleInit {
     report.finding = null;
     report.action = null;
     report.conclusion = null;
-    report.status = 'new';
+    report.status = reopenAs;
     await this.reports.save(report);
-    await this.recordStatus({ ...report, status: previous }, 'new', user.username, `Previous action uplifted: ${reason}`);
+    await this.recordStatus({ ...report, status: previous }, reopenAs, user.username, `Previous action uplifted: ${reason}`);
     const room = await this.discussions.findOne({ where: { reportId: report.id } });
     if (room && room.status === 'ended') {
       room.status = 'open';
       await this.discussions.save(room);
     }
-    await this.audit(id, 'ACTION_UPLIFTED', user.username, `${active.action} uplifted. ${reason}`, { disposition });
+    await this.audit(report.id, 'ACTION_UPLIFTED', user.username, `${active.action} uplifted. ${reason}`, { disposition });
+    await this.auditLog.record('ORGANISER_RESTRICTION_REMOVED', {
+      actor: user.username, entityType: 'organiser_reputation', entityId: report.reportedUsername,
+      details: `${String(active.action).replace(/_/g, ' ')} on ${this.reportCode(report.id)} was reverted: ${reason}`,
+      metadata: { competitionId: report.competitionId, reportId: report.id, action: active.action, disposition },
+    });
+    return active;
+  }
+
+  /** A Community Moderator reverses the current decision and reopens the report (existing Uplift). */
+  async uplift(id: string, dto: { reason: string; competitionDisposition?: string }, user: any) {
+    if (!this.isModerator(user)) throw new ForbiddenException('Only a Community Moderator can uplift an action.');
+    const reason = String(dto?.reason || '').trim();
+    if (reason.length < 15) throw new BadRequestException('Give a reason of at least 15 characters to uplift an action.');
+    const report = await this.reports.findOne({ where: { id } });
+    if (!report) throw new NotFoundException('Report not found.');
+    if (report.queue !== 'moderator') throw new BadRequestException('Only decisions against an organiser can be uplifted.');
+    const appealPending = report.appealStatus === 'submitted';
+    await this.revertOrganiserDecision(report, reason, user, 'new', dto.competitionDisposition);
+    if (appealPending) {
+      report.appealOutcome = 'reverted';
+      report.appealDecisionReason = reason;
+      report.appealDecidedBy = user.username;
+      report.appealDecidedAt = new Date();
+      await this.reports.save(report);
+    }
     await this.notifyUser(report.reportedUsername, 'Decision uplifted',
       `The Community Moderator uplifted the decision on ${this.reportCode(report.id)}. Its restrictions were removed and the report was reopened for review.`,
       { reportId: report.id, compId: report.competitionId, link: '/pages/my-reports.html' });
     return this.get(id, user);
   }
 
-  /** The moderator opens the report's single discussion room (created when missing). */
+  /**
+   * The Community Moderator decides an appeal: 'revert' undoes the original
+   * decision, 'discard' keeps it. The appeal is claimed atomically, so two
+   * moderators (or a retried request) can never apply a decision twice.
+   */
+  async decideAppeal(id: string, dto: { action: string; reason: string }, user: any) {
+    if (!this.isModerator(user)) throw new ForbiddenException('Only a Community Moderator can decide an appeal.');
+    const action = String(dto?.action || '');
+    if (!['revert', 'discard'].includes(action)) throw new BadRequestException('Choose Revert the Decision or Discard.');
+    const reason = String(dto?.reason || '').trim();
+    if (reason.length < 10) throw new BadRequestException('Explain your decision (at least 10 characters).');
+    if (reason.length > 2000) throw new BadRequestException('The reason is too long (max 2000 characters).');
+
+    const report = await this.reports.findOne({ where: { id } });
+    if (!report) throw new NotFoundException('Report not found.');
+    const type = report.appealType || this.appealTypeFor(report);
+    const wanted = action === 'revert' ? 'reverted' : 'discarded';
+    if (report.appealStatus !== 'submitted') {
+      // Idempotent: the same decision arriving twice returns the recorded result.
+      if (report.appealOutcome === wanted) return this.decorate(report);
+      throw new BadRequestException(report.appealOutcome ? 'This appeal was already decided.' : 'There is no pending appeal on this report.');
+    }
+
+    const claimed = await this.reports.createQueryBuilder()
+      .update(ReportEntity)
+      .set({ appealStatus: 'deciding' } as any)
+      .where('id = :id AND "appealStatus" = :pending', { id, pending: 'submitted' })
+      .execute();
+    if (!claimed.affected) throw new BadRequestException('Another moderator is deciding this appeal right now.');
+
+    try {
+      const fresh = await this.reports.findOneOrFail({ where: { id } });
+      fresh.appealStatus = 'submitted'; // replaced by the final status when the decision completes
+      if (action === 'discard') return await this.discardAppeal(fresh, type, reason, user);
+      return type === 'organiser'
+        ? await this.revertOrganiserAppeal(fresh, reason, user)
+        : await this.revertPlayerAppeal(fresh, reason, user);
+    } catch (err) {
+      // Release the claim so the appeal can be decided again.
+      await this.reports.createQueryBuilder()
+        .update(ReportEntity)
+        .set({ appealStatus: 'submitted' } as any)
+        .where('id = :id AND "appealStatus" = :deciding', { id, deciding: 'deciding' })
+        .execute()
+        .catch(() => undefined);
+      throw err;
+    }
+  }
+
+  private stampAppealDecision(report: ReportEntity, outcome: 'reverted' | 'discarded', reason: string, user: any) {
+    report.appealStatus = 'resolved';
+    report.appealOutcome = outcome;
+    report.appealDecisionReason = reason;
+    report.appealDecidedBy = user.username;
+    report.appealDecidedAt = new Date();
+  }
+
+  private async discardAppeal(report: ReportEntity, type: string, reason: string, user: any) {
+    this.stampAppealDecision(report, 'discarded', reason, user);
+    await this.reports.save(report);
+    const code = this.reportCode(report.id);
+    await this.recordStatus(report, report.status, user.username, `Appeal discarded; the original decision stays in force. ${reason}`);
+    await this.audit(report.id, 'APPEAL_DISCARDED', user.username, `Appeal discarded: ${reason}`, { appealType: type });
+    await this.auditLog.record('APPEAL_DISCARDED', {
+      actor: user.username, entityType: 'report', entityId: report.id,
+      details: `Appeal on ${code} discarded; the original decision stays in force.`,
+      metadata: { competitionId: report.competitionId, reportId: report.id, appealType: type, reason },
+    });
+    if (type === 'organiser') {
+      await this.notifyUser(report.reportedUsername, 'Appeal discarded — restrictions retained',
+        `The Community Moderator discarded your appeal on ${code}. The original decision and its restrictions remain in force. Reason: ${reason}`,
+        { reportId: report.id, link: '/pages/my-reports.html' });
+    } else {
+      const organizers = await this.organizersOf(report.competitionId).catch(() => []);
+      await this.notifyUser(report.reportedUsername, 'Appeal discarded',
+        `The Community Moderator discarded your appeal on ${code}. The organiser's decision remains in force. Reason: ${reason}`,
+        { reportId: report.id, compId: report.competitionId, link: '/pages/my-reports.html' });
+      await this.notifyMany([...organizers, report.reporterUsername], 'Appeal discarded',
+        `The appeal on ${code} was discarded. The original decision remains in force.`,
+        { reportId: report.id, compId: report.competitionId, link: '/pages/my-reports.html' });
+    }
+    return this.decorate(report);
+  }
+
+  /** Organiser appeal → Revert: same reversal as Uplift, but the report returns to Under Review. */
+  private async revertOrganiserAppeal(report: ReportEntity, reason: string, user: any) {
+    if (report.queue !== 'moderator') throw new BadRequestException('This is not an organiser appeal.');
+    // Reopening a suspended competition restores the organiser's access to it.
+    const active = await this.revertOrganiserDecision(report, reason, user, 'under_review', 'reopen');
+    this.stampAppealDecision(report, 'reverted', reason, user);
+    await this.reports.save(report);
+    const code = this.reportCode(report.id);
+    await this.audit(report.id, 'APPEAL_UPHELD', user.username, `Appeal upheld; ${active.action} reverted and the report returned to Under Review. ${reason}`, { appealType: 'organiser' });
+    await this.notifyUser(report.reportedUsername, 'Decision reverted — restrictions removed',
+      `Your appeal on ${code} was upheld. The restrictions from that decision were removed and the report is back under review. Reason: ${reason}`,
+      { reportId: report.id, compId: report.competitionId, link: '/pages/my-reports.html' });
+    await this.notifyUser(report.reporterUsername, 'Decision reverted on appeal',
+      `The decision on your report ${code} was reverted on appeal. The report is back under review.`,
+      { reportId: report.id, compId: report.competitionId, link: '/pages/my-reports.html' });
+    return this.decorate(report);
+  }
+
+  /** Player appeal → Revert: undo exactly what the organiser's decision did. */
+  private async revertPlayerAppeal(report: ReportEntity, reason: string, user: any) {
+    if (report.queue !== 'organiser') throw new BadRequestException('This is not a player appeal.');
+    const history = this.decisionHistoryOf(report);
+    const active = history.length ? history[history.length - 1] : null;
+    if (!active || active.status !== 'active') throw new BadRequestException('There is no active decision to revert.');
+    const action = String(active.action || report.action || '');
+    const code = this.reportCode(report.id);
+    let restored: Record<string, any> | null = null;
+
+    if (action === 'remove_from_competition') {
+      restored = await this.restoreRemovedPlayer(report, user.username, reason);
+    } else if (['warning', 'formal_warning', 'final_warning'].includes(action)) {
+      const player = await this.users.findByUsername(report.reportedUsername);
+      if (player) await this.users.update(player.id, { warningCount: Math.max(0, Number(player.warningCount || 0) - 1) } as any);
+    } else {
+      throw new BadRequestException('This decision has no consequence to revert.');
+    }
+
+    active.status = 'reverted';
+    active.revertedBy = user.username;
+    active.revertReason = reason;
+    active.revertedAt = new Date().toISOString();
+    report.decisionHistory = [...history.slice(0, -1), active];
+    this.stampAppealDecision(report, 'reverted', reason, user);
+    await this.reports.save(report);
+    await this.recordStatus(report, report.status, user.username, `Organiser decision (${action}) reverted on appeal. ${reason}`);
+    await this.audit(report.id, 'APPEAL_UPHELD', user.username, `Appeal upheld; ${action} reverted. ${reason}`, { appealType: 'player', restored });
+    await this.auditLog.record('DECISION_REVERTED', {
+      actor: user.username, entityType: 'report', entityId: report.id,
+      details: `Organiser decision (${action.replace(/_/g, ' ')}) on ${code} reverted on appeal: ${reason}`,
+      metadata: { competitionId: report.competitionId, reportId: report.id, appealType: 'player', action, restored },
+    });
+
+    const organizers = await this.organizersOf(report.competitionId).catch(() => []);
+    const reinstated = action === 'remove_from_competition';
+    await this.notifyUser(report.reportedUsername, reinstated ? 'You were reinstated into the competition' : 'Decision reverted',
+      reinstated
+        ? `Your appeal on ${code} was upheld. You are back on your team${restored?.wasLeader ? ' as Team Leader' : ''} with your previous access. Reason: ${reason}`
+        : `Your appeal on ${code} was upheld and the warning was removed. Reason: ${reason}`,
+      { reportId: report.id, compId: report.competitionId, teamId: restored?.teamId, link: '/pages/my-reports.html' });
+    await this.notifyMany([...organizers, report.reporterUsername], 'Decision reverted on appeal',
+      `The Community Moderator reverted the organiser's decision on ${code}${reinstated ? ` and reinstated @${report.reportedUsername}` : ''}.`,
+      { reportId: report.id, compId: report.competitionId, link: '/pages/my-reports.html' });
+    return this.decorate(report);
+  }
+
+  /**
+   * Puts a removed player back exactly as they were, in one transaction: same
+   * team, same roster position, same team role and account role, and the
+   * removal record that blocked their access is deleted. If they were the Team
+   * Leader, leadership returns to them and the automatically promoted player
+   * steps down, so there is never more than one leader.
+   */
+  private async restoreRemovedPlayer(report: ReportEntity, actor: string, reason: string) {
+    const username = report.reportedUsername;
+    const key = lower(username);
+    const removalRepo = this.dataSource.getRepository(CompetitionRemovalEntity);
+    const removal = await removalRepo.createQueryBuilder('r')
+      .where('r."competitionId" = :competitionId', { competitionId: report.competitionId })
+      .andWhere('lower(r.username) = :username', { username: key })
+      .getOne();
+    if (!removal) throw new BadRequestException('This player is no longer removed from the competition.');
+
+    // Snapshot from the removal; removals made before snapshots existed fall back to the audit trail.
+    let snap: Record<string, any> = removal.restoreSnapshot || {};
+    if (!snap.teamId) {
+      const rows = await this.auditRows.createQueryBuilder('a')
+        .where('a."actionType" IN (:...types)', { types: ['TEAM_MEMBER_REMOVED', 'TEAM_LEADERSHIP_TRANSFERRED'] })
+        .andWhere("a.metadata ->> 'reportId' = :reportId", { reportId: report.id })
+        .getMany();
+      const removed = rows.find((r) => r.actionType === 'TEAM_MEMBER_REMOVED');
+      const transfer = rows.find((r) => r.actionType === 'TEAM_LEADERSHIP_TRANSFERRED');
+      snap = {
+        teamId: removed?.metadata?.teamId || removed?.entityId || report.reportedTeamId || null,
+        index: -1,
+        wasLeader: !!(transfer?.metadata?.removedLeader || removed?.metadata?.removedLeader),
+        previousRole: null,
+        successor: transfer?.metadata?.newLeader || removed?.metadata?.newLeader || null,
+        successorPreviousRole: null,
+      };
+    }
+    if (!snap.teamId) throw new BadRequestException("The player's original team could not be determined.");
+
+    const result: Record<string, any> = { teamId: snap.teamId, wasLeader: !!snap.wasLeader, demoted: null };
+    await this.dataSource.transaction(async (manager) => {
+      const teamRepo = manager.getRepository(TeamEntity);
+      const team = await teamRepo.findOne({ where: { id: snap.teamId }, lock: { mode: 'pessimistic_write' } });
+      if (!team) throw new BadRequestException('The original team no longer exists, so the player cannot be reinstated.');
+      if (team.competitionId !== report.competitionId) throw new BadRequestException('The original team belongs to another competition.');
+      const status = String(team.status || '').toLowerCase();
+      if (['banned', 'rejected', 'disbanded'].includes(status)) {
+        throw new BadRequestException(`The original team is ${status}, so the player cannot be reinstated into it.`);
+      }
+
+      // A player can be on only one team per competition.
+      const others = await teamRepo.find({ where: { competitionId: report.competitionId } });
+      const elsewhere = others.find((t) => t.id !== team.id && (t.memberUsernames || []).some((m) => lower(m) === key));
+      if (elsewhere) throw new BadRequestException(`@${username} has since joined another team in this competition.`);
+
+      const members = (team.memberUsernames || []).filter(Boolean);
+      if (!members.some((m) => lower(m) === key)) {
+        const index = Number.isInteger(snap.index) && snap.index >= 0 ? Math.min(snap.index, members.length) : members.length;
+        members.splice(index, 0, username);
+      }
+      team.memberUsernames = members;
+
+      const usersRepo = manager.getRepository(UserEntity);
+      const playerRow = await usersRepo.createQueryBuilder('u').where('lower(u.username) = :k', { k: key }).getOne();
+      const staffRoles = ['admin', 'super_admin', 'finance_moderator', 'community_moderator'];
+
+      if (snap.wasLeader) {
+        const currentLeader = team.leaderId || team.leaderUsername || '';
+        team.leaderId = username;
+        team.leaderUsername = username;
+        team.createdBy = username;
+        if (currentLeader && lower(currentLeader) !== key) {
+          result.demoted = currentLeader;
+          // The interim leader steps down; their account role goes back unless they still lead another team.
+          const stillLeads = (await teamRepo.find()).some((t) => t.id !== team.id && lower(t.leaderId) === lower(currentLeader));
+          if (!stillLeads) {
+            const interim = await usersRepo.createQueryBuilder('u').where('lower(u.username) = :k', { k: lower(currentLeader) }).getOne();
+            if (interim && String(interim.role).toLowerCase() === 'team_lead') {
+              const back = lower(snap.successor) === lower(currentLeader) && snap.successorPreviousRole && !staffRoles.includes(String(snap.successorPreviousRole))
+                ? snap.successorPreviousRole
+                : UserRole.PARTICIPANT;
+              await usersRepo.update(interim.id, { role: back } as any);
+            }
+          }
+        }
+        if (playerRow && !staffRoles.includes(String(playerRow.role).toLowerCase())) {
+          await usersRepo.update(playerRow.id, { role: UserRole.TEAM_LEAD } as any);
+        }
+      } else if (playerRow && snap.previousRole && !staffRoles.includes(String(snap.previousRole))
+        && String(playerRow.role).toLowerCase() !== String(snap.previousRole).toLowerCase()) {
+        await usersRepo.update(playerRow.id, { role: snap.previousRole } as any);
+      }
+
+      await teamRepo.save(team);
+      await manager.getRepository(CompetitionRemovalEntity).delete({ id: removal.id });
+      // Same transaction: the reinstatement and its audit entry commit together or not at all.
+      const auditRepo = manager.getRepository(AuditLogEntity);
+      await auditRepo.save(auditRepo.create({
+        actionType: 'TEAM_MEMBER_REINSTATED',
+        actor,
+        entityType: 'team',
+        entityId: team.id,
+        details: `@${username} reinstated to ${team.name} after the removal on ${this.reportCode(report.id)} was reverted on appeal.`
+          + (snap.wasLeader ? ` Team Leader role restored${result.demoted ? `; @${result.demoted} stepped down` : ''}.` : ''),
+        metadata: {
+          competitionId: report.competitionId, teamId: team.id, reportId: report.id, username,
+          rosterIndex: members.findIndex((m) => lower(m) === key), wasLeader: !!snap.wasLeader,
+          previousLeader: result.demoted, reason,
+        },
+      }));
+      result.teamName = team.name;
+      result.members = members.slice();
+    });
+
+    if (result.demoted) {
+      await this.notifyUser(result.demoted, 'Team leadership returned',
+        `@${username} was reinstated to ${result.teamName} as Team Leader after an appeal. You are no longer the Team Leader.`,
+        { compId: report.competitionId, teamId: result.teamId });
+    }
+    const teammates = (result.members || []).filter((m: string) => lower(m) !== key && lower(m) !== lower(result.demoted));
+    await this.notifyMany(teammates, 'Teammate reinstated',
+      `@${username} was reinstated to ${result.teamName} after an appeal${snap.wasLeader ? ' and is Team Leader again' : ''}.`,
+      { compId: report.competitionId, teamId: result.teamId });
+    return result;
+  }
+
+  /**
+   * Moderator "Discuss". Organiser appeals: the report's own room (existing).
+   * Player appeals: the SAME room the organiser used for the report, with the
+   * organiser(s), reporter, accused player and the moderator; everyone is
+   * notified when the moderator joins or reopens it.
+   */
   async appealRoom(id: string, user: any) {
     if (!this.isModerator(user)) throw new ForbiddenException('Community Moderator access is required.');
     const report = await this.reports.findOne({ where: { id } });
     if (!report) throw new NotFoundException('Report not found.');
-    if (report.queue !== 'moderator') throw new BadRequestException('This report is not in the moderator queue.');
-    const room = await this.ensureRoom(report, report.resolvedBy || user.username, [
-      { username: report.reportedUsername, role: 'accused' },
+    if (report.queue === 'moderator') {
+      const room = await this.ensureRoom(report, report.resolvedBy || user.username, [
+        { username: report.reportedUsername, role: 'accused' },
+        { username: report.reporterUsername, role: 'reporter' },
+      ], user.username);
+      if (report.appealDiscussionId !== room.id) {
+        report.appealDiscussionId = room.id;
+        await this.reports.save(report);
+      }
+      return { discussionId: room.id, discussion: room };
+    }
+
+    if (!report.appealStatus || (report.appealType || 'player') !== 'player') {
+      throw new BadRequestException('This report has no player appeal to discuss.');
+    }
+    const before = await this.discussions.findOne({ where: { reportId: report.id } });
+    const wasJoined = before
+      ? !!(await this.participants.createQueryBuilder('p')
+        .where('p."discussionId" = :d', { d: before.id })
+        .andWhere('lower(p.username) = :u', { u: lower(user.username) })
+        .getOne())
+      : false;
+    const wasEnded = before?.status === 'ended';
+    const organizers = await this.organizersOf(report.competitionId).catch(() => []);
+    const room = await this.ensureRoom(report, report.resolvedBy || organizers[0] || user.username, [
+      ...organizers.map((name) => ({ username: name, role: 'reviewer' })),
       { username: report.reporterUsername, role: 'reporter' },
+      { username: report.reportedUsername, role: 'accused' },
+      { username: user.username, role: 'moderator' },
     ], user.username);
     if (report.appealDiscussionId !== room.id) {
       report.appealDiscussionId = room.id;
       await this.reports.save(report);
+    }
+    if (!before || !wasJoined || wasEnded) {
+      const link = `/pages/case-discussion.html?discussionId=${room.id}`;
+      const people = await this.participants.find({ where: { discussionId: room.id } });
+      await this.notifyMany(
+        people.map((p) => p.username).filter((name) => lower(name) !== lower(user.username)),
+        'Appeal discussion opened',
+        `A Community Moderator ${wasEnded ? 'reopened' : 'joined'} the discussion for the appeal on ${this.reportCode(report.id)}.`,
+        { reportId: report.id, discussionId: room.id, link },
+      );
+      await this.audit(report.id, 'APPEAL_DISCUSSION_OPENED', user.username, `Moderator ${wasEnded ? 'reopened' : 'joined'} the appeal discussion.`, { discussionId: room.id });
     }
     return { discussionId: room.id, discussion: room };
   }
@@ -1387,6 +1856,56 @@ export class ReportsService implements OnModuleInit {
       await this.reports.save(report);
     }
     return { discussionId: room.id, discussion: room };
+  }
+
+  /**
+   * Appeal "View" bundle: the original discussion (messages, participants,
+   * evidence) and the competition's audit timeline.
+   */
+  async appealDetails(id: string, user: any) {
+    if (!this.isModerator(user)) throw new ForbiddenException('Community Moderator access is required.');
+    const report = await this.reports.findOne({ where: { id } });
+    if (!report) throw new NotFoundException('Report not found.');
+    if (!report.appealStatus) throw new BadRequestException('This report has not been appealed.');
+
+    const room = await this.discussions.findOne({ where: { reportId: report.id } });
+    const [participants, messages, evidenceRows, statusRows, reportAuditRows, teams] = await Promise.all([
+      room ? this.participants.find({ where: { discussionId: room.id }, order: { createdAt: 'ASC' } }) : Promise.resolve([]),
+      room ? this.messages.find({ where: { discussionId: room.id }, order: { createdAt: 'ASC' } }) : Promise.resolve([]),
+      this.evidence.find({ where: { reportId: id }, order: { createdAt: 'ASC' } }),
+      this.statusHistory.find({ where: { reportId: id }, order: { createdAt: 'ASC' } }),
+      this.reportAudit.find({ where: { reportId: id }, order: { createdAt: 'ASC' } }),
+      this.teams.find({ where: { competitionId: report.competitionId } }),
+    ]);
+    const timeline = await this.competitionTimeline(report.competitionId, teams.map((t) => t.id));
+    const merged = [
+      ...timeline,
+      ...statusRows.map((row) => ({
+        at: row.createdAt, type: 'REPORT_STATUS', actor: row.actor,
+        details: `${this.reportCode(id)}: ${row.fromStatus || 'new'} → ${row.toStatus}${row.note ? ` — ${row.note}` : ''}`, source: 'report',
+      })),
+      ...reportAuditRows.map((row: any) => ({
+        at: row.createdAt, type: row.action, actor: row.actor, details: `${this.reportCode(id)}: ${row.details || ''}`, source: 'report',
+      })),
+    ].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+
+    return {
+      report: await this.decorate(report),
+      discussion: room ? { ...room, participants, messages } : null,
+      evidence: evidenceRows,
+      timeline: merged,
+    };
+  }
+
+  /** Audit events about a competition: the competition itself, its teams, and anything tagged with its id. */
+  private async competitionTimeline(competitionId: string, teamIds: string[]) {
+    const qb = this.auditRows.createQueryBuilder('a')
+      .where('a."entityId" = :compId', { compId: competitionId })
+      .orWhere("a.metadata ->> 'compId' = :compId", { compId: competitionId })
+      .orWhere("a.metadata ->> 'competitionId' = :compId", { compId: competitionId });
+    if (teamIds.length) qb.orWhere('a."entityId" IN (:...teamIds)', { teamIds });
+    const rows = await qb.orderBy('a."createdAt"', 'ASC').take(500).getMany();
+    return rows.map((row) => ({ at: row.createdAt, type: row.actionType, actor: row.actor, details: row.details, source: 'audit' }));
   }
 
   /** Whether the signed-in player was removed from a competition, and why. */
@@ -1478,17 +1997,18 @@ export class ReportsService implements OnModuleInit {
       financial = [];
     }
 
-    const auditRows = await this.auditRows
-      .createQueryBuilder('a')
-      .where('a."entityId" = :compId', { compId: report.competitionId })
-      .orWhere('a.metadata ->> \'compId\' = :compId', { compId: report.competitionId })
-      .orWhere('a."entityType" = :type AND a."entityId" = :organiser', { type: 'organiser_reputation', organiser })
-      .orderBy('a."createdAt"', 'ASC')
-      .take(200)
-      .getMany();
+    // The competition's full timeline (competition, its teams, anything tagged with it)
+    // plus the organiser's reputation events.
+    const [competitionEvents, reputationRows] = await Promise.all([
+      this.competitionTimeline(report.competitionId, teams.map((t) => t.id)),
+      this.auditRows.createQueryBuilder('a')
+        .where('a."entityType" = :type AND a."entityId" = :organiser', { type: 'organiser_reputation', organiser })
+        .orderBy('a."createdAt"', 'ASC').take(100).getMany(),
+    ]);
 
     const timeline = [
-      ...auditRows.map((row) => ({
+      ...competitionEvents,
+      ...reputationRows.map((row) => ({
         at: row.createdAt,
         type: row.actionType,
         actor: row.actor,

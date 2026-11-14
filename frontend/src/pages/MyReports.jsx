@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ReportsAPI } from '../services/api.js';
+import { AppealModal } from '../components/ReportActionModals.jsx';
 import useReportSync from '../hooks/useReportSync.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import ReportCard from '../components/ReportCard.jsx';
@@ -19,46 +20,28 @@ import '../styles/pages/reports.css';
 const sameUser = (a, b) => String(a || '').toLowerCase() === String(b || '').toLowerCase();
 
 /**
- * A player affected by an organiser decision can complain about that organiser.
- * Available whether or not the player was removed from the competition, and the
- * original report/decision is never modified by filing the complaint.
+ * Appeals. The server decides who may appeal and which workflow applies
+ * (`canAppeal`, `appealKind`):
+ *  - organiser appeal: the organiser appeals a Community Moderator decision;
+ *  - player appeal: the accused player appeals the organiser's decision (this
+ *    replaces the old "Report organiser" button for that situation).
+ * Each decision can be appealed once.
  */
-const APPEALABLE_ACTIONS = ['reputation_downgrade', 'creation_restriction', 'competition_suspension', 'formal_warning', 'final_warning'];
+const canAppeal = (report, session) => !!report.canAppeal && sameUser(report.reportedUsername, session?.username);
 
-/**
- * The affected organiser may appeal an active non-warning decision, ONCE per
- * report. `appealUsed` is permanent and survives uplift + a later decision, so
- * this is a display of a rule the engine also enforces.
- */
-function canAppealReport(report, session) {
-  return sameUser(report.reportedUsername, session?.username)
-    && report.status === 'resolved'
-    && report.queue === 'moderator'
-    && APPEALABLE_ACTIONS.includes(String(report.action || ''))
-    && !report.uplifted
-    && !report.appealUsed
-    && report.appealStatus !== 'submitted';
+const APPEAL_PILL = {
+  pending: { label: 'Appeal pending', color: '#fbbf24' },
+  reverted: { label: 'Appeal upheld — decision reverted', color: '#c6ff33' },
+  discarded: { label: 'Appeal discarded — decision stands', color: '#f87171' },
+};
+function appealState(report) {
+  if (!report.appealStatus) return null;
+  if (report.appealOutcome === 'reverted' || (report.appealKind === 'organiser' && report.uplifted)) return 'reverted';
+  if (report.appealOutcome === 'discarded') return 'discarded';
+  return ['submitted', 'deciding'].includes(report.appealStatus) ? 'pending' : null;
 }
 
-function canReportOrganiser(report, session) {
-  const me = String(session?.username || '').toLowerCase();
-  if (!me || !report) return false;
-  if (String(report.reportedUsername || '').toLowerCase() !== me) return false;
-  if (report.status !== 'resolved' || !report.resolvedBy) return false;
-  if (String(report.resolvedBy).toLowerCase() === me) return false;
-  // Any decision that affected this player can be complained about, including
-  // legacy warning actions recorded before they were unified.
-  const affectingActions = ['warning', 'formal_warning', 'final_warning', 'remove_from_competition'];
-  if (!affectingActions.includes(String(report.action || ''))) return false;
-  // A complaint cannot itself be complained about.
-  return !report.originalReportId;
-}
-
-/**
- * `embedded` renders just the reports content (no page shell or heading) so the
- * Disputes page can show it as its "Reports" view.
- */
-export default function MyReports({ embedded = false }) {
+export default function MyReports() {
   const { session } = useAuth();
   const navigate = useNavigate();
   const [view, setView] = useState('reports');
@@ -67,9 +50,11 @@ export default function MyReports({ embedded = false }) {
   const [discussions, setDiscussions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [appealTarget, setAppealTarget] = useState(null);
 
+  // Only the first load shows the loading state; the 20-second background
+  // refresh (useReportSync) updates the list in place instead of blanking it.
   const load = useCallback(async () => {
-    setLoading(true);
     setError('');
     try {
       const [mine, threads] = await Promise.all([ReportsAPI.mine(), ReportsAPI.myDiscussions()]);
@@ -84,11 +69,12 @@ export default function MyReports({ embedded = false }) {
   useEffect(() => { load(); }, [load]);
   useReportSync(load);
 
-  async function appeal(report) {
-    const res = await ReportsAPI.appeal(report.id);
-    if (!res.ok) { showToast(res.error || 'Unable to submit the appeal.', 'error'); return; }
-    showToast('Appeal submitted. The decision remains active while it is reviewed.', 'success');
-    navigate(`/pages/case-discussion.html?discussionId=${encodeURIComponent(res.data.discussionId)}`);
+  function appealSubmitted(result) {
+    setAppealTarget(null);
+    showToast('Appeal submitted. The decision stays in force until a Community Moderator reviews it.', 'success');
+    // Organiser appeals continue in their discussion room (existing workflow).
+    if (result?.discussionId) navigate(`/pages/case-discussion.html?discussionId=${encodeURIComponent(result.discussionId)}`);
+    else load();
   }
 
   async function viewAppeal(report) {
@@ -97,23 +83,20 @@ export default function MyReports({ embedded = false }) {
     navigate(`/pages/case-discussion.html?discussionId=${encodeURIComponent(res.data.discussionId)}`);
   }
 
-  const Shell = embedded ? 'div' : 'main';
   const countFor = (status) => reports.filter((report) => report.status === status).length;
   const filtered = tab === 'all' ? reports : reports.filter((report) => report.status === tab);
 
   return (
-    <Shell className={embedded ? 'reports-page' : 'main-content reports-page'}>
-      {!embedded && (
-        <div className="reports-head">
-          <div>
-            <h1 className="reports-title">Reports</h1>
-            <p className="reports-subtitle">
-              Track what you filed and what was filed about you. Case discussions appear here as soon as a
-              reviewer opens one.
-            </p>
-          </div>
+    <main className="main-content reports-page">
+      <div className="reports-head">
+        <div>
+          <h1 className="reports-title">Reports</h1>
+          <p className="reports-subtitle">
+            Track what you filed and what was filed about you. Case discussions appear here as soon as a
+            reviewer opens one.
+          </p>
         </div>
-      )}
+      </div>
 
       {error && <div className="report-inline-error">{error}</div>}
 
@@ -137,6 +120,10 @@ export default function MyReports({ embedded = false }) {
           Case Discussions <span className="count">{discussions.length}</span>
         </button>
       </div>
+
+      {appealTarget && (
+        <AppealModal report={appealTarget} onClose={() => setAppealTarget(null)} onDone={appealSubmitted} />
+      )}
 
       {view === 'reports' ? (
         <>
@@ -173,24 +160,21 @@ export default function MyReports({ embedded = false }) {
                       {report.status !== 'discarded' && report.status !== 'resolved' && report.queue === 'organiser' && (
                         <Link className="report-btn" to={`/pages/comp-info.html?id=${report.competitionId}`}>Competition</Link>
                       )}
-                      {canReportOrganiser(report, session) && (
-                        <Link
-                          className="report-btn danger"
-                          to={`/pages/report.html?compId=${encodeURIComponent(report.competitionId)}&against=${encodeURIComponent(report.resolvedBy)}&role=organiser&originalReportId=${encodeURIComponent(report.id)}&sourcePage=reports-card`}
-                        >
-                          Report organiser
-                        </Link>
-                      )}
-                      {report.uplifted && (
+                      {report.uplifted && report.appealKind === 'organiser' && (
                         <span className="report-pill" style={{ color: '#c6ff33', background: 'rgba(198,255,51,0.1)', border: '1px solid rgba(198,255,51,0.4)' }}>
                           Action uplifted — reopened for review
                         </span>
                       )}
-                      {report.appealStatus === 'submitted' && report.status === 'resolved' && sameUser(report.reportedUsername, session?.username) && (
+                      {appealState(report) && !(report.uplifted && report.appealKind === 'organiser') && (
+                        <span className="report-pill" style={{ color: APPEAL_PILL[appealState(report)].color, border: '1px solid #334155' }} title={report.appealDecisionReason || report.appealReason || ''}>
+                          {APPEAL_PILL[appealState(report)].label}
+                        </span>
+                      )}
+                      {report.appealKind === 'organiser' && appealState(report) === 'pending' && sameUser(report.reportedUsername, session?.username) && (
                         <button className="report-btn" onClick={() => viewAppeal(report)}>View appeal</button>
                       )}
-                      {canAppealReport(report, session) && (
-                        <button className="report-btn danger" onClick={() => appeal(report)}>Appeal</button>
+                      {canAppeal(report, session) && (
+                        <button className="report-btn danger" onClick={() => setAppealTarget(report)}>Appeal</button>
                       )}
                     </>
                   )}
@@ -236,6 +220,6 @@ export default function MyReports({ embedded = false }) {
           )}
         </>
       )}
-    </Shell>
+    </main>
   );
 }

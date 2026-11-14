@@ -25,7 +25,8 @@ export default function JoinTeams() {
   const navigate = useNavigate();
   const { session } = useAuth();
   const id = params.get('id') || params.get('compId') || '';
-  const highlightTeamId = params.get('teamId');
+  // An invite link (…&teamId=) opens straight to that one team.
+  const invitedTeamId = params.get('teamId');
   const { loading, error, data: comp, reload } = useCompetition(id);
   const joinCodeGate = useJoinCodeGate(comp);
 
@@ -63,9 +64,16 @@ export default function JoinTeams() {
   const openRequests = myRequests.filter((r) => ['pending', 'awaiting_payment'].includes(r.status));
   const requestedTeamIds = new Set(openRequests.map((r) => r.teamId));
   const playerFee = comp.feeType === 'per_player' ? comp.entryFeeAmount : 0;
+  const invitedTeam = invitedTeamId ? teams.find((t) => t.id === invitedTeamId) || null : null;
+  const shownTeams = invitedTeam ? [invitedTeam] : teams;
+  const allTeamsHref = `/pages/join-teams.html?id=${encodeURIComponent(comp.id)}`;
 
   async function requestJoin(team) {
-    if (!session) { navigate(`/pages/login.html?redirect=${encodeURIComponent(`/pages/join-teams.html?id=${id}`)}`); return; }
+    if (!session) {
+      const back = `/pages/join-teams.html?id=${encodeURIComponent(id)}${invitedTeamId ? `&teamId=${encodeURIComponent(invitedTeamId)}` : ''}`;
+      navigate(`/pages/login.html?redirect=${encodeURIComponent(back)}`);
+      return;
+    }
     const code = await joinCodeGate.requireCode();
     if (code === null) return;
     setSending(team.id);
@@ -105,8 +113,12 @@ export default function JoinTeams() {
 
       <div className="join-header-row">
         <div>
-          <h1>Join a team</h1>
-          <p>Request to join a team below, or create your own.</p>
+          <h1>{invitedTeam ? `Join ${invitedTeam.name}` : 'Join a team'}</h1>
+          <p>
+            {invitedTeam
+              ? <>You were invited to this team. Send a request and the captain will review it. <Link to={allTeamsHref}>See all teams</Link></>
+              : 'Request to join a team below, or create your own.'}
+          </p>
         </div>
         {!organizer && (myTeam || regOpen) && (
           <Link to={createHref} className="create-team-cta">{myTeam ? 'View my team' : '+ Create team'}</Link>
@@ -115,6 +127,7 @@ export default function JoinTeams() {
 
       {organizer && <Notice tone="info">You organize this competition, so you cannot join a team in it.</Notice>}
       {!regOpen && <Notice tone="warning">{comp.registration.label}. New join requests are closed.</Notice>}
+      {invitedTeamId && !invitedTeam && <Notice tone="warning">The team in this invite link is no longer registered in this competition. Showing all teams instead.</Notice>}
       {myTeam && <Notice tone="success">You are on {myTeam.name}. A player can be on only one team per competition.</Notice>}
 
       {openRequests.length > 0 && (
@@ -139,13 +152,13 @@ export default function JoinTeams() {
         </section>
       )}
 
-      <div className="section-label">Registered teams ({teams.length}{comp.maxTeams ? ` / ${comp.maxTeams}` : ''})</div>
+      {!invitedTeam && <div className="section-label">Registered teams ({teams.length}{comp.maxTeams ? ` / ${comp.maxTeams}` : ''})</div>}
 
       {teams.length === 0 ? (
         <EmptyState title="No teams registered yet" message={regOpen ? 'Be the first to create one.' : 'Registration is closed.'} />
       ) : (
         <div id="team-list">
-          {teams.map((team) => {
+          {shownTeams.map((team) => {
             const count = team.members.length;
             const full = count >= maxPerTeam;
             const isMine = myTeam && myTeam.id === team.id;
@@ -159,7 +172,7 @@ export default function JoinTeams() {
             else action = <button type="button" className="btn-join" disabled={sending === team.id} onClick={() => requestJoin(team)}>{sending === team.id ? 'Sending…' : 'Request to join'}</button>;
 
             return (
-              <div className={`request-card${highlightTeamId === team.id ? ' request-card-highlight' : ''}`} key={team.id}>
+              <div className={`request-card${invitedTeam && invitedTeam.id === team.id ? ' request-card-highlight' : ''}`} key={team.id}>
                 <div className="request-card-left">
                   <div className="team-icon">{team.avatar}</div>
                   <div>

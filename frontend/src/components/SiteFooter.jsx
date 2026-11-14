@@ -79,7 +79,6 @@ export default function SiteFooter() {
           <div className="footer-col-title">Help</div>
           <ul>
             <li><Link to="/pages/about.html#policies">Rules and policies</Link></li>
-            <li><Link to={session ? '/pages/disputes.html' : '/pages/login.html?redirect=/pages/disputes.html'}>Disputes</Link></li>
             <li><Link to={session ? '/pages/my-reports.html' : '/pages/login.html?redirect=/pages/my-reports.html'}>Report a problem</Link></li>
           </ul>
         </div>

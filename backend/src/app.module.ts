@@ -1,3 +1,5 @@
+import { APP_INTERCEPTOR } from '@nestjs/core';
+import { AuditInterceptor } from './common/audit/audit.interceptor';
 import { EscrowAccountEntity } from './entities/escrow-account.entity';
 import { PaymentMailEntity } from './entities/payment-mail.entity';
 import { MockPaymentLifecycle1793750401000 } from './database/migrations/1793750401000-mock-payment-lifecycle';
@@ -64,6 +66,7 @@ import { InitialSchema1700000000000 } from './database/migrations/1700000000000-
 import { FinanceRequests1794100000000 } from './database/migrations/1794100000000-finance-requests';
 import { AuditLogEntityType1794200000000 } from './database/migrations/1794200000000-audit-log-entity-type';
 import { DiscussionMessageEvidence1794200001000 } from './database/migrations/1794200001000-discussion-message-evidence';
+import { AppealWorkflows1794300000000 } from './database/migrations/1794300000000-appeal-workflows';
 import { WorkflowEnhancements1710000000000 } from './database/migrations/1710000000000-workflow-enhancements';
 import { MatchBrackets1793577600000 } from './database/migrations/1793577600000-match-brackets';
 import { MatchResultRules1793577601000 } from './database/migrations/1793577601000-match-result-rules';
@@ -132,7 +135,7 @@ import { ParticipationAndRoleCleanup1793900000000 } from './database/migrations/
           // automatic synchronization. Set DB_SYNCHRONIZE=true only for a
           // throwaway local database.
           synchronize: config.get<string>('DB_SYNCHRONIZE') === 'true',
-          migrations: [InitialSchema1700000000000, WorkflowEnhancements1710000000000, MatchBrackets1793577600000, MatchResultRules1793577601000, ChatMessages1793664000000, ReportsReputation1793750000000, PaymentFoundation1793750400000, MockPaymentLifecycle1793750401000, PaymentReversals1793750402000, RemoveAadhaarVerification1793846400000, ParticipationAndRoleCleanup1793900000000, CoOrganizerInvitations1794000000000, ReportAppeals1794000001000, FinanceRequests1794100000000, AuditLogEntityType1794200000000, DiscussionMessageEvidence1794200001000],
+          migrations: [InitialSchema1700000000000, WorkflowEnhancements1710000000000, MatchBrackets1793577600000, MatchResultRules1793577601000, ChatMessages1793664000000, ReportsReputation1793750000000, PaymentFoundation1793750400000, MockPaymentLifecycle1793750401000, PaymentReversals1793750402000, RemoveAadhaarVerification1793846400000, ParticipationAndRoleCleanup1793900000000, CoOrganizerInvitations1794000000000, ReportAppeals1794000001000, FinanceRequests1794100000000, AuditLogEntityType1794200000000, DiscussionMessageEvidence1794200001000, AppealWorkflows1794300000000],
           migrationsRun: config.get<string>('DB_MIGRATIONS_RUN') !== 'false',
           logging: config.get<string>('NODE_ENV') === 'development' ? ['error', 'warn'] : false,
         };
@@ -168,7 +171,7 @@ import { ParticipationAndRoleCleanup1793900000000 } from './database/migrations/
     ReputationModule,
     ReportsModule,
   ],
-  providers: [SeederService],
+  providers: [SeederService, { provide: APP_INTERCEPTOR, useClass: AuditInterceptor }],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
