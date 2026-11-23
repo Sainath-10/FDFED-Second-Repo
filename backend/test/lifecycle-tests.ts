@@ -105,7 +105,8 @@ async function run() {
   });
 
   // Incoming reporting restrictions must also hold inside the payment lifecycle.
-  assert(financeRole({ role: 'admin' }));
+  // The retired Admin role no longer has finance access.
+  assert(!financeRole({ role: 'admin' }));
   assert(financeRole({ role: 'finance_moderator' }));
   assert(!financeRole({ role: 'community_moderator' }));
   await insert(User, { username: 'removed', role: 'participant', banned: false });

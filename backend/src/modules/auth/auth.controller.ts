@@ -104,7 +104,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Search usernames as you type (invitations)' })
   async searchUsers(@Query('q') q: string, @Query('scope') scope: string, @Request() req: any) {
     const wantsAll = scope === 'all';
-    if (wantsAll && ![UserRole.ADMIN, UserRole.SUPER_ADMIN].includes(req.user?.role)) {
+    if (wantsAll && ![UserRole.SUPER_ADMIN].includes(req.user?.role)) {
       throw new ForbiddenException('Only administrators can search staff accounts.');
     }
     return this.authService.searchUsernames(String(q || ''), wantsAll ? 'all' : 'players', req.user?.username);
@@ -112,7 +112,7 @@ export class AuthController {
 
   @Get('users')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get all users (Admin only)' })
   async getAllUsers() {
@@ -137,18 +137,9 @@ export class AuthController {
     return this.authService.revokeAdmin(body.username, body.reason, req.user);
   }
 
-  @Patch('users/:id/ban')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Ban a user by id, username or email (Admin only)' })
-  async banUser(@Param('id') id: string, @Body() body: ModerationReasonDto, @Request() req: any) {
-    return this.authService.banUser(id, req.user, body?.reason);
-  }
-
   @Patch('users/:id/unban')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Lift a ban (Admin only)' })
   async unbanUser(@Param('id') id: string, @Request() req: any) {
@@ -157,7 +148,7 @@ export class AuthController {
 
   @Patch('users/:id/warn')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Issue a warning to a user (Admin only)' })
   async warnUser(@Param('id') id: string, @Body() body: ModerationReasonDto, @Request() req: any) {
@@ -166,7 +157,7 @@ export class AuthController {
 
   @Post('users/:id/reset-password')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @HttpCode(200)
   @ApiOperation({ summary: 'Issue a one-time temporary password (Admin only)' })

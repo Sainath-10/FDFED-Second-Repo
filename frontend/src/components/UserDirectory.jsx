@@ -2,7 +2,8 @@
  * NEXUS ESPORTS — user directory
  *
  * Every account from the backend, with the moderation actions an administrator
- * may take: warn, ban, unban and issue a temporary password. The backend
+ * may take: warn, unban (after three warnings) and issue a temporary password
+ * for a forgotten-password request. There is no manual ban. The backend
  * enforces who may act on whom (nobody can act on themselves or on a Super
  * Admin; only a Super Admin can act on other staff).
  */
@@ -14,13 +15,12 @@ import { showToast } from '../lib/toast.js';
 
 const ROLE_LABEL = {
   super_admin: 'Super Admin',
-  admin: 'Admin',
   finance_moderator: 'Finance',
   community_moderator: 'Moderator',
   team_lead: 'Team lead',
   participant: 'Player',
 };
-const STAFF = ['super_admin', 'admin', 'finance_moderator', 'community_moderator'];
+const STAFF = ['super_admin', 'finance_moderator', 'community_moderator'];
 const roleOf = (u) => (u.adminType && ROLE_LABEL[u.adminType] ? u.adminType : u.role);
 
 export default function UserDirectory({ title = 'Users', subtitle = 'Every registered account.' }) {
@@ -59,15 +59,14 @@ export default function UserDirectory({ title = 'Users', subtitle = 'Every regis
   async function run(reason) {
     const { user, action } = acting;
     const res = action === 'warn' ? await AuthAPI.warnUser(user.id, reason)
-      : action === 'ban' ? await AuthAPI.banUser(user.id, reason)
-        : action === 'unban' ? await AuthAPI.unbanUser(user.id)
-          : await AuthAPI.resetPassword(user.id);
+      : action === 'unban' ? await AuthAPI.unbanUser(user.id)
+        : await AuthAPI.resetPassword(user.id);
     if (!res.ok) { showToast(res.error || 'That action failed.', 'error'); return; }
     setActing(null);
     if (action === 'reset') { setTempPassword({ username: user.username, password: res.data.temporaryPassword }); return; }
     showToast(action === 'warn'
       ? (res.data.banned ? `@${user.username} reached three warnings and was banned.` : `Warning ${res.data.warningCount} of 3 sent to @${user.username}.`)
-      : `@${user.username} was ${action === 'ban' ? 'banned' : 'unbanned'}.`);
+      : `@${user.username} was unbanned.`);
     load();
   }
 
@@ -106,7 +105,6 @@ export default function UserDirectory({ title = 'Users', subtitle = 'Every regis
                       {canModerate(u) ? (
                         <div className="ui-row-actions">
                           {!u.banned && <button type="button" className="btn-table-secondary" onClick={() => setActing({ user: u, action: 'warn' })}>Warn</button>}
-                          {!u.banned && <button type="button" className="btn-table-danger" onClick={() => setActing({ user: u, action: 'ban' })}>Ban</button>}
                           {u.banned && <button type="button" className="btn-table-primary" onClick={() => setActing({ user: u, action: 'unban' })}>Unban</button>}
                           <button type="button" className="btn-table-secondary" onClick={() => setActing({ user: u, action: 'reset' })}>Reset password</button>
                         </div>
@@ -121,13 +119,13 @@ export default function UserDirectory({ title = 'Users', subtitle = 'Every regis
       )}
 
       <ReasonDialog
-        open={!!acting && ['warn', 'ban'].includes(acting.action)}
-        title={acting?.action === 'ban' ? `Ban @${acting?.user.username}` : `Warn @${acting?.user.username}`}
-        description={acting?.action === 'ban' ? 'The account is signed out and cannot log in until it is unbanned.' : 'The user is notified. A third warning bans the account automatically.'}
+        open={!!acting && acting.action === 'warn'}
+        title={`Warn @${acting?.user.username}`}
+        description="The user is notified. A third warning bans the account automatically."
         placeholder="Reason"
         minLength={5}
-        tone={acting?.action === 'ban' ? 'danger' : 'primary'}
-        confirmLabel={acting?.action === 'ban' ? 'Ban account' : 'Send warning'}
+        tone="primary"
+        confirmLabel="Send warning"
         onConfirm={run}
         onClose={() => setActing(null)}
       />

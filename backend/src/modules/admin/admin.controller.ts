@@ -59,28 +59,28 @@ export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 
   @Get('stats')
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Platform statistics (Admin only)' })
   async getAdminStats() {
     return await this.adminService.getAdminStats();
   }
 
   @Get('activity')
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.FINANCE_MODERATOR)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.FINANCE_MODERATOR)
   @ApiOperation({ summary: 'Staff activity log; finance moderators see only their own entries' })
   async getActivityLogs(@Request() req: any, @Query('adminUsername') adminUsername?: string) {
     return await this.adminService.getActivityLogs(isFinance(req.user) ? req.user.username : adminUsername);
   }
 
   @Post('activity')
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.FINANCE_MODERATOR)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.FINANCE_MODERATOR)
   @ApiOperation({ summary: 'Record a staff action' })
   async logActivity(@Request() req: any, @Body() body: LogActivityDto) {
     return await this.adminService.logActivity(req.user.username, body.actionType, body.details, body.metadata);
   }
 
   @Get('settings')
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Platform settings (formats and team limit)' })
   async getSettings() {
     return this.adminService.getPlatformSettings();

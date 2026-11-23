@@ -14,7 +14,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import { CompetitionsAPI, MatchesAPI } from '../services/api.js';
+import { CompetitionsAPI, MatchesAPI, PlatformAPI } from '../services/api.js';
 import { paymentRequest, requestEarlyEnd } from '../services/payments.js';
 import { UsernameChips } from '../components/UsernameSearch.jsx';
 import { hasStarted, isClosedCompetition, isOrganizerOf, useCompetition } from '../services/competitions.js';
@@ -48,6 +48,16 @@ export default function EditCompetition() {
   const [cancelOpen, setCancelOpen] = useState(false);
   const [fixtures, setFixtures] = useState(null);
   const [ledger, setLedger] = useState(null);
+  // The Super Admin's saved team limit (the server enforces the same rule).
+  const [platformMaxTeams, setPlatformMaxTeams] = useState(MAX_TEAMS);
+  // A competition already above a since-lowered limit may keep its current size.
+  const teamLimit = Math.max(platformMaxTeams, Number(comp?.maxTeams || 0));
+
+  useEffect(() => {
+    PlatformAPI.settings().then((res) => {
+      if (res.ok && Number.isInteger(res.data?.maxTeams)) setPlatformMaxTeams(res.data.maxTeams);
+    });
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -99,7 +109,7 @@ export default function EditCompetition() {
     const changed = ['regOpen', 'regClose', 'start', 'end'].filter((k) => form[k] !== original[k]);
     if (changed.length) Object.assign(next, validateSchedule(form, { changed }));
     const mt = Number(form.maxTeams);
-    if (!Number.isInteger(mt) || mt < 2 || mt > MAX_TEAMS) next.maxTeams = `Whole number from 2 to ${MAX_TEAMS}.`;
+    if (!Number.isInteger(mt) || mt < 2 || mt > teamLimit) next.maxTeams = `Whole number from 2 to ${teamLimit}.`;
     else if (mt < comp.maxTeams) next.maxTeams = `Capacity can only grow (currently ${comp.maxTeams}).`;
     const mp = Number(form.maxPlayersPerTeam);
     if (!Number.isInteger(mp) || mp < 1 || mp > MAX_PLAYERS) next.maxPlayersPerTeam = `Whole number from 1 to ${MAX_PLAYERS}.`;
@@ -213,7 +223,7 @@ export default function EditCompetition() {
           {field('Ends', errors.end, <input className="form-input" type="date" value={form.end} onChange={set('end')} disabled={started || ended} />, 'The end day is included. A one-day event can start and end on the same day.')}
 
           <h2 className="ui-card-title" style={{ marginTop: 10 }}>Capacity</h2>
-          {field('Max teams', errors.maxTeams, <input className="form-input" type="number" min={comp.maxTeams || 2} max={MAX_TEAMS} value={form.maxTeams} onChange={set('maxTeams')} disabled={ended} />)}
+          {field('Max teams', errors.maxTeams, <input className="form-input" type="number" min={comp.maxTeams || 2} max={teamLimit} value={form.maxTeams} onChange={set('maxTeams')} disabled={ended} />)}
           {field('Max players per team', errors.maxPlayersPerTeam, <input className="form-input" type="number" min={comp.maxPlayersPerTeam || 1} max={MAX_PLAYERS} value={form.maxPlayersPerTeam} onChange={set('maxPlayersPerTeam')} disabled={ended} />)}
         </div>
 

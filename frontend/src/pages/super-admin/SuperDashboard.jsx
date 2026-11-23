@@ -42,7 +42,8 @@ export default function SuperDashboard() {
     if (!Number.isInteger(maxTeams) || maxTeams < 2 || maxTeams > 256) { showToast('Max teams must be a whole number from 2 to 256.', 'error'); return; }
     if (!settings.allowKnockout && !settings.allowRoundRobin) { showToast('Keep at least one format enabled.', 'error'); return; }
     const value = Number(ceiling);
-    if (!Number.isInteger(value) || value < 0) { showToast('The prize ceiling must be a whole number of rupees.', 'error'); return; }
+    // Same bounds the server enforces, so a value is never shown as accepted and then refused.
+    if (!Number.isInteger(value) || value < 1 || value > 10_000_000) { showToast('The prize ceiling must be a whole number of rupees from ₹1 to ₹1,00,00,000.', 'error'); return; }
     setSaving(true);
     const [a, b] = await Promise.all([
       AdminAPI.saveSettings({ allowKnockout: !!settings.allowKnockout, allowRoundRobin: !!settings.allowRoundRobin, maxTeams }),
@@ -91,7 +92,7 @@ export default function SuperDashboard() {
           </div>
           <div className="ui-field">
             <label htmlFor="sa-ceiling">Platform prize-pool ceiling (₹)</label>
-            <input id="sa-ceiling" className="form-input" type="number" min={0} step={1} value={ceiling} onChange={(e) => setCeiling(e.target.value)} />
+            <input id="sa-ceiling" className="form-input" type="number" min={1} max={10000000} step={1} value={ceiling} onChange={(e) => setCeiling(e.target.value)} />
             <span className="ui-field-help">No competition can exceed this, even with an approved exception.</span>
           </div>
           <div className="ui-dialog-actions">

@@ -12,7 +12,7 @@ import { PlatformAPI } from '../services/api.js';
 import { ROLE_ROUTES } from '../routes.js';
 import logo from '../assets/f03e2b11537e425d8544ee3ca732bf73af5137c0.png';
 
-const STAFF = ['admin', 'super-admin', 'finance_moderator', 'community_moderator'];
+const STAFF = ['super-admin', 'finance_moderator', 'community_moderator'];
 const PROFILE_FOR = {
   admin: '/pages/admin/admin-profile.html',
   finance_moderator: '/pages/admin/admin-profile.html',

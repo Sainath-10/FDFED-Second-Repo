@@ -18,7 +18,7 @@ import { competitionBanner } from '../lib/assets.js';
 import { showToast } from '../lib/toast.js';
 import '../styles/pages/create-team.css';
 
-const STAFF_ROLES = ['admin', 'super-admin', 'super_admin', 'finance_moderator', 'community_moderator'];
+const STAFF_ROLES = ['super-admin', 'super_admin', 'finance_moderator', 'community_moderator'];
 
 function Steps({ current }) {
   const steps = ['Name your team', 'Register', 'Invite players'];

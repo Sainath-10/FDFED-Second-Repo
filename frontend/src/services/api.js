@@ -214,10 +214,6 @@ export const AuthAPI = {
     return makeRequest(`/auth/users/exists?username=${encodeURIComponent(username)}`, { method: 'GET' });
   },
 
-  async banUser(idOrUsername, reason) {
-    return makeRequest(`/auth/users/${encodeURIComponent(idOrUsername)}/ban`, { method: 'PATCH', body: JSON.stringify(reason ? { reason } : {}) });
-  },
-
   async unbanUser(idOrUsername) {
     return makeRequest(`/auth/users/${encodeURIComponent(idOrUsername)}/unban`, { method: 'PATCH' });
   },

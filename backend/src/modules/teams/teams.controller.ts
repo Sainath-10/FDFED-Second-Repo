@@ -32,7 +32,7 @@ export class TeamsController {
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.PARTICIPANT, UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.TEAM_LEAD)
+  @Roles(UserRole.PARTICIPANT, UserRole.SUPER_ADMIN, UserRole.TEAM_LEAD)
   @ApiBearerAuth()
   @HttpCode(201)
   @ApiOperation({
@@ -102,7 +102,7 @@ export class TeamsController {
 
   @Get('refund-requests')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.FINANCE_MODERATOR)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.FINANCE_MODERATOR)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'List refund requests (support workflow). Filter with ?status=pending' })
   async refundRequests(@Query('status') status?: string) {
@@ -111,7 +111,7 @@ export class TeamsController {
 
   @Patch('refund-requests/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.FINANCE_MODERATOR)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.FINANCE_MODERATOR)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Resolve a refund request (support workflow). Never auto-claims a provider refund was completed.' })
   async resolveRefundRequest(
@@ -144,7 +144,7 @@ export class TeamsController {
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.TEAM_LEAD, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Update team details',
@@ -169,7 +169,7 @@ export class TeamsController {
 
   @Post(':id/disband')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.TEAM_LEAD, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @HttpCode(200)
   @ApiOperation({
@@ -186,7 +186,7 @@ export class TeamsController {
 
   @Post(':id/members')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.TEAM_LEAD, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @HttpCode(200)
   @ApiOperation({
@@ -212,7 +212,7 @@ export class TeamsController {
 
   @Delete(':id/members/:memberId')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.TEAM_LEAD, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.TEAM_LEAD, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @HttpCode(200)
   @ApiOperation({
@@ -383,7 +383,7 @@ export class TeamsController {
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @HttpCode(204)
   @ApiOperation({

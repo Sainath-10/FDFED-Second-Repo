@@ -269,7 +269,7 @@ export class CompetitionsController {
 
   @Patch(':id/approval')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Approve or reject a competition',

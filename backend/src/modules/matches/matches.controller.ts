@@ -110,7 +110,7 @@ export class MatchesController {
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a match (Admins only)' })
   async delete(@Param('id') id: string, @Request() req?: any) {

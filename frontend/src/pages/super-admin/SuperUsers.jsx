@@ -1,7 +1,7 @@
 /**
  * NEXUS ESPORTS — Super Admin users
  *
- * Every account from the backend with warn, ban, unban and password reset.
+ * Every account from the backend with warn, unban and password reset.
  */
 import UserDirectory from '../../components/UserDirectory.jsx';
 

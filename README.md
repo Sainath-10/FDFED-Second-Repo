@@ -108,7 +108,6 @@ before exposing the app to anyone.
 |---|---|---|---|
 | `superadmin` | `super123` | `super-admin` | `/pages/super-admin/super-dashboard.html` |
 | `superadmin1`, `superadmin2` | `nexus` | `super-admin` | `/pages/super-admin/super-dashboard.html` |
-| `admin` | `admin123` | `admin` | `/pages/admin/dashboard.html` |
 | `finance` | `nexus` | `finance_moderator` | `/pages/admin/finance.html` |
 | `communitymod` | `nexus` | `community_moderator` | `/pages/moderator/reports.html` |
 | `regular` | `regular123` | `participant` (organizes the demo competitions) | `/pages/profile.html` |
@@ -124,13 +123,22 @@ passwords or an account list; when the API is unreachable, login fails with a cl
 Four demo competitions are seeded as free, public and upcoming (registration open today, play in
 two to three weeks), so team registration can be tried straight away.
 
-**Forgot password:** the login page sends a reset request to the administrators. An Admin or
-Super Admin opens **Users**, picks the account and chooses **Reset password**, which shows a
+**Forgot password:** the login page sends a reset request to the administrators. A Super Admin
+opens **Users**, picks the account and chooses **Reset password**, which shows a
 one-time password to pass on to the user.
 
-Roles in this app: `participant`, `team_lead`, `community_moderator`, `admin`, `super-admin`
-(the UI name for the backend's `super_admin`). The retired `comp_admin`, `dispute_admin` and
-`revenue_admin` roles no longer exist; their responsibilities are carried by `admin`.
+Roles in this app: `participant`, `team_lead`, `finance_moderator`, `community_moderator` and
+`super-admin` (the UI name for the backend's `super_admin`). The retired `admin` role and the
+`comp_admin`, `dispute_admin` and `revenue_admin` roles it replaced no longer exist: they cannot be
+assigned, and a startup migration deletes any account that still holds one.
+
+**After pulling this change:** restart the backend. Pending migrations run automatically on
+startup (unless `DB_MIGRATIONS_RUN=false` is set in your `.env`), and one of them removes the
+old `admin` / Dispute / Competition / Revenue Admin accounts from your local database, recording
+their usernames in the activity log. Those logins stop working, so sign in as `superadmin` and use
+**Admins → Add administrator** to give anyone who still needs access a Finance Moderator,
+Community Moderator or Super Admin role. If your browser was signed in as one of the removed
+accounts, you are signed out on the next request.
 
 > Seeding is idempotent and only writes a password when an account has none, so a password you
 > change in the UI survives restarts. To reset the roster, clear the `users` table and restart the

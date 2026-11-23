@@ -1925,7 +1925,7 @@ export class ReportsService implements OnModuleInit {
 
       const usersRepo = manager.getRepository(UserEntity);
       const playerRow = await usersRepo.createQueryBuilder('u').where('lower(u.username) = :k', { k: key }).getOne();
-      const staffRoles = ['admin', 'super_admin', 'finance_moderator', 'community_moderator'];
+      const staffRoles = ['super_admin', 'finance_moderator', 'community_moderator'];
 
       if (snap.wasLeader) {
         const currentLeader = team.leaderId || team.leaderUsername || '';
@@ -2435,7 +2435,7 @@ export class ReportsService implements OnModuleInit {
         // High-priority reports get a second platform-level reminder (never a reroute).
         const staff = await this.users.findAll();
         const platform = staff.filter((u: any) =>
-          ['super_admin', 'admin'].includes(String(u.role || '').toLowerCase()),
+          ['super_admin'].includes(String(u.role || '').toLowerCase()),
         );
         await Promise.all(
           platform.map((u: any) =>

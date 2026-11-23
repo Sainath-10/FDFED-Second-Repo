@@ -43,7 +43,7 @@ export class MatchesService {
     if (!competition) throw new NotFoundException('Competition not found');
     const username = String(actor || '').toLowerCase();
     const organizer = [competition.createdBy, ...(competition.organizers || [])].some((name) => String(name || '').toLowerCase() === username);
-    if (!organizer && !['admin', 'super_admin'].includes(role)) {
+    if (!organizer && !['super_admin'].includes(role)) {
       throw new ForbiddenException('Only an organizer of this competition (or a competition admin) can edit fixtures.');
     }
     if (competition.status === 'completed') throw new BadRequestException('This competition has already ended.');
@@ -88,7 +88,7 @@ export class MatchesService {
       .sort((a, b) => a.seed - b.seed).map((slot) => slot.teamId);
     const seedOrder = [...new Set([...persisted, ...eligible.map((team) => team.id)])];
     await this.repo.delete({ competitionId });
-    const result = await this.completeBracket(competitionId, 'system:team-registration', 'admin', seedOrder);
+    const result = await this.completeBracket(competitionId, 'system:team-registration', 'super_admin', seedOrder);
     return { rebuilt: true, created: result.created };
   }
 
@@ -328,7 +328,7 @@ export class MatchesService {
     const normalizedActor = String(actor || '').toLowerCase();
     const isOrganizer = String(competition.createdBy || '').toLowerCase() === normalizedActor
       || (competition.organizers || []).some((name) => String(name).toLowerCase() === normalizedActor);
-    const isAdmin = ['admin', 'super_admin'].includes(String(actorRole || '').toLowerCase());
+    const isAdmin = ['super_admin'].includes(String(actorRole || '').toLowerCase());
     if (!isOrganizer && !isAdmin) {
       throw new ForbiddenException('Only an organizer of this competition (or a competition admin) can generate fixtures.');
     }

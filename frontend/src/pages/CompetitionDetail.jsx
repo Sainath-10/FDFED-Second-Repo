@@ -126,7 +126,7 @@ export default function CompetitionDetail() {
   const isLeague = /league|robin/i.test(`${comp?.type} ${comp?.format}`);
   const creator = comp?.createdBy || comp?.organizerId;
   const organizers = [...new Set([creator, ...(comp?.organizers || [])].filter(Boolean))];
-  const canManage = isOrganizerOf(comp, session?.username) || ['admin', 'super-admin', 'super_admin'].includes(session?.role);
+  const canManage = isOrganizerOf(comp, session?.username) || ['super-admin', 'super_admin'].includes(session?.role);
   const eligibleTeams = teams.filter((team) => !['rejected', 'banned', 'disbanded'].includes(String(team.status || '').toLowerCase()));
   const availableTabs = canManage ? ['fixtures', 'teams', 'overview', 'standings', 'organizers', 'disputes', 'activity'] : ['fixtures', 'teams', 'overview', 'standings'];
   const activeTab = availableTabs.includes(params.get('tab')) ? params.get('tab') : 'fixtures';

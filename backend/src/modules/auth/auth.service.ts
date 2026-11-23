@@ -20,7 +20,7 @@ import {
   USERNAME_PATTERN,
   USERNAME_MESSAGE,
 } from './dto/auth.dto';
-import { UserRole } from '../../common/interfaces';
+import { UserRole, hasRetiredStaffRole } from '../../common/interfaces';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditLogService } from '../../common/audit/audit.service';
 import { isEligiblePlayerAccount } from '../../common/validation/player-eligibility';
@@ -29,7 +29,6 @@ import { isEligiblePlayerAccount } from '../../common/validation/player-eligibil
 const INVALID_CREDENTIALS = 'Invalid username/email or password';
 
 const STAFF_ROLES = new Set<string>([
-  UserRole.ADMIN,
   UserRole.SUPER_ADMIN,
   UserRole.FINANCE_MODERATOR,
   UserRole.COMMUNITY_MODERATOR,
@@ -93,6 +92,13 @@ export class AuthService {
         details: 'Sign-in refused: the account is banned.', metadata: { username: user.username },
       });
       throw new UnauthorizedException('Your account has been banned from this platform.');
+    }
+    if (hasRetiredStaffRole(user)) {
+      await this.auditLog.record('LOGIN_BLOCKED', {
+        actor: user.username, entityType: 'user', entityId: user.id,
+        details: 'Sign-in refused: the account holds a retired administrator role.', metadata: { username: user.username },
+      });
+      throw new UnauthorizedException('This administrator role has been removed from the platform.');
     }
     await this.auditLog.record('LOGIN', {
       actor: user.username, entityType: 'user', entityId: user.id,
@@ -261,18 +267,6 @@ export class AuthService {
     return target;
   }
 
-  async banUser(usernameOrId: string, actor: any, reason?: string): Promise<{ banned: boolean; username: string }> {
-    const target = await this.moderationTarget(usernameOrId, actor);
-    await this.userRepository.setBanned(target.id, true);
-    await this.auditLog.record('USER_BANNED', {
-      actor: actor?.username,
-      entityType: 'user',
-      entityId: target.id,
-      details: `@${target.username} banned. ${reason || ''}`.trim(),
-    });
-    return { banned: true, username: target.username };
-  }
-
   async unbanUser(usernameOrId: string, actor: any): Promise<{ banned: boolean; username: string }> {
     const target = await this.moderationTarget(usernameOrId, actor);
     await this.userRepository.setBanned(target.id, false);
@@ -333,7 +327,7 @@ export class AuthService {
     const user = await this.userRepository.findByEmailOrUsername(emailOrUsername);
     if (user && !user.banned) {
       const admins = (await this.userRepository.findAll()).filter(
-        (u) => !u.banned && (u.role === UserRole.ADMIN || isSuperAdmin(u)),
+        (u) => !u.banned && isSuperAdmin(u),
       );
       await Promise.all(
         admins.map((admin) =>

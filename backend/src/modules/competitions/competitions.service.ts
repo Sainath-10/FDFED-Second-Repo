@@ -390,7 +390,7 @@ export class CompetitionsService {
     const comp = await this.competitionRepository.findById(competitionId);
     if (!comp) throw new NotFoundException(`Competition with ID ${competitionId} not found`);
     const isOrganizer = comp.createdBy === requesterUsername || (comp.organizers || []).includes(requesterUsername);
-    const isAdmin = ['admin', 'super_admin'].includes(requesterRole);
+    const isAdmin = ['super_admin'].includes(requesterRole);
     if (!isOrganizer && !isAdmin) {
       throw new ForbiddenException('Only organizers of this competition can view its join code.');
     }
@@ -508,7 +508,7 @@ export class CompetitionsService {
     if (!comp) throw new NotFoundException(`Competition with ID ${id} not found`);
 
     const isOrganizer = comp.createdBy === requesterUsername || (comp.organizers || []).includes(requesterUsername);
-    const isAdmin = ['admin', 'super_admin'].includes(requesterRole);
+    const isAdmin = ['super_admin'].includes(requesterRole);
     if (!isOrganizer && !isAdmin) {
       throw new ForbiddenException('Only an organizer of this competition (or an admin) can update it.');
     }
@@ -574,6 +574,16 @@ export class CompetitionsService {
       );
       if (errors.length) {
         throw new BadRequestException(errors.map((e) => e.message).join(' '));
+      }
+      // The Super Admin's saved team limit applies to edits as well as creation.
+      // An existing competition already above a since-lowered limit may keep its
+      // size, but can never be raised further.
+      if (updateCompetitionDto.maxTeams !== undefined) {
+        const platform = await this.adminService.getPlatformSettings();
+        const next = Number(updateCompetitionDto.maxTeams);
+        if (next > platform.maxTeams && next > Number(comp.maxTeams || 0)) {
+          throw new BadRequestException(`Max teams cannot exceed ${platform.maxTeams} on this platform.`);
+        }
       }
     }
 
@@ -667,7 +677,7 @@ export class CompetitionsService {
     const comp = await this.competitionRepository.findById(id);
     if (!comp) throw new NotFoundException(`Competition with ID ${id} not found`);
     const isOrganizer = comp.createdBy === requesterUsername || (comp.organizers || []).includes(requesterUsername);
-    const isAdmin = ['admin', 'super_admin', 'finance_moderator'].includes(requesterRole);
+    const isAdmin = ['super_admin', 'finance_moderator'].includes(requesterRole);
     if (!isOrganizer && !isAdmin) {
       throw new ForbiddenException('Only organizers of this competition (or admins) can view participant contact details.');
     }
@@ -700,7 +710,7 @@ export class CompetitionsService {
     if (!comp) throw new NotFoundException(`Competition with ID ${id} not found`);
 
     const isOrganizer = comp.createdBy === requesterUsername || (comp.organizers || []).includes(requesterUsername);
-    const isAdmin = ['admin', 'super_admin'].includes(requesterRole);
+    const isAdmin = ['super_admin'].includes(requesterRole);
     if (!isOrganizer && !isAdmin) {
       throw new ForbiddenException('Only an organizer of this competition (or an admin) can end it.');
     }

@@ -174,7 +174,7 @@ export class ReputationController {
 
   @Get('prize-pool-exceptions')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COMMUNITY_MODERATOR)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.COMMUNITY_MODERATOR)
   @ApiOperation({ summary: 'Prize-pool exception requests (administrative review)' })
   async exceptions(@Query('status') status?: string) {
     return this.reputation.listExceptions({ status });
@@ -188,7 +188,7 @@ export class ReputationController {
 
   @Post('prize-pool-exceptions/:id/review')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Roles(UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Approve or reject a prize-pool exception' })
   async reviewException(@Param('id') id: string, @Body() dto: ReviewExceptionDto, @Request() req: any) {
     return this.reputation.reviewException(id, dto.status, dto.note || '', req.user.username);
@@ -210,7 +210,7 @@ export class ReputationController {
   async profile(@Param('username') username: string, @Request() req: any) {
     const role = String(req.user?.role || '');
     const isSelf = String(req.user?.username).toLowerCase() === String(username).toLowerCase();
-    const allowed = isSelf || ['community_moderator', 'super_admin', 'admin'].includes(role);
+    const allowed = isSelf || ['community_moderator', 'super_admin'].includes(role);
     if (!allowed) throw new ForbiddenException('You can only view your own reputation profile.');
     return this.reputation.getProfile(username);
   }
@@ -226,14 +226,14 @@ export class ReputationController {
   async overview(@Param('username') username: string, @Request() req: any) {
     const role = String(req.user?.role || '');
     const isSelf = String(req.user?.username).toLowerCase() === String(username).toLowerCase();
-    const allowed = isSelf || ['community_moderator', 'super_admin', 'admin'].includes(role);
+    const allowed = isSelf || ['community_moderator', 'super_admin'].includes(role);
     if (!allowed) throw new ForbiddenException('You can only view your own reputation overview.');
     return this.reputation.getOrganiserOverview(username);
   }
 
   @Get('user/:username/history')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.COMMUNITY_MODERATOR, UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Roles(UserRole.COMMUNITY_MODERATOR, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Reputation and sanction history' })
   async history(@Param('username') username: string) {
     return this.reputation.getHistory(username);

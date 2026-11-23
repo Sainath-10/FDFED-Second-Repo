@@ -15,7 +15,7 @@ import { showToast } from '../../lib/toast.js';
 export default function AddAdmin() {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
-  const [adminType, setAdminType] = useState('admin');
+  const [adminType, setAdminType] = useState(ADMIN_ROLE_OPTIONS[0].value);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);

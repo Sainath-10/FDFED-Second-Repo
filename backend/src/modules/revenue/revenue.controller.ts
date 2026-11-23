@@ -38,7 +38,7 @@ export class RevenueController {
 
   @Post('config')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Update revenue configuration (Revenue/Super Admin only)' })
   async updateConfig(
     @Request() req: any,
@@ -50,7 +50,7 @@ export class RevenueController {
 
   @Get('transactions')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.FINANCE_MODERATOR)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.FINANCE_MODERATOR)
   @ApiOperation({ summary: 'Get revenue transactions (Admin only)' })
   async getTransactions(
     @Query('status') status?: string,
@@ -63,7 +63,7 @@ export class RevenueController {
 
   @Post('transactions')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.FINANCE_MODERATOR)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.FINANCE_MODERATOR)
   @ApiOperation({ summary: 'Create revenue transaction (Admin only)' })
   async createTransaction(
     @Body() body: CreateRevenueTransactionDto,

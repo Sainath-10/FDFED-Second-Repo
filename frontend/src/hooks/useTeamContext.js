@@ -113,7 +113,7 @@ export function useTeamContext() {
   const mapped = useMemo(() => toTeam(team), [team]);
   const me = normalize(username);
   const sessionRole = normalize(session?.role);
-  const isStaff = ['admin', 'super_admin', 'super-admin'].includes(sessionRole);
+  const isStaff = ['super_admin', 'super-admin'].includes(sessionRole);
   const active = !!mapped && !INACTIVE.includes(normalize(mapped.status));
   const isMember = !!mapped && mapped.members.some((m) => normalize(m.username) === me);
   const isLeader = active && isMember && normalize(mapped.leader) === me;

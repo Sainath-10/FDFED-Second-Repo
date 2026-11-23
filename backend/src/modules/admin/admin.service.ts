@@ -63,7 +63,7 @@ export class AdminService {
       ],
     });
     const teams = await this.teamRepo.count();
-    const staffRoles = new Set(['admin', 'super_admin', 'finance_moderator', 'community_moderator']);
+    const staffRoles = new Set(['super_admin', 'finance_moderator', 'community_moderator']);
     const published = competitions.filter((c) => !isUnpublished(c) && c.paymentStatus !== 'EXPIRED');
     const live = published.filter((c) => !['completed', 'cancelled'].includes(String(c.status)));
 

@@ -7,7 +7,7 @@ import { AuditLogEntity } from '../../entities/audit-log.entity';
 import { CompetitionEntity } from '../../entities/competition.entity';
 import { TeamEntity } from '../../entities/team.entity';
 
-const STAFF = ['admin', 'super_admin', 'finance_moderator', 'community_moderator'];
+const STAFF = ['super_admin', 'finance_moderator', 'community_moderator'];
 const lower = (v: unknown) => String(v ?? '').trim().toLowerCase();
 const limitOf = (raw: string | undefined) => Math.min(Math.max(Number(raw) || 200, 1), 500);
 

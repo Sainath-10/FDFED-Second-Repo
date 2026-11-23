@@ -10,7 +10,7 @@ import { AuthAPI } from '../../services/api.js';
 import { ADMIN_ROLE_OPTIONS } from '../../lib/adminRoles.js';
 import { EmptyState, ErrorState, LoadingState, PageHeader, formatDate } from '../../components/ui.jsx';
 
-const STAFF = ['super_admin', 'admin', 'finance_moderator', 'community_moderator'];
+const STAFF = ['super_admin', 'finance_moderator', 'community_moderator'];
 const typeOf = (u) => (STAFF.includes(u.adminType) ? u.adminType : u.role);
 const labelOf = (type) => ADMIN_ROLE_OPTIONS.find((o) => o.value === type)?.label || type;
 

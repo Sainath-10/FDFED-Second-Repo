@@ -55,11 +55,11 @@ export class PaymentsController {
   status(@Param('id', ParseUUIDPipe) id: string, @Req() req: any) { return this.payments.status(id, req.user); }
 
   @Get('transactions') @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.FINANCE_MODERATOR, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.FINANCE_MODERATOR, UserRole.SUPER_ADMIN)
   transactions(@Query() query: TransactionQuery) { return this.payments.transactions(query.page, query.type); }
 
   @Post('transactions/:id/review') @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.FINANCE_MODERATOR, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.FINANCE_MODERATOR, UserRole.SUPER_ADMIN)
   review(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Body() dto: ReviewDto) { return this.payments.review(id, req.user.username, dto.note); }
   @Post('competitions/:id/pay-prize-pool') @UseGuards(JwtAuthGuard)
   prize(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Body() dto: MockPaymentDto) { return this.lifecycle.prize(id, req.user, dto.outcome); }
@@ -79,36 +79,36 @@ export class PaymentsController {
 
   /** Finance: approve (refund players, 10% penalty) or reject an early-end request. */
   @Post('competitions/:id/early-end-review') @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.FINANCE_MODERATOR, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.FINANCE_MODERATOR, UserRole.SUPER_ADMIN)
   reviewEarlyEnd(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Body() dto: FinanceDecisionDto) { return this.lifecycle.reviewEarlyEnd(id, req.user, dto.decision === 'approve', dto.note); }
 
   /** Finance: prize pools above ₹10,00,000 waiting for approval (with the organiser's contact details). */
   @Get('large-prize-requests') @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.FINANCE_MODERATOR, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.FINANCE_MODERATOR, UserRole.SUPER_ADMIN)
   largePrizeRequests(@Query('status') status?: string) { return this.payments.largePrizeRequests(status); }
 
   @Post('competitions/:id/large-prize-review') @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.FINANCE_MODERATOR, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.FINANCE_MODERATOR, UserRole.SUPER_ADMIN)
   reviewLargePrize(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Body() dto: FinanceDecisionDto) { return this.payments.reviewLargePrize(id, req.user, dto.decision === 'approve', dto.note); }
 
   @Post('competitions/:id/settle') @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.FINANCE_MODERATOR, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.FINANCE_MODERATOR, UserRole.SUPER_ADMIN)
   settle(@Param('id', ParseUUIDPipe) id: string, @Req() req: any) { return this.lifecycle.settle(id, req.user); }
 
   @Post('competitions/:id/hold') @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.FINANCE_MODERATOR, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.FINANCE_MODERATOR, UserRole.SUPER_ADMIN)
   hold(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Body() dto: HoldDto) { return this.lifecycle.hold(id, req.user, dto.held, dto.reason); }
 
   @Post('competitions/:id/release-held-prize') @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.FINANCE_MODERATOR, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.FINANCE_MODERATOR, UserRole.SUPER_ADMIN)
   heldPrize(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Body() dto: ReviewDto) { return this.lifecycle.releaseHeldPrize(id, req.user, dto.note); }
 
   @Post('competitions/:id/reverse') @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.FINANCE_MODERATOR, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.FINANCE_MODERATOR, UserRole.SUPER_ADMIN)
   reverse(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Body() dto: ReviewDto) { return this.lifecycle.reverse(id, req.user, dto.note); }
 
   @Post('competitions/:id/organizer-trust') @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.FINANCE_MODERATOR, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.FINANCE_MODERATOR, UserRole.SUPER_ADMIN)
   reviewTrust(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Body() dto: TrustDto) { return this.lifecycle.reviewTrust(id, req.user, dto.score, dto.reason); }
 
   // Mock-mode testing tools (LifecycleService rejects them outside mock mode / in production).
@@ -116,11 +116,11 @@ export class PaymentsController {
   startNow(@Param('id', ParseUUIDPipe) id: string, @Req() req: any) { return this.lifecycle.mockStartNow(id, req.user); }
 
   @Post('competitions/:id/mock/close-dispute-window') @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.FINANCE_MODERATOR, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.FINANCE_MODERATOR, UserRole.SUPER_ADMIN)
   closeDisputeWindow(@Param('id', ParseUUIDPipe) id: string, @Req() req: any) { return this.lifecycle.mockCloseDisputeWindow(id, req.user); }
 
   @Post('mock/run-deadlines') @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.FINANCE_MODERATOR, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.FINANCE_MODERATOR, UserRole.SUPER_ADMIN)
   async runDeadlines() { await this.lifecycle.runDeadlinesNow(); return { ok: true }; }
 
   @Get('me') @UseGuards(JwtAuthGuard)
@@ -130,7 +130,7 @@ export class PaymentsController {
   subscription(@Req() req: any) { return this.lifecycle.subscription(req.user); }
 
   @Get('competitions') @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.FINANCE_MODERATOR, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.FINANCE_MODERATOR, UserRole.SUPER_ADMIN)
   competitions() { return this.lifecycle.competitions(); }
 
   @Get('mail') @UseGuards(JwtAuthGuard)

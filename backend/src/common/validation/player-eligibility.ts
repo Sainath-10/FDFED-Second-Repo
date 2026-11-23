@@ -20,7 +20,6 @@ const ELIGIBLE_ROLES = new Set<string>([
 /** Privileged roles that must never be added to a competition roster. */
 const PRIVILEGED_ROLES = new Set<string>([
   UserRole.SUPER_ADMIN,
-  UserRole.ADMIN,
   UserRole.COMMUNITY_MODERATOR,
   'super-admin',
   'finance_moderator',
@@ -31,6 +30,7 @@ const PRIVILEGED_ROLES = new Set<string>([
   'staff',
   // Retired administrator roles: removed from the application, still rejected
   // if a legacy row survives the migration.
+  'admin',
   'comp_admin',
   'dispute_admin',
   'revenue_admin',

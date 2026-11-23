@@ -30,7 +30,7 @@ import Profile from './Profile.jsx';
 import MyActivity from './MyActivity.jsx';
 import CompManageTeams from './CompManageTeams.jsx';
 import FixtureRedirect from './FixtureRedirect.jsx';
-import ParticipantRedirect, { CompetitionCenterRedirect, DisputeFormRedirect } from './ParticipantRedirect.jsx';
+import ParticipantRedirect, { DisputeFormRedirect } from './ParticipantRedirect.jsx';
 import OrganizerRevenue from './OrganizerRevenue.jsx';
 import CreateCompetition from './CreateCompetition.jsx';
 import EditCompetition from './EditCompetition.jsx';
@@ -38,8 +38,6 @@ import MyReports from './MyReports.jsx';
 import SubmitReport from './SubmitReport.jsx';
 import DisputeEscalation from './DisputeEscalation.jsx';
 import AdminDisputeReview from './admin/AdminDisputeReview.jsx';
-import AdminUsers from './admin/AdminUsers.jsx';
-import AdminDashboard from './admin/AdminDashboard.jsx';
 import AdminActivity from './admin/AdminActivity.jsx';
 import AdminProfile from './admin/AdminProfile.jsx';
 import AdminRevenueConfig from './admin/AdminRevenueConfig.jsx';
@@ -82,10 +80,7 @@ export const PAGE_COMPONENTS = {
   '/pages/admin/revenue-transactions.html': AdminRevenueTransactions,
   '/pages/admin/disputes.html': AdminDisputes,
   '/pages/admin/revenue-config.html': AdminRevenueConfig,
-  '/pages/admin/competition-detail.html': CompetitionCenterRedirect,
-  '/pages/admin/dashboard.html': AdminDashboard,
   '/pages/admin/admin-activity.html': AdminActivity,
-  '/pages/admin/users.html': AdminUsers,
   '/pages/admin/dispute-review.html': AdminDisputeReview,
   '/pages/create-competition.html': CreateCompetition,
   '/pages/edit-competition.html': EditCompetition,

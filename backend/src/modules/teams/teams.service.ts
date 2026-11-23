@@ -41,7 +41,7 @@ export class TeamsService {
       throw new ForbiddenException('User context required');
     }
     const role = user.role;
-    if (role === UserRole.ADMIN || role === UserRole.SUPER_ADMIN) {
+    if (role === UserRole.SUPER_ADMIN) {
       return team;
     }
     // A removal is checked before ownership: a removed leader must lose every
@@ -82,7 +82,7 @@ export class TeamsService {
   private async assertViewerCanReadCompetition(competitionId: string, user: any) {
     if (!competitionId || !user) return;
     const role = user.role;
-    if (role === UserRole.ADMIN || role === UserRole.SUPER_ADMIN) return;
+    if (role === UserRole.SUPER_ADMIN) return;
     await this.assertNotRemoved(competitionId, user.username || user.id);
   }
 
@@ -630,7 +630,7 @@ export class TeamsService {
     const competition = await this.competitionRepository.findById(team.competitionId);
     const actor = String(user?.username || '').toLowerCase();
     const organizer = !!competition && [competition.createdBy, ...(competition.organizers || [])].some((name) => String(name || '').toLowerCase() === actor);
-    if (!organizer && !['admin', 'super_admin', 'comp_admin'].includes(String(user?.role || ''))) {
+    if (!organizer && !['super_admin'].includes(String(user?.role || ''))) {
       throw new ForbiddenException('Only an organizer of this competition (or a competition admin) can change a team’s status.');
     }
     return { team, competition };
@@ -919,7 +919,7 @@ export class TeamsService {
 
   async getInvitesByUser(toUsername: string, user?: any) {
     const isSelf = String(user?.username || '').toLowerCase() === String(toUsername || '').toLowerCase();
-    if (!isSelf && user?.role !== UserRole.ADMIN && user?.role !== UserRole.SUPER_ADMIN) {
+    if (!isSelf && user?.role !== UserRole.SUPER_ADMIN) {
       throw new ForbiddenException('Cannot access invitations of another user');
     }
     return this.teamRepository.getInvitesByUser(toUsername);

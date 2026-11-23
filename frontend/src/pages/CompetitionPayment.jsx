@@ -8,6 +8,7 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import PaymentMailbox from '../components/PaymentMailbox.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 import { ConfirmAction, EscrowStats, LifecycleSteps, MockBanner, Notice, PayoutPreview, Pill, TransactionTable } from '../components/PaymentUI.jsx';
 import { paymentRequest, loadCheckout, money, rupees, formatDateTime, competitionState, TERMINAL_STATES, requestEarlyEnd } from '../services/payments.js';
 import { showToast } from '../lib/toast.js';
@@ -20,6 +21,7 @@ export default function CompetitionPayment() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const id = params.get('id');
+  const { session } = useAuth();
   const [ledger, setLedger] = useState(null);
   const [status, setStatus] = useState(null);
   const [error, setError] = useState('');
@@ -121,7 +123,8 @@ export default function CompetitionPayment() {
         </div>
         <div className="pay-actions">
           {ledger?.platformFeePaid && <Link className="pay-btn ghost" to={`/pages/competition-detail.html?id=${encodeURIComponent(id)}`}>View competition</Link>}
-          {ledger?.canModerate && <Link className="pay-btn" to={`/pages/admin/finance.html?id=${encodeURIComponent(id)}`}>Open finance case</Link>}
+          {/* The Finance dashboard belongs to the Finance Moderator only. */}
+          {ledger?.canModerate && session?.role === 'finance_moderator' && <Link className="pay-btn" to={`/pages/admin/finance.html?id=${encodeURIComponent(id)}`}>Open finance case</Link>}
         </div>
       </div>
 

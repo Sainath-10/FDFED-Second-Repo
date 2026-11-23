@@ -16,10 +16,3 @@ export function DisputeFormRedirect() {
   const compId = params.get('id') || params.get('compId');
   return <Navigate replace to={compId ? `/pages/submit-report.html?compId=${encodeURIComponent(compId)}` : '/pages/submit-report.html'} />;
 }
-
-/** The admin competition page and the organizer competition center are one page. */
-export function CompetitionCenterRedirect() {
-  const [params] = useSearchParams();
-  const id = params.get('id');
-  return <Navigate replace to={id ? `/pages/competition-detail.html?id=${encodeURIComponent(id)}` : '/pages/admin/dashboard.html'} />;
-}

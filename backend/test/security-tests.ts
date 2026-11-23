@@ -40,7 +40,8 @@ const errorsFor = async (cls: any, body: any) => validate(plainToInstance(cls, b
 async function makeAuth() {
   const users: any[] = [
     { id: 'u-super', username: 'boss', email: 'boss@x.gg', role: UserRole.SUPER_ADMIN, adminType: 'super_admin', banned: false, warningCount: 0 },
-    { id: 'u-admin', username: 'adm', email: 'adm@x.gg', role: UserRole.ADMIN, adminType: 'admin', banned: false, warningCount: 0 },
+    // A legacy row still holding the retired Admin role.
+    { id: 'u-admin', username: 'adm', email: 'adm@x.gg', role: 'admin', adminType: 'admin', banned: false, warningCount: 0 },
     { id: 'u-fin', username: 'fin', email: 'fin@x.gg', role: UserRole.FINANCE_MODERATOR, adminType: 'finance_moderator', banned: false, warningCount: 0 },
     { id: 'u-p', username: 'player', email: 'p@x.gg', role: UserRole.PARTICIPANT, adminType: null, banned: false, warningCount: 0 },
   ];
@@ -116,13 +117,19 @@ async function main() {
     assert.equal(res.access_token, 'token');
   });
 
-  await test('admins cannot ban a Super Admin, other staff, or themselves', async () => {
+  await test('a retired Admin account cannot sign in, and there is no manual ban', async () => {
     const { service } = await makeAuth();
-    const admin = { id: 'u-admin', username: 'adm', role: UserRole.ADMIN, adminType: 'admin' };
-    await rejects(() => service.banUser('boss', admin), ForbiddenException, 'Super Admin');
-    await rejects(() => service.banUser('fin', admin), ForbiddenException, 'staff');
-    await rejects(() => service.banUser('adm', admin), ForbiddenException, 'own');
-    assert.deepEqual(await service.banUser('player', admin), { banned: true, username: 'player' });
+    await rejects(() => service.login({ emailOrUsername: 'adm', password: 'secret1' }), UnauthorizedException, 'removed');
+    assert.equal(typeof (service as any).banUser, 'undefined');
+  });
+
+  await test('moderation cannot target a Super Admin or yourself, and only a Super Admin may warn staff', async () => {
+    const { service } = await makeAuth();
+    const fin = { id: 'u-fin', username: 'fin', role: UserRole.FINANCE_MODERATOR, adminType: 'finance_moderator' };
+    await rejects(() => service.warnUser('boss', fin), ForbiddenException, 'Super Admin');
+    await rejects(() => service.warnUser('fin', fin), ForbiddenException, 'own');
+    const boss = { id: 'u-super', username: 'boss', role: UserRole.SUPER_ADMIN, adminType: 'super_admin' };
+    assert.equal((await service.warnUser('player', boss)).warningCount, 1);
   });
 
   await test('a Super Admin cannot revoke themselves', async () => {
@@ -133,12 +140,14 @@ async function main() {
   await test('add admin validates the role and never uses a default password or returns a hash', async () => {
     assert.ok((await errorsFor(AddAdminDto, { username: 'newmod', adminType: 'totally_fake_role' })).length);
     const { service } = await makeAuth();
-    const res: any = await service.addAdmin({ username: 'newmod', adminType: 'admin' } as any, { username: 'boss' });
+    // The retired Admin role can no longer be granted.
+    assert.ok((await errorsFor(AddAdminDto, { username: 'newmod', adminType: 'admin' })).length);
+    const res: any = await service.addAdmin({ username: 'newmod', adminType: 'finance_moderator' } as any, { username: 'boss' });
     assert.equal(res.created, true);
     assert.ok(res.temporaryPassword && res.temporaryPassword !== 'nexus' && res.temporaryPassword.length >= 10);
     assert.equal('passwordHash' in res.user, false);
     const login = await service.login({ emailOrUsername: 'newmod', password: res.temporaryPassword });
-    assert.equal(login.user.role, 'admin');
+    assert.equal(login.user.role, 'finance_moderator');
   });
 
   await test('username search offers only player accounts to players and never returns emails', async () => {

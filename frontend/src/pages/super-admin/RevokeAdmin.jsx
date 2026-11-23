@@ -12,7 +12,7 @@ import { AuthAPI } from '../../services/api.js';
 import { Notice, PageHeader } from '../../components/ui.jsx';
 import { showToast } from '../../lib/toast.js';
 
-const STAFF = ['super_admin', 'admin', 'finance_moderator', 'community_moderator'];
+const STAFF = ['super_admin', 'finance_moderator', 'community_moderator'];
 
 export default function RevokeAdmin() {
   const navigate = useNavigate();

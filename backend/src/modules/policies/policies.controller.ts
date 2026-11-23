@@ -41,7 +41,7 @@ export class PoliciesController {
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Roles(UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a new policy (Super Admin / Admin only)' })
   async create(
@@ -54,7 +54,7 @@ export class PoliciesController {
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Roles(UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a policy (Super Admin / Admin only)' })
   async update(@Param('id') id: string, @Body() body: UpdatePolicyDto) {
@@ -64,7 +64,7 @@ export class PoliciesController {
 
   @Patch(':id/archive')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Roles(UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Archive a policy (Super Admin / Admin only)' })
   async archive(@Param('id') id: string) {

@@ -22,7 +22,6 @@ export const USERNAME_MESSAGE =
 
 /** Staff roles a Super Admin may grant. */
 export const GRANTABLE_ADMIN_TYPES = [
-  UserRole.ADMIN,
   UserRole.FINANCE_MODERATOR,
   UserRole.COMMUNITY_MODERATOR,
   UserRole.SUPER_ADMIN,

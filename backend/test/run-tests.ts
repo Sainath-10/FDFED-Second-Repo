@@ -606,7 +606,7 @@ async function competitionServiceTests() {
 
     // Administrative operations remain role-protected.
     const approvalRoles = Reflect.getMetadata(ROLES_KEY, CompetitionsController.prototype.setApproval);
-    assert.ok(Array.isArray(approvalRoles) && approvalRoles.includes('admin'));
+    assert.ok(Array.isArray(approvalRoles) && approvalRoles.includes('super_admin') && !approvalRoles.includes('admin'));
     const deleteRoles = Reflect.getMetadata(ROLES_KEY, CompetitionsController.prototype.deleteCompetition);
     assert.deepEqual(deleteRoles, ['super_admin']);
   });
@@ -815,7 +815,7 @@ async function teamServiceTests() {
       }),
       findByUsername: async (name: string) => (name === 'ghost' ? null : ({
         id: `u-${name}`, username: name, email: `${name}@nexus.gg`,
-        role: name === 'boss' ? UserRole.ADMIN : UserRole.PARTICIPANT,
+        role: name === 'boss' ? UserRole.FINANCE_MODERATOR : UserRole.PARTICIPANT,
       })),
       findAll: async () => [
         { id: 'u1', username: 'alice', role: UserRole.TEAM_LEAD },
@@ -823,7 +823,7 @@ async function teamServiceTests() {
         { id: 'u3', username: 'carol', role: UserRole.PARTICIPANT },
         { id: 'u4', username: 'dave', role: UserRole.TEAM_LEAD },
         { id: 'u5', username: 'erin', role: UserRole.PARTICIPANT, banned: true },
-        { id: 'u6', username: 'boss', role: UserRole.ADMIN },
+        { id: 'u6', username: 'boss', role: UserRole.FINANCE_MODERATOR },
         { id: 'u7', username: 'organizer', role: UserRole.PARTICIPANT },
       ],
       update: async (_id: string, updates: any) => {
@@ -1591,14 +1591,14 @@ async function matchServiceTests() {
     });
   });
 
-  await test('only the competition organizer or an admin can generate fixtures', async () => {
+  await test('only the competition organizer or a Super Admin can generate fixtures', async () => {
     const { service } = makeService();
     await expectThrow(
       () => service.generateSchedule('c1', 'unrelated-user', {}, UserRole.PARTICIPANT),
       ForbiddenException,
       'Only an organizer',
     );
-    const adminResult = await service.generateSchedule('c1', 'competition-admin', {}, UserRole.ADMIN);
+    const adminResult = await service.generateSchedule('c1', 'platform-super-admin', {}, UserRole.SUPER_ADMIN);
     assert.ok(adminResult.created > 0);
   });
 

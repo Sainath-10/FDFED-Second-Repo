@@ -34,7 +34,7 @@ const minor = (amount: number) => {
   return n;
 };
 const inr = (amountMinor: number) => `₹${(amountMinor / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
-export const financeRole = (u: any) => ['finance_moderator', 'admin', 'super_admin'].includes(u?.role);
+export const financeRole = (u: any) => ['finance_moderator', 'super_admin'].includes(u?.role);
 
 /**
  * Mock escrow lifecycle (Payment_Architecture.md §2–§9). Every money movement is

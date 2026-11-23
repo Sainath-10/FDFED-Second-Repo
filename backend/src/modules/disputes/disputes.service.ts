@@ -11,9 +11,9 @@ import { CreateDisputeDto, OrganizerReviewDisputeDto, AdminResolveDisputeDto } f
 import { IDispute, DisputeStatus, DisputeTargetType, UserRole } from '../../common/interfaces';
 
 /** Staff who may read every dispute. */
-const STAFF = new Set<string>([UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.FINANCE_MODERATOR]);
+const STAFF = new Set<string>([UserRole.SUPER_ADMIN, UserRole.FINANCE_MODERATOR]);
 /** Staff who may resolve any open dispute (this is what unblocks settlement). */
-const RESOLVERS = new Set<string>([UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.FINANCE_MODERATOR]);
+const RESOLVERS = new Set<string>([UserRole.SUPER_ADMIN, UserRole.FINANCE_MODERATOR]);
 
 const lc = (v: unknown) => String(v ?? '').trim().toLowerCase();
 const isStaffUser = (user: any) => STAFF.has(lc(user?.role)) || STAFF.has(lc(user?.adminType));
@@ -238,7 +238,7 @@ export class DisputesService {
 
     if (dto.action === 'resolve_and_ban') {
       const roles = [lc(user?.role), lc(user?.adminType)];
-      if (!roles.includes(UserRole.ADMIN) && !roles.includes(UserRole.SUPER_ADMIN)) {
+      if (!roles.includes(UserRole.SUPER_ADMIN)) {
         throw new ForbiddenException('Only an administrator can ban an account.');
       }
       const target = String(dto.targetUsernameToBan || '').trim().replace(/^@/, '');

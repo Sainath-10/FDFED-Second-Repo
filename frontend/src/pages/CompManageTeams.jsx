@@ -32,7 +32,7 @@ export default function CompManageTeams() {
   const [contacts, setContacts] = useState(null);
   const [contactsError, setContactsError] = useState('');
 
-  const canManage = comp && (isOrganizerOf(comp, session?.username) || ['admin', 'super-admin', 'super_admin'].includes(session?.role));
+  const canManage = comp && (isOrganizerOf(comp, session?.username) || ['super-admin', 'super_admin'].includes(session?.role));
 
   useEffect(() => {
     if (!id || !canManage) return;

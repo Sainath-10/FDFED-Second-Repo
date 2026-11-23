@@ -37,16 +37,6 @@ export const ADMIN_ROLE_OPTIONS = [
     bg: 'rgba(244, 114, 182, 0.15)',
     border: 'rgba(244, 114, 182, 0.3)',
   },
-  {
-    value: 'admin',
-    role: 'admin',
-    adminType: 'admin',
-    label: 'Admin',
-    icon: '🔧',
-    color: '#94a3b8',
-    bg: 'rgba(148, 163, 184, 0.15)',
-    border: 'rgba(148, 163, 184, 0.3)',
-  },
 ];
 
 const normalize = (value) => String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
@@ -80,5 +70,5 @@ export function resolveAdminRole(value) {
 
 export const ADMIN_ROLE_VALUES = ADMIN_ROLE_OPTIONS.map((option) => option.value);
 
-/** Roles a Super Admin may assign from the creation form (never participant). */
-export const CREATABLE_ADMIN_ROLES = ADMIN_ROLE_OPTIONS.filter((option) => option.value !== 'admin');
+/** Roles a Super Admin may assign (the retired Admin role is not one of them). */
+export const CREATABLE_ADMIN_ROLES = ADMIN_ROLE_OPTIONS;

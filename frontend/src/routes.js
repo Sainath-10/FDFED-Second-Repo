@@ -30,17 +30,17 @@ export const ROLE_ROUTES = {
   participant: '/pages/profile.html',
   team_lead: '/pages/profile.html',
   teamlead: '/pages/profile.html',
-  admin: '/pages/admin/dashboard.html',
   'super-admin': '/pages/super-admin/super-dashboard.html',
   super_admin: '/pages/super-admin/super-dashboard.html',
   community_moderator: '/pages/moderator/reports.html',
 };
 
 /**
- * Roles allowed into the admin area. Per the current admin/dispute model the
- * Super Admin has its own area and no admin-route access, so it is excluded.
+ * Finance moderation area. The retired Admin role no longer exists, and the
+ * Super Admin has its own area: it reaches only the shared revenue and
+ * activity pages below, never the Finance dashboard.
  */
-export const ADMIN_ROLES = ['admin'];
+export const FINANCE_ROLES = ['finance_moderator'];
 export const SUPER_ADMIN_ROLES = ['super-admin'];
 export const TEAM_LEAD_ROLES = ['team_lead'];
 /** Handles reports against organisers only. */
@@ -98,16 +98,13 @@ export const PROTECTED_ROUTES = [
   route('/pages/dispute-escalation.html', 'Escalate dispute', 'disputes'),
 
  // Admin
-  route('/pages/admin/finance.html', 'Finance moderation', 'admin', ['finance_moderator', 'admin', 'super-admin']),
-  route('/pages/admin/dashboard.html', 'Admin dashboard', 'admin', ADMIN_ROLES),
-  route('/pages/admin/users.html', 'Users', 'admin', ADMIN_ROLES),
-  route('/pages/admin/disputes.html', 'Disputes', 'admin', [...ADMIN_ROLES, 'finance_moderator']),
-  route('/pages/admin/dispute-review.html', 'Dispute review', 'admin', [...ADMIN_ROLES, 'finance_moderator']),
-  route('/pages/admin/competition-detail.html', 'Competition detail', 'admin', ADMIN_ROLES),
-  route('/pages/admin/admin-activity.html', 'Admin activity', 'admin', [...ADMIN_ROLES, ...SUPER_ADMIN_ROLES, 'finance_moderator']),
-  route('/pages/admin/admin-profile.html', 'Admin profile', 'admin', [...ADMIN_ROLES, 'finance_moderator']),
-  route('/pages/admin/revenue-config.html', 'Revenue config', 'admin', [...ADMIN_ROLES, ...SUPER_ADMIN_ROLES]),
-  route('/pages/admin/revenue-transactions.html', 'Revenue transactions', 'admin', [...ADMIN_ROLES, ...SUPER_ADMIN_ROLES, 'finance_moderator']),
+  route('/pages/admin/finance.html', 'Finance moderation', 'admin', FINANCE_ROLES),
+  route('/pages/admin/disputes.html', 'Disputes', 'admin', FINANCE_ROLES),
+  route('/pages/admin/dispute-review.html', 'Dispute review', 'admin', FINANCE_ROLES),
+  route('/pages/admin/admin-activity.html', 'Admin activity', 'admin', [...SUPER_ADMIN_ROLES, ...FINANCE_ROLES]),
+  route('/pages/admin/admin-profile.html', 'Admin profile', 'admin', FINANCE_ROLES),
+  route('/pages/admin/revenue-config.html', 'Revenue config', 'admin', SUPER_ADMIN_ROLES),
+  route('/pages/admin/revenue-transactions.html', 'Revenue transactions', 'admin', [...SUPER_ADMIN_ROLES, ...FINANCE_ROLES]),
 
  // Super admin
   route('/pages/super-admin/super-dashboard.html', 'Super admin dashboard', 'super-admin', SUPER_ADMIN_ROLES),

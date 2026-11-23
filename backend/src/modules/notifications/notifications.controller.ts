@@ -30,7 +30,7 @@ export class NotificationsController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.FINANCE_MODERATOR, UserRole.COMMUNITY_MODERATOR)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.FINANCE_MODERATOR, UserRole.COMMUNITY_MODERATOR)
   @ApiOperation({ summary: 'Create a notification (Admin only)' })
   async create(
     @Body() body: CreateNotificationDto,
@@ -42,7 +42,7 @@ export class NotificationsController {
   @ApiOperation({ summary: 'Get notifications for a user' })
   async getForUser(@Request() req: any, @Param('username') username: string) {
     const isSelf = req.user?.username?.toLowerCase() === username.toLowerCase();
-    const isAdmin = [UserRole.ADMIN, UserRole.SUPER_ADMIN].includes(req.user?.role);
+    const isAdmin = [UserRole.SUPER_ADMIN].includes(req.user?.role);
     if (!isSelf && !isAdmin) {
       throw new ForbiddenException('Cannot access notifications of another user');
     }
@@ -53,7 +53,7 @@ export class NotificationsController {
   @ApiOperation({ summary: 'Get unread notification count for a user' })
   async getUnreadCount(@Request() req: any, @Param('username') username: string) {
     const isSelf = req.user?.username?.toLowerCase() === username.toLowerCase();
-    const isAdmin = [UserRole.ADMIN, UserRole.SUPER_ADMIN].includes(req.user?.role);
+    const isAdmin = [UserRole.SUPER_ADMIN].includes(req.user?.role);
     if (!isSelf && !isAdmin) {
       throw new ForbiddenException('Cannot access notifications of another user');
     }
@@ -69,7 +69,7 @@ export class NotificationsController {
       throw new NotFoundException('Notification not found');
     }
     const isSelf = req.user?.username?.toLowerCase() === notification.toUsername.toLowerCase();
-    const isAdmin = [UserRole.ADMIN, UserRole.SUPER_ADMIN].includes(req.user?.role);
+    const isAdmin = [UserRole.SUPER_ADMIN].includes(req.user?.role);
     if (!isSelf && !isAdmin) {
       throw new ForbiddenException('Cannot modify notifications of another user');
     }
@@ -91,7 +91,7 @@ export class NotificationsController {
   @ApiOperation({ summary: 'Mark all notifications as read for user' })
   async markAllRead(@Request() req: any, @Param('username') username: string) {
     const isSelf = req.user?.username?.toLowerCase() === username.toLowerCase();
-    const isAdmin = [UserRole.ADMIN, UserRole.SUPER_ADMIN].includes(req.user?.role);
+    const isAdmin = [UserRole.SUPER_ADMIN].includes(req.user?.role);
     if (!isSelf && !isAdmin) {
       throw new ForbiddenException('Cannot access notifications of another user');
     }
@@ -107,7 +107,7 @@ export class NotificationsController {
       throw new NotFoundException('Notification not found');
     }
     const isSelf = req.user?.username?.toLowerCase() === notification.toUsername.toLowerCase();
-    const isAdmin = [UserRole.ADMIN, UserRole.SUPER_ADMIN].includes(req.user?.role);
+    const isAdmin = [UserRole.SUPER_ADMIN].includes(req.user?.role);
     if (!isSelf && !isAdmin) {
       throw new ForbiddenException('Cannot delete notifications of another user');
     }

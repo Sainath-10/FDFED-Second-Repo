@@ -4,10 +4,19 @@ export enum UserRole {
   SUPER_ADMIN = 'super_admin',
   TEAM_LEAD = 'team_lead',
   PARTICIPANT = 'participant',
-  ADMIN = 'admin',
   /** Handles reports against organisers only (separate dashboard). */
   COMMUNITY_MODERATOR = 'community_moderator',
 }
+
+/**
+ * Retired staff roles (the generic Admin role and the Dispute, Competition and
+ * Revenue Admin roles it replaced). They can no longer be assigned, and an
+ * account still carrying one can neither log in nor use an existing token.
+ */
+export const RETIRED_STAFF_ROLES: readonly string[] = ['admin', 'comp_admin', 'competition_admin', 'dispute_admin', 'revenue_admin'];
+
+export const hasRetiredStaffRole = (user: { role?: string | null; adminType?: string | null } | null | undefined) =>
+  !!user && [user.role, user.adminType].some((value) => RETIRED_STAFF_ROLES.includes(String(value || '').trim().toLowerCase()));
 
 export enum DisputeStatus {
   OPEN_ORGANIZER = 'open_organizer',

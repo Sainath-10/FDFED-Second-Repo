@@ -201,7 +201,6 @@ export class UserRepository {
 
     const demoAccounts = [
       { email: 'superadmin@nexus.gg', username: 'superadmin', password: 'super123', role: UserRole.SUPER_ADMIN, adminType: 'super_admin' },
-      { email: 'admin@nexus.gg', username: 'admin', password: 'admin123', role: UserRole.ADMIN, adminType: 'admin' },
       { email: 'regular@nexus.gg', username: 'regular', password: 'regular123', role: UserRole.PARTICIPANT, adminType: null },
       { email: 'superadmin1@nexus.gg', username: 'superadmin1', password, role: UserRole.SUPER_ADMIN, adminType: 'super_admin' },
       { email: 'superadmin2@nexus.gg', username: 'superadmin2', password, role: UserRole.SUPER_ADMIN, adminType: 'super_admin' },

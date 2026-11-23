@@ -44,7 +44,7 @@ export class DisputesController {
   @Post(':id/admin-resolve')
   @HttpCode(200)
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.FINANCE_MODERATOR)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.FINANCE_MODERATOR)
   @ApiOperation({ summary: 'Platform staff resolve any open dispute, optionally banning an account' })
   async adminResolve(@Param('id') id: string, @Body() dto: AdminResolveDisputeDto, @CurrentUser() user: any) {
     return this.disputesService.adminResolveDispute(id, dto, user);
@@ -64,7 +64,7 @@ export class DisputesController {
 
   @Get('admin-queue')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.FINANCE_MODERATOR)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.FINANCE_MODERATOR)
   @ApiOperation({ summary: 'Disputes against organizers and escalated disputes' })
   async getAdminQueue() {
     return this.disputesService.getAdminQueue();
@@ -72,7 +72,7 @@ export class DisputesController {
 
   @Get()
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.FINANCE_MODERATOR)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.FINANCE_MODERATOR)
   @ApiOperation({ summary: 'All disputes (staff only); filter with ?status=' })
   async getAllDisputes(@Query('status') status?: DisputeStatus) {
     if (status) return this.disputesService.getDisputesByStatus(status);

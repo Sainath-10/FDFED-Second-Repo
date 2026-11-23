@@ -21,8 +21,8 @@ import {
   MoneyIcon,
 } from '../components/icons.jsx';
 
-/** Roles that use an admin-area sidebar. */
-export const ADMIN_ROLES = ['finance_moderator', 'admin'];
+/** Roles that use an admin-area sidebar (the retired Admin role is gone). */
+export const ADMIN_ROLES = ['finance_moderator'];
 
 const MAIN_NAV = [
   { id: 'home', label: 'Home', to: '/', icon: HomeIcon, end: true },
@@ -54,24 +54,13 @@ const ADMIN_NAV = {
     ALERTS,
     { id: 'profile', label: 'Profile', to: '/pages/admin/admin-profile.html', icon: ProfileIcon },
   ],
-  admin: [
-    { id: 'home', label: 'Dashboard', to: '/pages/admin/dashboard.html', icon: HomeIcon, end: true },
-    { id: 'disputes', label: 'Disputes', to: '/pages/admin/disputes.html', icon: ShieldIcon },
-    { id: 'finance', label: 'Finance', to: '/pages/admin/finance.html', icon: MoneyIcon },
-    { id: 'revenue', label: 'Revenue', to: '/pages/admin/revenue-transactions.html', icon: TrophyIcon },
-    { id: 'users', label: 'Users', to: '/pages/admin/users.html', icon: UsersIcon },
-    { id: 'activity', label: 'Activity', to: '/pages/admin/admin-activity.html', icon: CheckCircleIcon },
-    ALERTS,
-    { id: 'profile', label: 'Profile', to: '/pages/admin/admin-profile.html', icon: ProfileIcon },
-  ],
 };
 
-/** Disputes are handled by Admins and Finance; the Super Admin manages people and platform rules. */
+/** Disputes and the Finance dashboard belong to the Finance Moderator; the Super Admin manages people and platform rules. */
 const SUPER_ADMIN_NAV = [
   { id: 'dashboard', label: 'Dashboard', to: '/pages/super-admin/super-dashboard.html', icon: HomeIcon, end: true },
   { id: 'users', label: 'Users', to: '/pages/super-admin/users.html', icon: UsersIcon },
   { id: 'admins', label: 'Admins', to: '/pages/super-admin/admins.html', icon: ShieldIcon },
-  { id: 'finance', label: 'Finance', to: '/pages/admin/finance.html', icon: MoneyIcon },
   { id: 'revenue', label: 'Revenue', to: '/pages/admin/revenue-transactions.html', icon: TrophyIcon },
   { id: 'activity', label: 'Activity', to: '/pages/admin/admin-activity.html', icon: CheckCircleIcon },
   ALERTS,
@@ -102,6 +91,6 @@ export function getSidebarNav(session) {
   const role = session.role;
   if (role === 'community_moderator') return { variant: 'admin', ...split(MODERATOR_NAV), showLogin: false };
   if (role === 'super-admin') return { variant: 'super-admin', ...split(SUPER_ADMIN_NAV), showLogin: false };
-  if (ADMIN_ROLES.includes(role)) return { variant: 'admin', ...split(ADMIN_NAV[role] || ADMIN_NAV.admin), showLogin: false };
+  if (ADMIN_ROLES.includes(role)) return { variant: 'admin', ...split(ADMIN_NAV[role]), showLogin: false };
   return { variant: 'main', ...split(MAIN_NAV), showLogin: false };
 }
