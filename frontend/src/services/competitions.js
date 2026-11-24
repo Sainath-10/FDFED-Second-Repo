@@ -35,6 +35,16 @@ export function hasStarted(c, now = Date.now()) {
   return !!c && time(c.startDate) <= now;
 }
 
+/** The scheduled end day is over (the organiser may not have pressed End yet). */
+export function isPastEndDate(c, now = Date.now()) {
+  return !!c && time(c.endDate) < now;
+}
+
+/** In progress right now: started, not closed, and its end date not yet passed. */
+export function isLiveCompetition(c, now = Date.now()) {
+  return hasStarted(c, now) && !isClosedCompetition(c) && !isPastEndDate(c, now);
+}
+
 /** Whether teams can register right now — the same rules the server applies. */
 export function registrationState(c, now = Date.now()) {
   if (!c) return { open: false, reason: 'missing', label: 'Competition unavailable' };
@@ -53,6 +63,7 @@ function badgeFor(c) {
   if (isCancelledCompetition(c)) return { badge: 'Cancelled', badgeClass: 'cancelled' };
   if (isClosedCompetition(c)) return { badge: 'Completed', badgeClass: 'ended' };
   if (String(c.status).toLowerCase() === 'suspended') return { badge: 'Suspended', badgeClass: 'ended' };
+  if (isPastEndDate(c)) return { badge: 'Ended', badgeClass: 'ended' };
   const reg = registrationState(c);
   if (reg.reason === 'started') return { badge: 'Live', badgeClass: 'live' };
   if (reg.reason === 'closed') return { badge: 'Registration closed', badgeClass: 'ended' };

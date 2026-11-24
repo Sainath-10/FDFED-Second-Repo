@@ -30,9 +30,10 @@ test('registration cannot close after the competition ends, or open after it', a
   assert.ok(validateSchedule({ regOpen: day(20), regClose: day(21), start: day(5), end: day(8) }).regOpen);
 });
 
-test('one-day events and same-day registration windows are allowed', async () => {
+test('the end must be at least one day after the start; same-day registration windows are allowed', async () => {
   const { validateSchedule, scheduleToIso } = await loadForm();
-  assert.deepEqual(validateSchedule({ regOpen: day(1), regClose: day(1), start: day(3), end: day(3) }), {});
+  assert.match(validateSchedule({ regOpen: day(1), regClose: day(1), start: day(3), end: day(3) }).end, /at least one day after it starts/);
+  assert.deepEqual(validateSchedule({ regOpen: day(1), regClose: day(1), start: day(3), end: day(4) }), {});
   const iso = scheduleToIso({ regOpen: day(1), regClose: day(1), start: day(3), end: day(3) });
   assert.ok(new Date(iso.endDate) > new Date(iso.startDate), 'the end is 23:59:59 on the start day');
   assert.ok(new Date(iso.registrationCloseAt) > new Date(iso.registrationOpenAt), 'registration closes at the end of its day');

@@ -161,13 +161,14 @@ async function competitionRuleTests() {
     }), []);
 
     // end before start is rejected
-    assert.match(validateDateWindow({ startDate: end, endDate: start }).map((e) => e.message).join(' '), /cannot end before it starts/i);
+    assert.match(validateDateWindow({ startDate: end, endDate: start }).map((e) => e.message).join(' '), /at least one day after it starts/i);
 
     // registration must close before the competition starts
     assert.match(validateDateWindow({ registrationCloseAt: end, startDate: start }).map((e) => e.message).join(' '), /close before the competition starts/i);
 
-    // a one-day event (end later the same day) is allowed
-    assert.deepEqual(validateDateWindow({ startDate: start, endDate: new Date(start.getTime() + 12 * 3600_000) }), []);
+    // the end must be at least one day after the start: the same day is rejected, the next day is fine
+    assert.match(validateDateWindow({ startDate: start, endDate: new Date(start.getTime() + 12 * 3600_000) }).map((e) => e.message).join(' '), /at least one day after it starts/i);
+    assert.deepEqual(validateDateWindow({ startDate: start, endDate: new Date(start.getTime() + 24 * 3600_000) }), []);
 
     // registration close before open is rejected
     assert.match(validateDateWindow({
@@ -586,7 +587,7 @@ async function competitionServiceTests() {
     await expectThrow(
       () => service.updateCompetition('c1', { endDate: new Date(future.getTime() - 86_400_000).toISOString() } as any, 'alice', 'team_lead'),
       BadRequestException,
-      'cannot end before it starts',
+      'at least one day after it starts',
     );
   });
 

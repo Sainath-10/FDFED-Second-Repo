@@ -63,6 +63,14 @@ export class CompetitionEntity {
   @Column({ default: 0 })
   maxPlayersPerTeam: number;
 
+  /** Saves that changed the schedule before play started (at most 2). */
+  @Column({ default: 0 })
+  dateEditCount: number;
+
+  /** End-date changes made after play started (at most 2; no other date may change then). */
+  @Column({ default: 0 })
+  endDateEditCount: number;
+
   @Column({ nullable: true, type: 'text' })
   img: string;
 

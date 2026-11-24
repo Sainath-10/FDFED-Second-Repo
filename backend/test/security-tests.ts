@@ -238,7 +238,7 @@ async function main() {
     const d = (h: number) => new Date(Date.now() + h * 3600000);
     assert.ok(validateDateWindow({ registrationOpenAt: d(1), registrationCloseAt: d(100), startDate: d(50), endDate: d(200) }).length);
     assert.ok(validateDateWindow({ registrationOpenAt: d(300), registrationCloseAt: d(301), startDate: d(50), endDate: d(200) }).length);
-    assert.deepEqual(validateDateWindow({ registrationOpenAt: d(1), registrationCloseAt: d(2), startDate: d(50), endDate: d(60) }), []);
+    assert.deepEqual(validateDateWindow({ registrationOpenAt: d(1), registrationCloseAt: d(2), startDate: d(50), endDate: d(80) }), []);
     assert.ok(validateFutureDates({ startDate: d(-5) }).length);
   });
 

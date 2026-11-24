@@ -52,6 +52,12 @@ export default function AdminActivity() {
             <div className="ui-row-main">
               <div className="ui-row-title">{label(r.actionType)}</div>
               <div className="ui-row-meta">{r.details}</div>
+              {/* Which competition an entry is about (older entries only stored it in metadata). */}
+              {r.metadata?.competitionName && !String(r.details || '').includes(r.metadata.competitionName) && (
+                <div className="ui-row-meta" style={{ marginTop: 2 }}>
+                  Competition: {r.metadata.competitionName}{r.metadata.prize ? ` · prize pool ₹${Number(r.metadata.prize).toLocaleString('en-IN')}` : ''}
+                </div>
+              )}
             </div>
             <span className="ui-row-meta">{formatDate(r.timestamp, true)}</span>
           </div>

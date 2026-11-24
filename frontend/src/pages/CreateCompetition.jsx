@@ -13,7 +13,7 @@ import { CompetitionsAPI, PlatformAPI, ReputationAPI } from '../services/api.js'
 import { calculatePlatformFee, useRevenueConfig } from '../services/competitions.js';
 import {
   FORMATS, GAMES, LARGE_PRIZE_POOL, MAX_ENTRY_FEE, MAX_PLAYERS, MAX_PRIZE_POOL, MIN_ENTRY_FEE,
-  parseRupees, readBanner, scheduleToIso, todayInput, validateContact, validateDescription, validateName, validatePrizes, validateSchedule,
+  nextDay, parseRupees, readBanner, scheduleToIso, todayInput, validateContact, validateDescription, validateName, validatePrizes, validateSchedule,
 } from '../lib/competitionForm.js';
 import { UsernameChips } from '../components/UsernameSearch.jsx';
 import { competitionBanner } from '../lib/assets.js';
@@ -123,7 +123,7 @@ export default function CreateCompetition() {
       const fee = parseRupees(form.entryFee, { label: 'Entry fee', allowEmpty: false });
       if (fee.error) next.entryFee = fee.error;
       else if (fee.value < MIN_ENTRY_FEE) next.entryFee = `The entry fee must be at least ${formatINR(MIN_ENTRY_FEE)}.`;
-      else if (fee.value > MAX_ENTRY_FEE) next.entryFee = 'The entry fee is too high.';
+      else if (fee.value > MAX_ENTRY_FEE) next.entryFee = `The entry fee cannot exceed ₹${MAX_ENTRY_FEE.toLocaleString('en-IN')}.`;
     }
     const me = String(session?.username || '').toLowerCase();
     const coOrgs = form.coOrganizers;
@@ -262,7 +262,7 @@ export default function CreateCompetition() {
             </div>
             <div className="form-row">
               <Field id="start-date" label="Starts *" error={err('start')}><input className="form-input" type="date" id="start-date" min={form.regClose || todayInput()} value={form.start} onChange={set('start')} /></Field>
-              <Field id="end-date" label="Ends *" error={err('end')} help="Same day as the start for a one-day event."><input className="form-input" type="date" id="end-date" min={form.start || todayInput()} value={form.end} onChange={set('end')} /></Field>
+              <Field id="end-date" label="Ends *" error={err('end')} help="At least one day after the start date."><input className="form-input" type="date" id="end-date" min={form.start ? nextDay(form.start) : todayInput()} value={form.end} onChange={set('end')} /></Field>
             </div>
             <div className="form-row">
               <Field id="max-teams" label={`Max teams (2–${platform.maxTeams}) *`} error={err('maxTeams')}><input className="form-input" type="number" id="max-teams" min="2" max={platform.maxTeams} step="1" value={form.maxTeams} onChange={set('maxTeams')} /></Field>

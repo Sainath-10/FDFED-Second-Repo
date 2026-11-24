@@ -615,9 +615,14 @@ export class LifecycleService implements OnModuleInit, OnModuleDestroy {
    */
   private async rankGroups(m: EntityManager, c: Competition) {
     const matches = await m.find(Match, { where: { competitionId: c.id } });
-    if (!matches.length || matches.some(x => !['completed', 'bye'].includes(x.status))) throw new BadRequestException('Complete all fixtures before ending the competition.');
     const teams = await m.find(Team, { where: { competitionId: c.id } });
     const activeTeams = teams.filter(activeTeam);
+    // Only one team took part and nothing was played: it wins on its own, and
+    // every other place stays empty (its prize share is not awarded).
+    if (activeTeams.length === 1 && matches.every(x => x.status === 'bye' || !x.team1Id || !x.team2Id)) {
+      return { groups: [[activeTeams[0].id]], teams, matches };
+    }
+    if (!matches.length || matches.some(x => !['completed', 'bye'].includes(x.status))) throw new BadRequestException('Complete all fixtures before ending the competition.');
     const active = new Set(activeTeams.map(t => t.id));
     const scheduled = new Set(matches.flatMap(x => [x.team1Id, x.team2Id]).filter(Boolean));
     const unscheduled = activeTeams.filter(t => !scheduled.has(t.id));
@@ -671,7 +676,10 @@ export class LifecycleService implements OnModuleInit, OnModuleDestroy {
       if (!c.prizePoolPaid) throw new HttpException('Pay the prize pool to end this competition.', HttpStatus.PAYMENT_REQUIRED);
       if (+new Date(c.startDate) > Date.now()) throw new BadRequestException('Competition has not started.');
       const fixtures = await m.find(Match, { where: { competitionId: c.id } });
-      if (!fixtures.length || fixtures.some(x => !['completed', 'bye'].includes(x.status))) {
+      // A lone registered team with nothing to play is declared the solo winner.
+      const soloWinner = (await m.find(Team, { where: { competitionId: c.id } })).filter(activeTeam).length === 1
+        && fixtures.every(x => x.status === 'bye' || !x.team1Id || !x.team2Id);
+      if (!soloWinner && (!fixtures.length || fixtures.some(x => !['completed', 'bye'].includes(x.status)))) {
         throw new BadRequestException('Some fixtures are still to be played. To end the competition early, give a reason: a finance moderator reviews it, players are refunded, and you forfeit 10% of the prize pool.');
       }
       await this.rankGroups(m, c);

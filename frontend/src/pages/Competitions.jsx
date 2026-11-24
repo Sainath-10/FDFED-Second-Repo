@@ -9,13 +9,13 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import CompCard from '../components/CompCard.jsx';
 import { EmptyState, ErrorState, LoadingState } from '../components/ui.jsx';
-import { hasStarted, isClosedCompetition, isDraft, useCompetitions } from '../services/competitions.js';
+import { hasStarted, isClosedCompetition, isDraft, isLiveCompetition, useCompetitions } from '../services/competitions.js';
 import '../styles/pages/competitions.css';
 
 const FILTERS = [
   { id: 'all', label: 'All', test: () => true },
   { id: 'open', label: 'Registration open', test: (c) => c.registration.open },
-  { id: 'live', label: 'Live', test: (c) => hasStarted(c) },
+  { id: 'live', label: 'Live', test: (c) => isLiveCompetition(c) },
   { id: 'upcoming', label: 'Upcoming', test: (c) => !hasStarted(c) },
   { id: 'league', label: 'League', test: (c) => String(c.type).toLowerCase() === 'league' },
   { id: 'tournament', label: 'Tournament', test: (c) => String(c.type).toLowerCase() === 'tournament' },

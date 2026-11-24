@@ -6,8 +6,8 @@
  * no past dates, whole-rupee amounts, and descending prizes.
  *
  * Dates come from <input type="date"> as YYYY-MM-DD in the organizer's time zone.
- * The start is saved as 00:00 and the end as 23:59:59, so a one-day event
- * (start and end on the same day) is valid. Registration closes at the end of
+ * The start is saved as 00:00 and the end as 23:59:59. A competition must end
+ * at least one day after it starts. Registration closes at the end of
  * its day — or when the competition starts, if that is the same day.
  */
 
@@ -26,7 +26,9 @@ export const FORMATS = ['Single Elimination', 'Round Robin'];
 /** Platform ceiling; prize pools above LARGE_PRIZE_POOL need a finance moderator's approval first. */
 export const MAX_PRIZE_POOL = 10_000_000;
 export const LARGE_PRIZE_POOL = 1_000_000;
-export const MAX_ENTRY_FEE = 300_000;
+export const MAX_ENTRY_FEE = 10_000;
+/** Schedule saves allowed before the start, and end-date changes after it (the server enforces both). */
+export const MAX_DATE_EDITS = 2;
 export const MIN_ENTRY_FEE = 10;
 export const MAX_TEAMS = 256;
 export const MAX_PLAYERS = 20;
@@ -44,6 +46,8 @@ export function toDateInput(value) {
 }
 
 export const todayInput = () => toDateInput(new Date());
+/** The calendar day after a YYYY-MM-DD date (for the earliest allowed end date). */
+export const nextDay = (value) => { const d = new Date(`${value}T00:00:00`); d.setDate(d.getDate() + 1); return toDateInput(d); };
 
 /** Input value for `days` from today (local time). */
 export function daysFromToday(days) {
@@ -108,7 +112,7 @@ export function validateSchedule({ regOpen, regClose, start, end }, { changed = 
   if (regOpen && regClose && regClose < regOpen) errors.regClose = 'Registration must close on or after the day it opens.';
   if (regClose && start && regClose > start) errors.regClose = 'Registration must close on or before the start date.';
   if (regOpen && start && regOpen > start) errors.regOpen = 'Registration must open before the competition starts.';
-  if (start && end && end < start) errors.end = 'The end date cannot be before the start date.';
+  if (start && end && end <= start) errors.end = 'The competition must end at least one day after it starts.';
 
   if (start) {
     const limit = new Date();

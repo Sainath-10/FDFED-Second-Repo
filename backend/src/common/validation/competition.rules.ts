@@ -15,7 +15,9 @@
 export const MAX_PRIZE_POOL = 10_000_000; // ₹1,00,00,000 platform-wide ceiling
 /** Prize pools above this need a finance moderator's approval before the competition can be published. */
 export const LARGE_PRIZE_POOL = 1_000_000; // ₹10,00,000
-export const MAX_ENTRY_FEE = 300_000;
+export const MAX_ENTRY_FEE = 10_000;
+/** How many times the schedule may be edited before play starts, and the end date after it starts. */
+export const MAX_DATE_EDITS = 2;
 
 /** Drafts nobody else can see yet: waiting for finance approval or for the platform fee. */
 export const UNPUBLISHED_PAYMENT_STATES = ['AWAITING_FINANCE_APPROVAL', 'AWAITING_PLATFORM_FEE'];
@@ -56,8 +58,11 @@ export function validateDateWindow(w: DateWindow): ValidationError[] {
   if (validDate(registrationOpenAt) && validDate(startDate) && registrationOpenAt.getTime() > startDate.getTime()) {
     errors.push({ field: 'registrationOpenAt', message: 'Registration must open before the competition starts.' });
   }
-  if (validDate(startDate) && validDate(endDate) && endDate.getTime() < startDate.getTime()) {
-    errors.push({ field: 'endDate', message: 'The competition cannot end before it starts.' });
+  // The end day must be at least one day after the start day. The start is
+  // stored at 00:00 and the end at 23:59:59, so a gap under 24 hours means the
+  // same calendar day (this holds in every timezone).
+  if (validDate(startDate) && validDate(endDate) && endDate.getTime() - startDate.getTime() < 86_400_000) {
+    errors.push({ field: 'endDate', message: 'The competition must end at least one day after it starts.' });
   }
   return errors;
 }
@@ -237,7 +242,7 @@ export function validateEntryFee(feeType: string | undefined, amount: unknown): 
   if (Number.isNaN(num)) return 'Entry fee must be a valid number.';
   if (!isWholeRupees(num)) return 'Entry fee must be a whole number of rupees.';
   if (num < MIN_ENTRY_FEE) return 'Entry fee must be at least ₹10.';
-  if (num > MAX_ENTRY_FEE) return 'Entry fee is unreasonably high.';
+  if (num > MAX_ENTRY_FEE) return `Entry fee cannot exceed ₹${MAX_ENTRY_FEE.toLocaleString('en-IN')}.`;
   return null;
 }
 

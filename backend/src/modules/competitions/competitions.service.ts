@@ -25,6 +25,7 @@ import {
   validateEntryFee,
   validateDateWindow,
   validateFutureDates,
+  MAX_DATE_EDITS,
   validateCompetitionName,
   validateDescription,
   isRegistrationClosed,
@@ -337,7 +338,11 @@ export class CompetitionsService {
     const me = String(user?.username || '');
     const pending = comp.pendingOrganizers || [];
     const entry = pending.find((p) => p.toLowerCase() === me.toLowerCase());
-    if (!entry) throw new BadRequestException('You do not have a pending co-organizer invitation for this competition.');
+    if (!entry) {
+      // Already answered (or withdrawn): make sure no stale Accept/Decline remains in Alerts.
+      await this.notificationsService.resolvePending(me, 'co-organizer-invite', 'compId', id, 'info').catch(() => undefined);
+      throw new BadRequestException('You do not have a pending co-organizer invitation for this competition.');
+    }
     const remaining = pending.filter((p) => p !== entry);
     const updates: any = { pendingOrganizers: remaining };
     if (accept) {
@@ -346,6 +351,7 @@ export class CompetitionsService {
       updates.organizers = Array.from(new Set([...(comp.organizers || [comp.createdBy]), entry]));
     }
     const updated = await this.competitionRepository.update(id, updates);
+    await this.notificationsService.resolvePending(entry, 'co-organizer-invite', 'compId', id, accept ? 'approved' : 'rejected').catch(() => undefined);
     await this.auditLog.record(accept ? 'CO_ORGANIZER_ACCEPTED' : 'CO_ORGANIZER_DECLINED', {
       actor: entry,
       entityType: 'competition',
@@ -598,9 +604,35 @@ export class CompetitionsService {
     const changed = (a: Date | null, b: Date | null | undefined) => !!a && (!b || +a !== +new Date(b));
     const datesChanging = changed(dateChange.registrationOpenAt, comp.registrationOpenAt) || changed(dateChange.registrationCloseAt, comp.registrationCloseAt)
       || changed(dateChange.startDate, comp.startDate) || changed(dateChange.endDate, comp.endDate);
+    // Date edit limits (persisted on the competition, so no client can bypass them):
+    //  - once any team has registered, the registration opening date is fixed;
+    //  - before play starts, the schedule can be changed in at most 2 saves;
+    //  - after play starts, only the end date can change, at most 2 times.
+    let dateEditField: 'dateEditCount' | 'endDateEditCount' | null = null;
     if (datesChanging) {
+      const comp2: any = comp;
       if (isCompetitionStarted(comp as any)) {
-        throw new BadRequestException('The competition has started: its dates can no longer be changed.');
+        const otherDatesChanging = changed(dateChange.registrationOpenAt, comp.registrationOpenAt)
+          || changed(dateChange.registrationCloseAt, comp.registrationCloseAt)
+          || changed(dateChange.startDate, comp.startDate);
+        if (otherDatesChanging) {
+          throw new BadRequestException('The competition has started: only its end date can still be changed.');
+        }
+        if (Number(comp2.endDateEditCount || 0) >= MAX_DATE_EDITS) {
+          throw new BadRequestException(`The end date has already been changed ${MAX_DATE_EDITS} times after the competition started.`);
+        }
+        dateEditField = 'endDateEditCount';
+      } else {
+        if (changed(dateChange.registrationOpenAt, comp.registrationOpenAt)) {
+          const teams = await this.teamRepository.find({ where: { competitionId: id } });
+          if (teams.some((t) => t.status !== 'rejected' && t.status !== 'disbanded')) {
+            throw new BadRequestException('Teams have already registered, so the registration opening date can no longer be changed.');
+          }
+        }
+        if (Number(comp2.dateEditCount || 0) >= MAX_DATE_EDITS) {
+          throw new BadRequestException(`The dates have already been changed ${MAX_DATE_EDITS} times and can no longer be edited.`);
+        }
+        dateEditField = 'dateEditCount';
       }
       const merged = {
         registrationOpenAt: dateChange.registrationOpenAt ?? comp.registrationOpenAt ?? null,
@@ -649,6 +681,7 @@ export class CompetitionsService {
     if (updateCompetitionDto.entryFeeAmount !== undefined) (updates as any).entryFeeAmount = updateCompetitionDto.entryFeeAmount;
     if (updateCompetitionDto.registrationOpenAt) (updates as any).registrationOpenAt = new Date(updateCompetitionDto.registrationOpenAt);
     if (updateCompetitionDto.registrationCloseAt) (updates as any).registrationCloseAt = new Date(updateCompetitionDto.registrationCloseAt);
+    if (dateEditField) (updates as any)[dateEditField] = Number((comp as any)[dateEditField] || 0) + 1;
 
     const updated = await this.competitionRepository.update(id, updates as any);
     newlyInvited.forEach((invitee) => this.sendOrganizerInvite(updated, invitee, requesterUsername));

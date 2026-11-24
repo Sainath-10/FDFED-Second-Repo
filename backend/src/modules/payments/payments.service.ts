@@ -175,7 +175,8 @@ export class PaymentsService {
         meta: { compId: comp.id, link: `/pages/competition-payment.html?id=${comp.id}` },
       }));
       await manager.save(manager.create(AdminActivityLogEntity, {
-        adminUsername: user.username, actionType: approve ? 'LARGE_PRIZE_APPROVED' : 'LARGE_PRIZE_REJECTED', details: note,
+        adminUsername: user.username, actionType: approve ? 'LARGE_PRIZE_APPROVED' : 'LARGE_PRIZE_REJECTED',
+        details: `${approve ? 'Approved' : 'Rejected'} the ₹${Number(comp.prize).toLocaleString('en-IN')} prize pool for "${comp.name}". Note: ${note}`,
         metadata: { competitionId: comp.id, competitionName: comp.name, prize: comp.prize },
       }));
       return { id: comp.id, paymentStatus: comp.paymentStatus, largePrizeRequest: comp.largePrizeRequest };

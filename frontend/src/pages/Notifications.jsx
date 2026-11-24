@@ -78,7 +78,7 @@ export default function Notifications() {
     setBusy('');
     if (!res.ok) {
       showToast(res.error || 'That action failed.', 'error');
-      if (/already handled|already been|was revoked|no longer|not found/i.test(res.error || '')) finish(item, 'info');
+      if (/already handled|already been|was revoked|no longer|not found|do not have a pending/i.test(res.error || '')) finish(item, 'info');
       return false;
     }
     showToast(success);

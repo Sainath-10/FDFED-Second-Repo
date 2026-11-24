@@ -55,9 +55,18 @@ function buildStandings(compData) {
     const t1 = table[match.team1];
     const t2 = table[match.team2];
     t1.mp += 1; t2.mp += 1;
-    if (match.score1 > match.score2) {
+    // The recorded winner decides the result (as on the server), so a knockout
+    // tie settled by the host counts as a win, and an edited result is always
+    // reflected. Scores are only a fallback, compared as numbers, not text.
+    const winner = String(match.winnerName || '').trim();
+    const s1 = Number(match.score1);
+    const s2 = Number(match.score2);
+    const outcome = winner
+      ? (winner === match.team1 ? 1 : winner === match.team2 ? 2 : 0)
+      : (Number.isFinite(s1) && Number.isFinite(s2) ? (s1 > s2 ? 1 : s2 > s1 ? 2 : 0) : 0);
+    if (outcome === 1) {
       t1.w += 1; t2.l += 1; t1.points += 3; t1.last5.unshift('W'); t2.last5.unshift('L');
-    } else if (match.score2 > match.score1) {
+    } else if (outcome === 2) {
       t2.w += 1; t1.l += 1; t2.points += 3; t1.last5.unshift('L'); t2.last5.unshift('W');
     } else {
       t1.d += 1; t2.d += 1; t1.points += 1; t2.points += 1; t1.last5.unshift('D'); t2.last5.unshift('D');
@@ -88,6 +97,9 @@ function mapApiMatch(match, index) {
     score2,
     winnerName: match.winnerName || '',
     round: match.round || '—',
+    // Position in the knockout bracket (absent for league fixtures).
+    bracketRound: Number.isFinite(Number(match.bracket?.round)) ? Number(match.bracket.round) : null,
+    bracketPosition: Number.isFinite(Number(match.bracket?.position)) ? Number(match.bracket.position) : null,
     date: valid ? scheduled.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : '—',
     time: valid ? scheduled.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '',
   };
@@ -175,7 +187,20 @@ export default function CompInfo() {
   const authoritativeMatches = apiMatches.map(mapApiMatch);
   const matchSource = authoritativeMatches.length ? authoritativeMatches : (comp.matches || []);
   const standings = buildStandings({ ...comp, matches: matchSource });
-  const matches = matchSource.filter((m) => ['completed', 'live', 'scheduled'].includes(m.status));
+  // The full fixture for the Bracket tab: every round, including byes and
+  // matches still waiting for their teams, in bracket order.
+  const fixtureRounds = (() => {
+    const all = matchSource.filter((m) => m.status !== 'cancelled');
+    const groups = new Map();
+    all.forEach((m, index) => {
+      const key = m.bracketRound != null ? `r${m.bracketRound}` : `n${m.round}`;
+      if (!groups.has(key)) groups.set(key, { label: m.round || 'Matches', order: m.bracketRound ?? 1000 + index, matches: [] });
+      groups.get(key).matches.push(m);
+    });
+    return [...groups.values()]
+      .sort((a, b) => a.order - b.order)
+      .map((g) => ({ ...g, matches: [...g.matches].sort((a, b) => (a.bracketPosition ?? 0) - (b.bracketPosition ?? 0)) }));
+  })();
   const prizes = comp.prizes || [];
   const hasPrize = comp.prize > 0;
   const prizePhrase = hasPrize ? `the prize pool of ${comp.prizePool}` : 'glory and championship honors';
@@ -275,6 +300,12 @@ export default function CompInfo() {
       registerLabel = 'Join a Team';
       createLabel = 'Create a New Team';
       rejectedNotice = teamStatus === 'rejected';
+      // Every team slot is taken (the server refuses a new team then too).
+      // Joining an existing team with roster space is still possible.
+      if (comp.maxTeams > 0 && approvedTeams.length >= comp.maxTeams) {
+        createLabel = 'Team Capacity Full';
+        createDisabled = true;
+      }
     }
   }
 
@@ -418,13 +449,18 @@ export default function CompInfo() {
                 <p style={{ marginBottom: 20, fontSize: 14, color: 'var(--text-muted)' }} id="comp-format-desc">
                   {formatType(comp.type)} format. {comp.entryFee ? `Entry fee: ${comp.entryFee}.` : ''} Up to {comp.maxTeams || '—'} teams.
                 </p>
-                <div className="bracket-row" id="comp-bracket-row">
-                  {matches.length === 0 ? (
-                    <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>No matches scheduled yet.</p>
-                  ) : (
-                    matches.map((m) => {
+                <div className="bracket-row" id="comp-bracket-row" style={{ alignItems: 'flex-start', overflowX: 'auto' }}>
+                  {fixtureRounds.length === 0 ? (
+                    <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>The fixture has not been generated yet.</p>
+                  ) : fixtureRounds.map((roundGroup) => (
+                    <div key={roundGroup.label + roundGroup.order} style={{ display: 'flex', flexDirection: 'column', gap: 12, justifyContent: 'space-around', minWidth: 190 }}>
+                      <div className="round-label" style={{ color: 'var(--accent)' }}>{roundGroup.label}</div>
+                    {roundGroup.matches.map((m) => {
                       const isLive = m.status === 'live';
                       const isDone = m.status === 'completed';
+                      const isBye = m.status === 'bye';
+                      const statusText = isLive ? '🔴 LIVE' : isDone ? 'Completed' : isBye ? 'Bye · advances' : m.status === 'pending' ? 'Awaiting teams' : m.status === 'ready' ? 'Ready to play' : 'Scheduled';
+                      const slotName = (name) => (name && name !== 'TBD' ? name : (isBye ? 'BYE' : 'TBD'));
                       const t1Banned = bannedNames.has(normalize(m.team1));
                       const t2Banned = bannedNames.has(normalize(m.team2));
                       // Prefer the persisted winner; never infer one when absent.
@@ -432,19 +468,20 @@ export default function CompInfo() {
                       const winner2 = isDone && (m.winnerName ? normalize(m.winnerName) === normalize(m.team2) : Number(m.score2) > Number(m.score1));
                       return (
                         <div className="bracket-match" key={m.id || `${m.team1}-${m.team2}-${m.round}`}>
-                          <div className="round-label">{m.round || 'Match'} · {isLive ? '🔴 LIVE' : (isDone ? 'Completed' : 'Scheduled')}</div>
+                          <div className="round-label">{statusText}{m.date && m.date !== '—' && !isDone && !isBye ? ` · ${m.date}${m.time ? ` ${m.time}` : ''}` : ''}</div>
                           <div className={`bracket-team ${winner1 ? 'winner' : ''}`}>
-                            <span>{t1Banned ? (<><del style={{ color: '#ef4444' }}>{m.team1 || 'TBD'}</del> <span style={{ color: '#ef4444', fontSize: 10, fontWeight: 700 }}>(BANNED)</span></>) : (m.team1 || 'TBD')}</span>
+                            <span>{t1Banned ? (<><del style={{ color: '#ef4444' }}>{m.team1 || 'TBD'}</del> <span style={{ color: '#ef4444', fontSize: 10, fontWeight: 700 }}>(BANNED)</span></>) : slotName(m.team1)}</span>
                             <span className="score">{isDone ? m.score1 : '—'}</span>
                           </div>
                           <div className={`bracket-team ${winner2 ? 'winner' : ''}`}>
-                            <span>{t2Banned ? (<><del style={{ color: '#ef4444' }}>{m.team2 || 'TBD'}</del> <span style={{ color: '#ef4444', fontSize: 10, fontWeight: 700 }}>(BANNED)</span></>) : (m.team2 || 'TBD')}</span>
+                            <span>{t2Banned ? (<><del style={{ color: '#ef4444' }}>{m.team2 || 'TBD'}</del> <span style={{ color: '#ef4444', fontSize: 10, fontWeight: 700 }}>(BANNED)</span></>) : slotName(m.team2)}</span>
                             <span className="score">{isDone ? m.score2 : '—'}</span>
                           </div>
                         </div>
                       );
-                    })
-                  )}
+                    })}
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -553,6 +590,15 @@ export default function CompInfo() {
               <div className="info-row"><span className="key">Teams</span><span className="val" id="info-teams">{approvedTeams.length} / {comp.maxTeams || '—'}</span></div>
               <div className="info-row"><span className="key">Date</span><span className="val" id="info-date">{comp.dates || '—'}</span></div>
               <div className="info-row"><span className="key">Prize Pool</span><span className="val" id="info-prize" style={{ color: 'var(--accent)', fontSize: 18 }}>{hasPrize ? comp.prizePool : 'No prize pool'}</span></div>
+              {/* Whether the organiser has paid the prize pool into escrow. */}
+              {hasPrize && (
+                <div className="info-row">
+                  <span className="key">Prize pool status</span>
+                  <span className="val" id="info-prize-status" style={{ color: comp.prizePoolPaid ? 'var(--accent)' : '#fbbf24' }}>
+                    {comp.prizePoolPaid ? 'Paid · held in escrow' : 'Not paid yet'}
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className="comp-sidebar-block" id="prize-breakdown-block">
@@ -583,7 +629,7 @@ export default function CompInfo() {
                 </button>
               )}
               {showCreate && (
-                <button id="btn-create-team" className="btn-outline" style={{ width: '100%', textAlign: 'center', padding: 13, fontSize: 14, cursor: 'pointer', background: 'none' }} disabled={createDisabled} onClick={onCreate}>
+                <button id="btn-create-team" className="btn-outline" style={{ width: '100%', textAlign: 'center', padding: 13, fontSize: 14, cursor: createDisabled ? 'not-allowed' : 'pointer', background: 'none', opacity: createDisabled ? 0.6 : 1 }} disabled={createDisabled} onClick={onCreate}>
                   {createLabel}
                 </button>
               )}

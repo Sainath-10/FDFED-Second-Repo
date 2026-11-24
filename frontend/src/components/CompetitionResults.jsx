@@ -43,13 +43,15 @@ export default function CompetitionResults({ competitionId, results: given, high
   const podium = results.places.filter((p) => p.position <= 3);
   const rest = results.places.filter((p) => p.position > 3);
   const mine = results.places.find((p) => p.teams.some((t) => t.id === highlightTeamId));
+  // Only one team took part: it wins on its own and the other places stay empty.
+  const solo = results.places.length === 1 && results.places[0].teams.length === 1;
 
   return (
     <section className="results-board" aria-label="Final results">
       <header className="results-head">
         <div>
           <span className="results-eyebrow">Final results</span>
-          <h2>{podium[0]?.teams.map((t) => t.name).join(' & ')} {podium[0]?.tied ? 'share the title' : 'are the champions'}</h2>
+          <h2>{podium[0]?.teams.map((t) => t.name).join(' & ')} {solo ? 'won as the only team' : podium[0]?.tied ? 'share the title' : 'are the champions'}</h2>
           <p>
             {results.settled
               ? 'Prizes have been paid out to every winning player.'
@@ -66,7 +68,7 @@ export default function CompetitionResults({ competitionId, results: given, high
         )}
       </header>
 
-      <div className={`results-podium podium-${Math.min(podium.length, 3)}`}>
+      <div className={`results-podium podium-${solo ? 3 : Math.min(podium.length, 3)}`}>
         {podium.map((place) => place.teams.map((team) => (
           <article key={team.id} className={`podium-step place-${Math.min(place.position, 3)}${team.id === highlightTeamId ? ' is-mine' : ''}`}>
             <div className="podium-medal" aria-hidden="true">{MEDALS[place.position] || '🏅'}</div>
@@ -79,6 +81,13 @@ export default function CompetitionResults({ competitionId, results: given, high
             )}
           </article>
         )))}
+        {solo && [2, 3].map((position) => (
+          <article key={`empty-${position}`} className={`podium-step place-${position}`} style={{ opacity: 0.5 }}>
+            <div className="podium-medal" aria-hidden="true">{MEDALS[position] || '🏅'}</div>
+            <h3>—</h3>
+            <span className="podium-place">{ordinal(position)} place · no team</span>
+          </article>
+        ))}
       </div>
 
       {rest.length > 0 && (

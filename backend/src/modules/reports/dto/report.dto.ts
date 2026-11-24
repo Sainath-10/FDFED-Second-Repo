@@ -1,4 +1,7 @@
-import { IsArray, IsIn, IsOptional, IsString, MaxLength, MinLength, ValidateNested } from 'class-validator';
+import { IsArray, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
+
+/** Longest temporary competition-creation ban a Community Moderator may set. */
+export const MAX_RESTRICTION_DAYS = 365;
 import { Type } from 'class-transformer';
 import {
   DISCARD_REASONS,
@@ -128,6 +131,9 @@ export class ModeratorDecisionDto {
 
   @IsOptional()
   @Type(() => Number)
+  @IsInt({ message: 'The ban length must be a whole number of days.' })
+  @Min(1, { message: 'The ban must last at least 1 day.' })
+  @Max(MAX_RESTRICTION_DAYS, { message: `The ban can last at most ${MAX_RESTRICTION_DAYS} days.` })
   days?: number;
 }
 

@@ -8,7 +8,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import CompCard from '../components/CompCard.jsx';
 import { EmptyState, formatINR } from '../components/ui.jsx';
-import { hasStarted, isClosedCompetition, isDraft, useCompetitions } from '../services/competitions.js';
+import { isClosedCompetition, isDraft, isLiveCompetition, useCompetitions } from '../services/competitions.js';
 import { assetUrl, competitionBanner } from '../lib/assets.js';
 import '../styles/pages/index.css';
 
@@ -27,7 +27,7 @@ export default function Index() {
 
   const published = data.filter((c) => !isDraft(c));
   const browsable = published.filter((c) => !isClosedCompetition(c));
-  const live = browsable.filter((c) => hasStarted(c));
+  const live = browsable.filter((c) => isLiveCompetition(c));
   const featured = [...browsable].sort((a, b) => Number(b.registration.open) - Number(a.registration.open) || b.prize - a.prize).slice(0, 6);
   const players = new Set(published.flatMap((c) => c.activeTeams.flatMap((t) => t.members.map((m) => m.username.toLowerCase()))));
   const totalPrize = published.reduce((sum, c) => sum + c.prize, 0);

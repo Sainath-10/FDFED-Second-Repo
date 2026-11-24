@@ -16,6 +16,9 @@ import {
 } from '../lib/reporting.js';
 import { ReportsAPI, ReputationAPI } from '../services/api.js';
 
+/** Longest temporary competition-creation ban (the server enforces the same limit). */
+const MAX_RESTRICTION_DAYS = 365;
+
 function Backdrop({ children, onClose }) {
   return (
     <div className="report-modal-backdrop" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
@@ -147,11 +150,18 @@ export function ModeratorDecisionModal({ report, onClose, onDone }) {
       setError('An unsubstantiated finding cannot justify a punitive action.');
       return;
     }
+    if (needsDays) {
+      const d = Number(days);
+      if (!Number.isInteger(d) || d < 1 || d > MAX_RESTRICTION_DAYS) {
+        setError(`Choose a ban length from 1 to ${MAX_RESTRICTION_DAYS} days.`);
+        return;
+      }
+    }
     if (action === 'competition_termination' && !window.confirm('End this competition now? Every player is refunded, the organiser forfeits 10% of the prize pool, and this cannot be undone or uplifted.')) return;
     setBusy(true);
     const payload = { finding, action, conclusion: conclusion.trim() };
     if (needsLevel) payload.level = level;
-    if (needsDays) payload.days = Number(days) || 30;
+    if (needsDays) payload.days = Number(days);
     const res = await ReportsAPI.actOrganiser(report.id, payload);
     setBusy(false);
     if (!res.ok) { setError(res.error || 'Unable to record this decision.'); return; }
@@ -202,8 +212,11 @@ export function ModeratorDecisionModal({ report, onClose, onDone }) {
       )}
       {needsDays && (
         <div className="report-field">
-          <label htmlFor="m-days">Duration (days)</label>
-          <input id="m-days" type="number" min={1} max={365} value={days} onChange={(e) => setDays(e.target.value)} />
+          <label htmlFor="m-days">Duration (days) — 1 to {MAX_RESTRICTION_DAYS}</label>
+          <input id="m-days" type="number" min={1} max={MAX_RESTRICTION_DAYS} step={1} value={days} onChange={(e) => setDays(e.target.value)} />
+          <span className="report-field-help" style={{ display: 'block', marginTop: 6, fontSize: 12, color: '#94a3b8' }}>
+            The organiser cannot create competitions until the ban ends. The longest ban allowed is {MAX_RESTRICTION_DAYS} days (one year).
+          </span>
         </div>
       )}
       <div className="report-field">

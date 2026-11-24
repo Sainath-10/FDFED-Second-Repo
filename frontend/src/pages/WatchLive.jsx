@@ -8,14 +8,14 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { MatchesAPI } from '../services/api.js';
-import { hasStarted, isClosedCompetition, isDraft, useCompetitions } from '../services/competitions.js';
+import { isDraft, isLiveCompetition, useCompetitions } from '../services/competitions.js';
 import { competitionBanner } from '../lib/assets.js';
 import { EmptyState, LoadingState, PageHeader, formatDate } from '../components/ui.jsx';
 
 export default function WatchLive() {
   const { data, loading } = useCompetitions({ withTeams: true });
   const [matches, setMatches] = useState({});
-  const live = data.filter((c) => !isDraft(c) && !isClosedCompetition(c) && hasStarted(c));
+  const live = data.filter((c) => !isDraft(c) && isLiveCompetition(c));
   const liveIds = live.map((c) => c.id).join(',');
 
   useEffect(() => {

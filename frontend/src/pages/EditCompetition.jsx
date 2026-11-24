@@ -18,7 +18,7 @@ import { CompetitionsAPI, MatchesAPI, PlatformAPI } from '../services/api.js';
 import { paymentRequest, requestEarlyEnd } from '../services/payments.js';
 import { UsernameChips } from '../components/UsernameSearch.jsx';
 import { hasStarted, isClosedCompetition, isOrganizerOf, useCompetition } from '../services/competitions.js';
-import { GAMES, MAX_PLAYERS, MAX_TEAMS, readBanner, scheduleToIso, toDateInput, validateDescription, validateName, validateSchedule } from '../lib/competitionForm.js';
+import { GAMES, MAX_DATE_EDITS, MAX_PLAYERS, MAX_TEAMS, readBanner, scheduleToIso, toDateInput, validateDescription, validateName, validateSchedule } from '../lib/competitionForm.js';
 import { competitionBanner } from '../lib/assets.js';
 import { ConfirmDialog, ErrorState, LoadingState, Notice, PageHeader, ReasonDialog, formatINR } from '../components/ui.jsx';
 import { showToast } from '../lib/toast.js';
@@ -99,6 +99,13 @@ export default function EditCompetition() {
   const started = hasStarted(comp);
   const regClosed = !comp.registration.open && comp.registration.reason !== 'not_open';
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
+  // Date edit limits (mirrors the server, which enforces them).
+  const dateEditsLeft = Math.max(0, MAX_DATE_EDITS - Number(comp.dateEditCount || 0));
+  const endEditsLeft = Math.max(0, MAX_DATE_EDITS - Number(comp.endDateEditCount || 0));
+  const hasRegisteredTeams = (comp.activeTeams || []).length > 0;
+  const datesLocked = ended || started || dateEditsLeft === 0;
+  const regOpenLocked = datesLocked || hasRegisteredTeams;
+  const endLocked = ended || (started ? endEditsLeft === 0 : dateEditsLeft === 0);
 
   function validate() {
     const next = {};
@@ -179,6 +186,8 @@ export default function EditCompetition() {
   const played = (fixtures || []).filter((m) => m.status !== 'bye');
   const remaining = played.filter((m) => m.status !== 'completed').length;
   const fixturesDone = !!fixtures && played.length > 0 && remaining === 0;
+  // Only one team registered and nothing to play: it can be declared the solo winner.
+  const soloWinner = started && !!fixtures && (comp.activeTeams || []).length === 1 && played.every((m) => !m.team1Id || !m.team2Id);
   const earlyRequest = ledger?.earlyEndRequest || comp.earlyEndRequest || null;
   const penaltyPercent = ledger?.earlyEndPenaltyPercent ?? 10;
   const prizeAmount = Number(comp.prize) || 0;
@@ -192,7 +201,20 @@ export default function EditCompetition() {
       />
       {ended && <Notice tone="warning">This competition has ended, so its settings can no longer change.</Notice>}
       {!ended && regClosed && <Notice tone="info">Registration has closed: the name, game, type and description are locked.</Notice>}
-      {!ended && started && <Notice tone="info">The competition has started: its dates are locked.</Notice>}
+      {!ended && started && (
+        <Notice tone="info">
+          The competition has started: only the end date can still change
+          {endEditsLeft > 0 ? ` (${endEditsLeft} of ${MAX_DATE_EDITS} changes left).` : ', and it has already been changed the maximum number of times.'}
+        </Notice>
+      )}
+      {!ended && !started && (
+        <Notice tone={dateEditsLeft ? 'info' : 'warning'}>
+          {dateEditsLeft
+            ? `The dates can be changed ${dateEditsLeft} more time${dateEditsLeft === 1 ? '' : 's'}.`
+            : 'The dates have been changed the maximum number of times and are now locked.'}
+          {hasRegisteredTeams ? ' Teams have registered, so the registration opening date is fixed.' : ''}
+        </Notice>
+      )}
 
       <form onSubmit={save} className="ui-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', alignItems: 'start' }}>
         <div className="ui-card">
@@ -217,10 +239,10 @@ export default function EditCompetition() {
 
         <div className="ui-card">
           <h2 className="ui-card-title">Dates</h2>
-          {field('Registration opens', errors.regOpen, <input className="form-input" type="date" value={form.regOpen} onChange={set('regOpen')} disabled={started || ended} />)}
-          {field('Registration closes', errors.regClose, <input className="form-input" type="date" value={form.regClose} onChange={set('regClose')} disabled={started || ended} />, 'Registration closes at the end of this day, or when play starts if it is the start day.')}
-          {field('Starts', errors.start, <input className="form-input" type="date" value={form.start} onChange={set('start')} disabled={started || ended} />)}
-          {field('Ends', errors.end, <input className="form-input" type="date" value={form.end} onChange={set('end')} disabled={started || ended} />, 'The end day is included. A one-day event can start and end on the same day.')}
+          {field('Registration opens', errors.regOpen, <input className="form-input" type="date" value={form.regOpen} onChange={set('regOpen')} disabled={regOpenLocked} />)}
+          {field('Registration closes', errors.regClose, <input className="form-input" type="date" value={form.regClose} onChange={set('regClose')} disabled={datesLocked} />, 'Registration closes at the end of this day, or when play starts if it is the start day.')}
+          {field('Starts', errors.start, <input className="form-input" type="date" value={form.start} onChange={set('start')} disabled={datesLocked} />)}
+          {field('Ends', errors.end, <input className="form-input" type="date" value={form.end} onChange={set('end')} disabled={endLocked} />, 'The end day is included. It must be at least one day after the start.')}
 
           <h2 className="ui-card-title" style={{ marginTop: 10 }}>Capacity</h2>
           {field('Max teams', errors.maxTeams, <input className="form-input" type="number" min={comp.maxTeams || 2} max={teamLimit} value={form.maxTeams} onChange={set('maxTeams')} disabled={ended} />)}
@@ -262,17 +284,18 @@ export default function EditCompetition() {
               <div className="ui-row-title">End competition</div>
               <div className="ui-row-meta">
                 {!started ? 'Available once the competition has started.'
+                  : soloWinner ? `Only one team registered: ending declares ${(comp.activeTeams || [])[0]?.name || 'it'} the solo winner. The other places stay empty.`
                   : fixturesDone ? 'Every fixture is complete. Ending opens the dispute window; finance then releases the prizes.'
                     : `${remaining} fixture${remaining === 1 ? ' is' : 's are'} still to be played. Ending now needs a reason and a finance moderator's approval: players are refunded and you forfeit ${penaltyPercent}% of the prize pool${prizeAmount ? ` (${formatINR(Math.round(prizeAmount * penaltyPercent) / 100)})` : ''}.`}
               </div>
             </div>
             <button
               type="button"
-              className={fixturesDone ? 'btn-primary' : 'btn-cancel'}
+              className={fixturesDone || soloWinner ? 'btn-primary' : 'btn-cancel'}
               disabled={!started || fixtures === null || earlyRequest?.status === 'pending'}
-              onClick={() => (fixturesDone ? setConfirmEnd(true) : setEarlyOpen(true))}
+              onClick={() => (fixturesDone || soloWinner ? setConfirmEnd(true) : setEarlyOpen(true))}
             >
-              {fixturesDone || !started ? 'End competition' : 'Request early end'}
+              {fixturesDone || soloWinner || !started ? 'End competition' : 'Request early end'}
             </button>
           </div>
           <div className="ui-row">

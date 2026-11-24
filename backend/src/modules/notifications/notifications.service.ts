@@ -48,6 +48,22 @@ export class NotificationsService {
     return this.repo.findOne({ where: { id } });
   }
 
+  /**
+   * Closes a user's still-pending actionable notifications once the action was
+   * answered (from any page), so Alerts never offers buttons that can no
+   * longer work. Matches on the notification type and one meta field.
+   */
+  async resolvePending(username: string, type: string, metaKey: string, metaValue: string, status: 'approved' | 'rejected' | 'info'): Promise<void> {
+    await this.repo.createQueryBuilder()
+      .update(NotificationEntity)
+      .set({ status, read: true })
+      .where('lower("toUsername") = lower(:username)', { username })
+      .andWhere('type = :type', { type })
+      .andWhere('status = :pending', { pending: 'pending' })
+      .andWhere(`meta ->> :metaKey = :metaValue`, { metaKey, metaValue: String(metaValue) })
+      .execute();
+  }
+
   async markAllRead(username: string): Promise<void> {
     await this.repo.update({ toUsername: username, read: false }, { read: true });
   }

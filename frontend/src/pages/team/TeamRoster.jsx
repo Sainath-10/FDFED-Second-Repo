@@ -105,13 +105,14 @@ export default function TeamRoster() {
               );
             })}
 
-            {canManage && !rosterLocked && Array.from({ length: Math.min(openSlots, 6) }).map((_, i) => (
-              <Link className="td-player td-player-empty" key={`empty-${i}`} to={addHref}>
+            {/* The existing players plus a single "Open slot" card while there is room. */}
+            {canManage && !rosterLocked && openSlots > 0 && (
+              <Link className="td-player td-player-empty" to={addHref}>
                 <span className="td-plus" aria-hidden="true">+</span>
                 <span>Open slot</span>
-                <small>Invite a player</small>
+                <small>{openSlots === 1 ? 'Invite a player · 1 place left' : `Invite a player · ${openSlots} places left`}</small>
               </Link>
-            ))}
+            )}
           </div>
         </section>
 
@@ -122,6 +123,12 @@ export default function TeamRoster() {
             <div className="td-kv"><span>Starts</span><strong>{formatDate(comp.startDate)}</strong></div>
             <div className="td-kv"><span>Ends</span><strong>{formatDate(comp.endDate)}</strong></div>
             <div className="td-kv"><span>Prize pool</span><strong>{Number(comp.prize) > 0 ? `₹${Number(comp.prize).toLocaleString('en-IN')}` : 'None'}</strong></div>
+            {Number(comp.prize) > 0 && (
+              <div className="td-kv">
+                <span>Prize pool status</span>
+                <strong style={{ color: comp.prizePoolPaid ? '#c6ff33' : '#fbbf24' }}>{comp.prizePoolPaid ? 'Paid · held in escrow' : 'Not paid yet'}</strong>
+              </div>
+            )}
             <Link className="td-btn" style={{ width: '100%', marginTop: 12 }} to={`/pages/comp-info.html?id=${encodeURIComponent(comp.id)}`}>Open competition page</Link>
           </div>
 
