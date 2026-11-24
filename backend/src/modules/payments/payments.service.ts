@@ -8,6 +8,9 @@ import { PaymentTransactionEntity } from '../../entities/payment-transaction.ent
 import { RevenueTransactionEntity } from '../../entities/revenue-transaction.entity';
 import { NotificationEntity } from '../../entities/notification.entity';
 import { AdminActivityLogEntity } from '../../entities/admin-activity-log.entity';
+import { OrganiserReputationEntity } from '../../entities/organiser-reputation.entity';
+import { REPUTATION_LEVEL_LIMITS, ReputationLevel } from '../../common/reporting';
+import { LARGE_PRIZE_POOL } from '../../common/validation/competition.rules';
 import { RazorpayService } from './razorpay.service';
 import { captureMatches, validWebhookSignature } from './payment.rules';
 
@@ -137,11 +140,17 @@ export class PaymentsService {
     const owners = Array.from(new Set(filtered.map((c) => c.createdBy)));
     const users = owners.length ? await this.db.getRepository(UserEntity).find({ where: { username: In(owners) }, select: { username: true, organizerTrustScore: true, email: true } }) : [];
     const byName = new Map(users.map((u) => [u.username, u]));
+    // The organiser's own prize-pool limit (reputation level) shown beside the request.
+    const reputations = owners.length ? await this.db.getRepository(OrganiserReputationEntity).find({ where: { username: In(owners) } }) : [];
+    const levelOf = new Map(reputations.map((r) => [r.username, (r.level || 'blue') as ReputationLevel]));
     return filtered.map((c) => ({
       id: c.id, name: c.name, game: c.game, createdBy: c.createdBy, prize: c.prize, platformFee: c.platformFee,
       startDate: c.startDate, endDate: c.endDate, maxTeams: c.maxTeams, feeType: c.feeType, entryFeeAmount: c.entryFeeAmount,
       paymentStatus: c.paymentStatus, request: c.largePrizeRequest,
       accountEmail: byName.get(c.createdBy)?.email || null, organizerTrustScore: byName.get(c.createdBy)?.organizerTrustScore ?? 100,
+      reputationLevel: levelOf.get(c.createdBy) || 'blue',
+      reputationLimit: REPUTATION_LEVEL_LIMITS[levelOf.get(c.createdBy) || 'blue'],
+      approvalThreshold: LARGE_PRIZE_POOL,
     }));
   }
 

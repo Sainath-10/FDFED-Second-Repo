@@ -17,7 +17,7 @@ import {
 import { ReportsAPI, ReputationAPI } from '../services/api.js';
 
 /** Longest temporary competition-creation ban (the server enforces the same limit). */
-const MAX_RESTRICTION_DAYS = 365;
+const MAX_RESTRICTION_DAYS = 60;
 
 function Backdrop({ children, onClose }) {
   return (
@@ -185,12 +185,6 @@ export function ModeratorDecisionModal({ report, onClose, onDone }) {
           {MODERATOR_ACTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
         <span className="hint">A warning never changes reputation by itself. Downgrades are audited with the reason.</span>
-        {action === 'competition_suspension' && (
-          <span className="hint" style={{ display: 'block', marginTop: 6, color: '#fb923c' }}>
-            Competition Suspension terminates this competition because of the recorded misconduct. It is not a
-            temporary suspension, so no duration is recorded and it is never restored automatically.
-          </span>
-        )}
         {action === 'competition_termination' && (
           <span className="hint" style={{ display: 'block', marginTop: 6, color: '#f87171' }}>
             Ends the competition immediately: every registration fee still in escrow is refunded to the players, the
@@ -215,7 +209,7 @@ export function ModeratorDecisionModal({ report, onClose, onDone }) {
           <label htmlFor="m-days">Duration (days) — 1 to {MAX_RESTRICTION_DAYS}</label>
           <input id="m-days" type="number" min={1} max={MAX_RESTRICTION_DAYS} step={1} value={days} onChange={(e) => setDays(e.target.value)} />
           <span className="report-field-help" style={{ display: 'block', marginTop: 6, fontSize: 12, color: '#94a3b8' }}>
-            The organiser cannot create competitions until the ban ends. The longest ban allowed is {MAX_RESTRICTION_DAYS} days (one year).
+            The organiser cannot create competitions until the ban ends. The longest ban allowed is {MAX_RESTRICTION_DAYS} days.
           </span>
         </div>
       )}

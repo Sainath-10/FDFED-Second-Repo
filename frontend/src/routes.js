@@ -99,8 +99,6 @@ export const PROTECTED_ROUTES = [
 
  // Admin
   route('/pages/admin/finance.html', 'Finance moderation', 'admin', FINANCE_ROLES),
-  route('/pages/admin/disputes.html', 'Disputes', 'admin', FINANCE_ROLES),
-  route('/pages/admin/dispute-review.html', 'Dispute review', 'admin', FINANCE_ROLES),
   route('/pages/admin/admin-activity.html', 'Admin activity', 'admin', [...SUPER_ADMIN_ROLES, ...FINANCE_ROLES]),
   route('/pages/admin/admin-profile.html', 'Admin profile', 'admin', FINANCE_ROLES),
   route('/pages/admin/revenue-config.html', 'Revenue config', 'admin', SUPER_ADMIN_ROLES),

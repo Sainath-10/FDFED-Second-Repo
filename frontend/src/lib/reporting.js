@@ -93,7 +93,6 @@ export const MODERATOR_ACTIONS = [
   { value: 'warning', label: 'Warning' },
   { value: 'reputation_downgrade', label: 'Reputation Downgrade' },
   { value: 'creation_restriction', label: 'Temporary Competition Creation Restriction' },
-  { value: 'competition_suspension', label: 'Competition Suspension' },
   { value: 'competition_termination', label: 'End competition & refund players' },
   { value: 'no_action', label: 'No Action' },
 ];

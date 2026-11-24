@@ -324,3 +324,59 @@
   .organiser-modal { padding: 20px; }
   .organiser-modal-levels { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+
+/* ── Teams tab: one card per registered team with its roster ── */
+.ci-teams-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+.ci-team-card {
+  background: #141414;
+  border: 1px solid #262626;
+  border-radius: 12px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  transition: border-color 0.15s ease;
+}
+.ci-team-card:hover { border-color: rgba(198, 255, 51, 0.35); }
+.ci-team-head { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.ci-team-avatar {
+  width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(198, 255, 51, 0.12); color: var(--accent, #c6ff33);
+  border: 1px solid rgba(198, 255, 51, 0.35); font-weight: 800; font-size: 16px;
+}
+.ci-team-title { min-width: 0; }
+.ci-team-title h3 {
+  margin: 0; font-size: 16px; font-weight: 700; color: var(--text-white, #fff);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ci-team-title span { font-size: 12px; color: var(--text-muted); }
+.ci-team-roster {
+  list-style: none; margin: 0; padding: 12px 0 0;
+  border-top: 1px solid #262626; display: flex; flex-direction: column; gap: 8px;
+}
+.ci-team-player {
+  display: flex; align-items: center; gap: 8px; min-width: 0;
+  padding: 8px 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.03);
+}
+.ci-player-name {
+  flex: 1; min-width: 0; font-size: 14px; color: var(--text-white, #fff);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ci-lead-badge {
+  flex-shrink: 0; font-size: 10px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase;
+  padding: 2px 8px; border-radius: 999px; color: var(--accent, #c6ff33);
+  background: rgba(198, 255, 51, 0.1); border: 1px solid rgba(198, 255, 51, 0.35);
+}
+.ci-report-btn {
+  flex-shrink: 0; font-size: 11px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase;
+  padding: 4px 10px; border-radius: 6px; cursor: pointer; font-family: inherit;
+  background: transparent; color: #cbd5e1; border: 1px solid #334155;
+}
+.ci-report-btn:hover { color: #f87171; border-color: rgba(248, 113, 113, 0.5); }

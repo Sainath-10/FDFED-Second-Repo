@@ -48,7 +48,6 @@ const MODERATOR_NAV = [
 const ADMIN_NAV = {
   finance_moderator: [
     { id: 'finance', label: 'Finance', to: '/pages/admin/finance.html', icon: MoneyIcon, end: true },
-    { id: 'disputes', label: 'Disputes', to: '/pages/admin/disputes.html', icon: ShieldIcon },
     { id: 'ledger', label: 'Ledger', to: '/pages/admin/revenue-transactions.html', icon: TrophyIcon },
     { id: 'activity', label: 'Activity', to: '/pages/admin/admin-activity.html', icon: CheckCircleIcon },
     ALERTS,

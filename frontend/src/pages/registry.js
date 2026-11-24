@@ -37,11 +37,9 @@ import EditCompetition from './EditCompetition.jsx';
 import MyReports from './MyReports.jsx';
 import SubmitReport from './SubmitReport.jsx';
 import DisputeEscalation from './DisputeEscalation.jsx';
-import AdminDisputeReview from './admin/AdminDisputeReview.jsx';
 import AdminActivity from './admin/AdminActivity.jsx';
 import AdminProfile from './admin/AdminProfile.jsx';
 import AdminRevenueConfig from './admin/AdminRevenueConfig.jsx';
-import AdminDisputes from './admin/AdminDisputes.jsx';
 import AdminRevenueTransactions from './admin/AdminRevenueTransactions.jsx';
 import CompetitionPayment from './CompetitionPayment.jsx';
 import MyPayments from './MyPayments.jsx';
@@ -78,10 +76,8 @@ export const PAGE_COMPONENTS = {
   '/pages/my-payments.html': MyPayments,
   '/pages/admin/finance.html': FinanceModerator,
   '/pages/admin/revenue-transactions.html': AdminRevenueTransactions,
-  '/pages/admin/disputes.html': AdminDisputes,
   '/pages/admin/revenue-config.html': AdminRevenueConfig,
   '/pages/admin/admin-activity.html': AdminActivity,
-  '/pages/admin/dispute-review.html': AdminDisputeReview,
   '/pages/create-competition.html': CreateCompetition,
   '/pages/edit-competition.html': EditCompetition,
   // Disputes and reports are one page now (Reports); the old address opens it.

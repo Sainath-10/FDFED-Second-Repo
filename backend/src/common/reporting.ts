@@ -78,11 +78,15 @@ export type ReportAction =
   | 'formal_warning'
   | 'final_warning';
 export const ORGANISER_ACTIONS: ReportAction[] = ['warning', 'remove_from_competition', 'no_action'];
+/**
+ * Actions a Community Moderator can take against an organiser. Competition
+ * Suspension is no longer offered; earlier suspension decisions keep working
+ * (history, appeal and uplift) through their stored records.
+ */
 export const MODERATOR_ACTIONS: ReportAction[] = [
   'warning',
   'reputation_downgrade',
   'creation_restriction',
-  'competition_suspension',
   'competition_termination',
   'no_action',
 ];

@@ -664,3 +664,44 @@
   .discussion-room-composer-actions { width: 100%; }
   .discussion-room-composer-actions .report-btn { flex: 1 1 140px; }
 }
+
+/* Organised card layout in Manage Competition → Disputes: header pills, people,
+   facts, the report text as a quote, then one footer row of equal-sized
+   actions with Open details pinned to the right. Scoped here so the shared
+   ReportCard keeps its look in the Reports queues. */
+.cd-disputes-panel .report-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 20px;
+  border-radius: 12px;
+}
+.cd-disputes-panel .report-card-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.cd-disputes-panel .report-people { margin: 2px 0 0; font-size: 15px; font-weight: 700; color: #fff; }
+.cd-disputes-panel .report-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: #9ca3af; }
+.cd-disputes-panel .report-desc {
+  margin: 2px 0 0;
+  padding: 10px 14px;
+  background: #0b0b0b;
+  border-left: 2px solid #c6ff33;
+  border-radius: 0 8px 8px 0;
+  color: #d1d5db;
+}
+.cd-disputes-panel .report-history { margin: 0; }
+.cd-disputes-panel .report-actions {
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid #262626;
+  gap: 8px;
+}
+/* The page sets `button { font: inherit }`; keep buttons and links one size. */
+.cd-disputes-panel .report-actions .report-btn,
+.cd-disputes-panel .report-actions .report-detail-link {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  min-height: 34px;
+  padding: 0 16px;
+  border-radius: 8px;
+}
+.cd-disputes-panel .cd-dispute-closed { font-size: 12px; color: #9ca3af; }

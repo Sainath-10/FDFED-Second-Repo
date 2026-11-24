@@ -1,7 +1,7 @@
 import { IsArray, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
 
 /** Longest temporary competition-creation ban a Community Moderator may set. */
-export const MAX_RESTRICTION_DAYS = 365;
+export const MAX_RESTRICTION_DAYS = 60;
 import { Type } from 'class-transformer';
 import {
   DISCARD_REASONS,

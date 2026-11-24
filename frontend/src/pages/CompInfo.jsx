@@ -413,29 +413,32 @@ export default function CompInfo() {
                 {/* One roster view for every role. Organisers used to get a
                     reduced card (name + count) while players got rosters; the
                     data was there, the organiser simply could not see it. */}
-                <div className="teams-grid" id="comp-teams-grid">
+                <div className="ci-teams-grid" id="comp-teams-grid">
                   {approvedTeams.length === 0 ? (
                     <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>No teams have been accepted yet.</p>
                   ) : (
                     teamRosters.map((t) => (
-                      <div className="team-card team-roster-card" key={t.key} style={{ textAlign: 'left', height: 'auto' }}>
-                        <div className="name">{t.name}</div>
-                        <div className="players">{t.members.length} Player{t.members.length === 1 ? '' : 's'}</div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+                      <article className="ci-team-card" key={t.key}>
+                        <header className="ci-team-head">
+                          <span className="ci-team-avatar" aria-hidden="true">{String(t.name || '?').charAt(0).toUpperCase()}</span>
+                          <div className="ci-team-title">
+                            <h3>{t.name}</h3>
+                            <span>{t.members.length} player{t.members.length === 1 ? '' : 's'}</span>
+                          </div>
+                        </header>
+                        <ul className="ci-team-roster">
                           {t.members.map((m) => (
-                            <div key={m.username} className="team-roster-player" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 14, color: '#fff' }}>
-                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {m.username}
-                                {m.isLead && <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>(Lead)</span>}
-                              </span>
+                            <li key={m.username} className="ci-team-player">
+                              <span className="ci-player-name" title={m.username}>@{m.username}</span>
+                              {m.isLead && <span className="ci-lead-badge">Lead</span>}
                               {/* Reporting stays a participant action; organisers can see the same roster. */}
                               {isCompetitionParticipant && normalize(m.username) !== userKey && (
-                                <ReportButton compId={comp.id} against={m.username} targetRole="player" source="comp-info-roster" className="btn-table-secondary" />
+                                <ReportButton compId={comp.id} against={m.username} targetRole="player" source="comp-info-roster" className="ci-report-btn" />
                               )}
-                            </div>
+                            </li>
                           ))}
-                        </div>
-                      </div>
+                        </ul>
+                      </article>
                     ))
                   )}
                 </div>
