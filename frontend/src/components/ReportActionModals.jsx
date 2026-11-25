@@ -157,7 +157,7 @@ export function ModeratorDecisionModal({ report, onClose, onDone }) {
         return;
       }
     }
-    if (action === 'competition_termination' && !window.confirm('End this competition now? Every player is refunded, the organiser forfeits 10% of the prize pool, and this cannot be undone or uplifted.')) return;
+    if (action === 'competition_termination' && !window.confirm('End this competition now? Every player is refunded, the organiser forfeits 10% of the prize pool, and this cannot be undone or reverted.')) return;
     setBusy(true);
     const payload = { finding, action, conclusion: conclusion.trim() };
     if (needsLevel) payload.level = level;
@@ -189,7 +189,7 @@ export function ModeratorDecisionModal({ report, onClose, onDone }) {
           <span className="hint" style={{ display: 'block', marginTop: 6, color: '#f87171' }}>
             Ends the competition immediately: every registration fee still in escrow is refunded to the players, the
             organiser forfeits 10% of the deposited prize pool as a penalty (the rest is returned to them) and their
-            trust score drops. Money cannot be un-refunded, so this decision cannot be appealed or uplifted. Not possible
+            trust score drops. Money cannot be un-refunded, so this decision cannot be appealed or reverted. Not possible
             once prizes have been paid out — use a finance reversal for that.
           </span>
         )}
@@ -235,7 +235,7 @@ export function UpliftModal({ report, onClose, onDone }) {
   async function submit() {
     setError('');
     if (reason.trim().length < 15) {
-      setError('A mandatory reason (at least 15 characters) is required to uplift an action.');
+      setError('A mandatory reason (at least 15 characters) is required to revert an action.');
       return;
     }
     setBusy(true);
@@ -243,13 +243,13 @@ export function UpliftModal({ report, onClose, onDone }) {
     if (isSuspension) payload.competitionDisposition = disposition;
     const res = await ReportsAPI.uplift(report.id, payload);
     setBusy(false);
-    if (!res.ok) { setError(res.error || 'Unable to uplift this action.'); return; }
+    if (!res.ok) { setError(res.error || 'Unable to revert this action.'); return; }
     onDone && onDone(res.data);
   }
 
   return (
     <Backdrop onClose={onClose}>
-      <h2>Uplift action</h2>
+      <h2>Revert action</h2>
       <p className="sub">{report.code || report.id} · @{report.reportedUsername}</p>
       <div className="report-field">
         <label>Original decision</label>
@@ -276,7 +276,7 @@ export function UpliftModal({ report, onClose, onDone }) {
       {error && <div className="report-inline-error">{error}</div>}
       <div className="report-modal-actions">
         <button className="report-btn ghost" onClick={onClose}>Cancel</button>
-        <button className="report-btn primary" disabled={busy} onClick={submit}>{busy ? 'Uplifting…' : 'Confirm uplift'}</button>
+        <button className="report-btn primary" disabled={busy} onClick={submit}>{busy ? 'Reverting…' : 'Confirm revert'}</button>
       </div>
     </Backdrop>
   );

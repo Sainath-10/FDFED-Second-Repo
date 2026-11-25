@@ -176,7 +176,7 @@ export default function MyReports() {
                       )}
                       {report.uplifted && report.appealKind === 'organiser' && (
                         <span className="report-pill" style={{ color: '#c6ff33', background: 'rgba(198,255,51,0.1)', border: '1px solid rgba(198,255,51,0.4)' }}>
-                          Action uplifted — reopened for review
+                          Action reverted — reopened for review
                         </span>
                       )}
                       {appealState(report) && !(report.uplifted && report.appealKind === 'organiser') && (

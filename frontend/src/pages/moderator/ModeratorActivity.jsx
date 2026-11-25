@@ -29,7 +29,7 @@ const ACTION_META = {
   APPEAL_UPHELD: { label: 'Appeal upheld — decision reverted', icon: '↩️', color: '#c6ff33' },
   APPEAL_DISCARDED: { label: 'Appeal rejected', icon: '⛔', color: '#f87171' },
   APPEAL_DISCUSSION_OPENED: { label: 'Appeal discussion entered', icon: '💬', color: '#c6ff33' },
-  ACTION_UPLIFTED: { label: 'Previous decision uplifted', icon: '↩️', color: '#fb923c' },
+  ACTION_UPLIFTED: { label: 'Previous decision reverted', icon: '↩️', color: '#fb923c' },
   REPORT_DEADLINE_SWEEP: { label: 'Overdue review escalated', icon: '⏰', color: '#fb923c' },
 };
 
@@ -232,7 +232,7 @@ export default function ModeratorActivity() {
                           onClick={() => setUpliftTarget({ ...row.report, code: row.code })}
                           style={{ marginLeft: 8, padding: '6px 14px', fontSize: 12, fontWeight: 800, borderRadius: 6, border: '1px solid rgba(251,146,60,0.5)', color: '#fb923c', background: 'rgba(251,146,60,0.08)', cursor: 'pointer' }}
                         >
-                          Uplift
+                          Revert
                         </button>
                       )}
 
@@ -291,7 +291,7 @@ export default function ModeratorActivity() {
           onClose={() => setUpliftTarget(null)}
           onDone={() => {
             setUpliftTarget(null);
-            showToast('Action uplifted. The report has returned to the New queue.', 'success');
+            showToast('Action reverted. The report has returned to the New queue.', 'success');
             load();
           }}
         />

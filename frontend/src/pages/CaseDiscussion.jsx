@@ -130,7 +130,7 @@ export default function CaseDiscussion() {
         return (
           <div className="report-context-card">
             <div className="report-context-head">
-              Decision under discussion{last.status === 'uplifted' ? ' — previous action uplifted' : ''}
+              Decision under discussion{last.status === 'uplifted' ? ' — previous action reverted' : ''}
             </div>
             <div className="report-context-row"><span>Finding</span><strong>{capitalise(last.finding)}</strong></div>
             <div className="report-context-row"><span>Action</span><strong>{capitalise(last.action)}</strong></div>
@@ -139,7 +139,7 @@ export default function CaseDiscussion() {
               <div className="report-context-row"><span>Appeal</span><strong>Submitted — decision remains active</strong></div>
             )}
             {last.status === 'uplifted' && last.upliftReason && (
-              <p className="report-context-note">Uplifted: {last.upliftReason}</p>
+              <p className="report-context-note">Reverted: {last.upliftReason}</p>
             )}
             {last.conclusion && <p className="report-context-note">{last.conclusion}</p>}
           </div>

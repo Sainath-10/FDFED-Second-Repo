@@ -291,7 +291,7 @@ async function run() {
   assert.equal(draft.paymentStatus, 'CANCELLED');
   assert.equal(user('org').organizerTrustScore, 75);
 
-  // Cancelling after registrations refunds players, holds the prize, and penalises the organizer.
+  // Cancelling before the start refunds players, returns the prize pool to the organizer, and penalises them.
   const second: any = await insert(Competition, {
     name: 'Second Cup', createdBy: 'org', organizers: ['org'], paymentStatus: 'OPEN_FOR_REGISTRATION', status: 'active',
     organizerPaid: true, prizePoolPaid: false, prize: 500, feeType: 'per_team', entryFeeAmount: 50, visibility: 'public',
@@ -305,15 +305,14 @@ async function run() {
   await service.cancel(second.id, org, 'Venue unavailable');
   const secondEscrow = table(Escrow).find(e => e.competitionId === second.id);
   assert.equal(second.paymentStatus, 'REFUND_ISSUED');
-  assert.equal(secondEscrow.status, 'HELD');
-  assert.equal(secondEscrow.balanceMinor, 50000);
+  assert.equal(secondEscrow.status, 'REFUNDED');
+  assert.equal(secondEscrow.balanceMinor, 0);
+  assert.deepEqual(tx({ competitionId: second.id, type: 'PRIZE_RETURN' }).map(t => [t.userUsername, t.amountMinor]), [['org', 50000]]);
+  assert.equal(tx({ competitionId: second.id, type: 'PRIZE_POOL' })[0].status, 'REFUNDED');
   assert.equal(user('org').organizerTrustScore, 65);
   assert(table(Mail).some(m => m.username === 'p1' && m.template === 'refund-apology' && m.competitionId === second.id));
   assert(table(Notification).some(n => n.toUsername === 'p1' && n.type === 'refund-apology' && n.meta?.compId === second.id && /refunded in full/.test(n.body)), 'refund reaches the player\'s notifications');
-  await service.releaseHeldPrize(second.id, finance, 'Compensate affected players');
-  assert.equal(secondEscrow.balanceMinor, 0);
-  // Only players still in the competition at cancellation are compensated (p2 left voluntarily).
-  assert.deepEqual(tx({ competitionId: second.id, type: 'PAYOUT' }).map(t => [t.userUsername, t.amountMinor]), [['p1', 50000]]);
+  assert.equal(tx({ competitionId: second.id, type: 'PAYOUT' }).length, 0);
 
   // A configured funding deadline closes prize deposits before the start date.
   const strict = new LifecycleService(db, config({ AUTO_CANCEL_HOURS_BEFORE_START: 48 }));

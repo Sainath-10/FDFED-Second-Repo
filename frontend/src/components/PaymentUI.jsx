@@ -75,20 +75,25 @@ export function TransactionTable({ items, showCompetition = false, showPayer = t
           </tr>
         </thead>
         <tbody>
-          {items.map((tx) => (
+          {items.map((tx) => {
+            // A penalty leaves escrow (OUT) but goes to the platform, not the
+            // account holder: in their own view it is money deducted from them.
+            const out = tx.direction === 'OUT' && !(!showPayer && tx.type === 'PENALTY');
+            return (
             <tr key={tx.id}>
               <td style={{ whiteSpace: 'nowrap', color: 'var(--text-muted)', fontSize: 13 }}>{formatDateTime(tx.paidAt || tx.createdAt)}</td>
               <td style={{ fontWeight: 600 }}>{txType(tx.type)} {isMock(tx) && <Pill tone="accent">mock</Pill>}</td>
               {showCompetition && <td>{tx.competitionName ? <Link to={`/pages/competition-detail.html?id=${encodeURIComponent(tx.competitionId)}`} style={{ color: 'var(--text-white)' }}>{tx.competitionName}</Link> : <span className="pay-mono">{tx.competitionId}</span>}</td>}
               {showPayer && <td>@{tx.userUsername}</td>}
-              <td className={tx.direction === 'OUT' ? 'pay-dir-out' : 'pay-dir-in'} style={{ whiteSpace: 'nowrap' }}>
-                <span aria-label={tx.direction === 'OUT' ? 'Paid out' : 'Paid in'}>{tx.direction === 'OUT' ? '↑' : '↓'}</span> {money(tx.amountMinor)}
+              <td className={out ? 'pay-dir-out' : 'pay-dir-in'} style={{ whiteSpace: 'nowrap' }}>
+                <span aria-label={out ? 'Paid out' : 'Paid in'}>{out ? '↑' : '↓'}</span> {money(tx.amountMinor)}
               </td>
               <td><Pill tone={txTone(tx.status)}>{tx.status}</Pill></td>
               <td className="pay-mono">{tx.gatewayRefId || tx.gatewayOrderId || 'Order pending'}</td>
               {onNote && <td><button type="button" className="btn-table-secondary" onClick={() => onNote(tx)}>Add note</button></td>}
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>

@@ -399,10 +399,19 @@ export class LifecycleService implements OnModuleInit, OnModuleDestroy {
       const exposed = txs.filter(tx => tx.status === 'ESCROWED');
       for (const tx of exposed) await this.refund(m, c, tx, reason);
       const e = await this.escrow(m, c); // re-read after refunds updated it
-      // No players were exposed: the deposited prize pool goes back to the organizer.
-      if (!exposed.length && e.prizeMinor > 0) {
-        await this.entry(m, c, 'PRIZE_RETURN', '', c.createdBy, e.prizeMinor, 'OUT');
-        e.balanceMinor -= e.prizeMinor; e.refundsMinor += e.prizeMinor;
+      // Before the start (or with no players exposed) nothing was played for, so
+      // the deposited prize pool goes back to the organizer automatically, in
+      // full. A started competition cancelled by finance keeps it held for review.
+      const started = +new Date(c.startDate) <= Date.now();
+      const prizeRow = await m.findOneBy(Transaction, { competitionId: id, type: 'PRIZE_POOL' });
+      const deposited = prizeRow && prizeRow.status === 'ESCROWED' ? Math.min(prizeRow.amountMinor, e.balanceMinor) : 0;
+      let returnedMinor = 0;
+      if ((!started || !exposed.length) && deposited > 0) {
+        await this.entry(m, c, 'PRIZE_RETURN', '', c.createdBy, deposited, 'OUT');
+        prizeRow!.status = 'REFUNDED';
+        await m.save(prizeRow!);
+        e.balanceMinor -= deposited; e.refundsMinor += deposited;
+        returnedMinor = deposited;
       }
       e.status = e.balanceMinor > 0 ? 'HELD' : 'REFUNDED';
       await m.save(e);
@@ -410,7 +419,7 @@ export class LifecycleService implements OnModuleInit, OnModuleDestroy {
       await m.save(c);
       await this.penalize(m, c.createdBy, TRUST_PENALTY_CANCEL);
       await this.notify(m, c, c.createdBy, 'competition-cancelled-organizer', '',
-        `"${c.name}" has been cancelled.\nReason: ${reason}.\n\nAll registration fees have been refunded to players. Your platform fee is non-refundable and your organizer trust score was reduced by ${TRUST_PENALTY_CANCEL}.${e.status === 'HELD' ? `\nYour deposited prize pool (${inr(e.balanceMinor)}) is held for finance review.` : ''}`);
+        `"${c.name}" has been cancelled.\nReason: ${reason}.\n\nAll registration fees have been refunded to players. Your platform fee is non-refundable and your organizer trust score was reduced by ${TRUST_PENALTY_CANCEL}.${returnedMinor > 0 ? `\nYour deposited prize pool (${inr(returnedMinor)}) has been returned to you in full.` : ''}${e.status === 'HELD' ? `\nYour deposited prize pool (${inr(e.balanceMinor)}) is held for finance review.` : ''}`);
       await this.audit(m, c, user.username, 'COMPETITION_CANCELLED', reason);
       return { status: c.paymentStatus, escrow: e };
     });

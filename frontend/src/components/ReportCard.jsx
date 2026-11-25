@@ -13,8 +13,8 @@ import {
 
 const DECISION_STATUS = {
   active: { label: 'Active', color: '#86efac' },
-  uplifted: { label: 'Uplifted', color: '#fb923c' },
-  reverted: { label: 'Uplifted', color: '#fb923c' },
+  uplifted: { label: 'Reverted', color: '#fb923c' },
+  reverted: { label: 'Reverted', color: '#fb923c' },
   superseded: { label: 'Superseded', color: '#94a3b8' },
 };
 
@@ -79,7 +79,7 @@ export default function ReportCard({ report, actions = null, detailHref = null, 
                 <span className="report-pill" style={{ color: meta.color, border: `1px solid ${meta.color}55` }}>{meta.label}</span>
                 <span>@{decision.decidedBy || 'system'}</span>
                 <span>{formatDate(decision.decidedAt)}</span>
-                {decision.upliftReason && <span className="report-history-note">Uplifted: {decision.upliftReason}</span>}
+                {decision.upliftReason && <span className="report-history-note">Reverted: {decision.upliftReason}</span>}
               </div>
             );
           })}

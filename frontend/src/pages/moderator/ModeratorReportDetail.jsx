@@ -114,7 +114,7 @@ export default function ModeratorReportDetail() {
               Decision history
             </span>
             <span className="report-meta" style={{ margin: 0 }}>
-              The original decision is preserved when an action is uplifted or corrected.
+              The original decision is preserved when an action is reverted or corrected.
             </span>
           </div>
           <div style={{ display: 'grid', gap: 8 }}>
@@ -137,12 +137,12 @@ export default function ModeratorReportDetail() {
                       ? { color: '#fb923c', border: '1px solid rgba(251,146,60,0.4)' }
                       : { color: '#94a3b8', border: '1px solid #334155' }}
                 >
-                  {decision.status === 'active' ? 'Active' : decision.status === 'superseded' ? 'Superseded' : 'Uplifted'}
+                  {decision.status === 'active' ? 'Active' : decision.status === 'superseded' ? 'Superseded' : 'Reverted'}
                 </span>
                 <span style={{ color: '#94a3b8' }}>@{decision.decidedBy || 'system'} · {formatDate(decision.decidedAt)}</span>
                 {decision.upliftReason && (
                   <span style={{ color: '#fb923c' }}>
-                    Uplifted by @{decision.upliftedBy || '—'} · {formatDate(decision.upliftedAt)} · {decision.upliftReason}
+                    Reverted by @{decision.upliftedBy || '—'} · {formatDate(decision.upliftedAt)} · {decision.upliftReason}
                   </span>
                 )}
                 {decision.conclusion && (

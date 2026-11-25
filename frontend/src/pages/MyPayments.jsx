@@ -27,8 +27,11 @@ export default function MyPayments() {
   const list = items || [];
   const sum = (filter) => list.filter(filter).reduce((total, tx) => total + tx.amountMinor, 0);
   const paid = sum((tx) => PAID_IN.includes(tx.type) && tx.status !== 'FAILED' && tx.status !== 'PENDING');
-  const escrowed = sum((tx) => tx.type === 'REGISTRATION' && tx.status === 'ESCROWED');
-  const refunded = sum((tx) => tx.type === 'REFUND');
+  // Money of yours still held: entry fees and, for organisers, deposited prize pools.
+  const escrowed = sum((tx) => ['REGISTRATION', 'PRIZE_POOL'].includes(tx.type) && tx.status === 'ESCROWED');
+  // Money returned to you: registration refunds and prize pools given back to the
+  // organiser (cancellation, early end after the penalty, unawarded prizes).
+  const refunded = sum((tx) => ['REFUND', 'PRIZE_RETURN'].includes(tx.type));
   const won = sum((tx) => tx.type === 'PAYOUT');
 
   return (

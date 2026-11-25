@@ -1442,7 +1442,7 @@ export class ReportsService implements OnModuleInit {
     const latest = history.length ? history[history.length - 1] : null;
     if (latest && latest.status !== 'active') return 'This decision is no longer active.';
     if (report.queue === 'moderator') {
-      if (report.uplifted) return 'This decision was already uplifted.';
+      if (report.uplifted) return 'This decision was already reverted.';
       if (!APPEALABLE_ACTIONS.has(String(report.action || ''))) return 'A normal warning or a no-action decision cannot be appealed.';
       return null;
     }
@@ -1545,17 +1545,17 @@ export class ReportsService implements OnModuleInit {
     reopenAs: ReportStatus,
     competitionDisposition: string | undefined,
   ) {
-    if (report.queue !== 'moderator') throw new BadRequestException('Only decisions against an organiser can be uplifted.');
+    if (report.queue !== 'moderator') throw new BadRequestException('Only decisions against an organiser can be reverted.');
 
     // Always judge the CURRENT persisted decision, never a stale copy.
     const current = await this.reports.findOne({ where: { id: report.id } });
     if (!current) throw new NotFoundException('Report not found.');
     const history = this.decisionHistoryOf(current);
     const active = history.length ? history[history.length - 1] : null;
-    if (active && active.status === 'uplifted') throw new BadRequestException('This decision was already uplifted.');
-    if (!active || active.status !== 'active') throw new BadRequestException('There is no active decision to uplift.');
+    if (active && active.status === 'uplifted') throw new BadRequestException('This decision was already reverted.');
+    if (!active || active.status !== 'active') throw new BadRequestException('There is no active decision to revert.');
     if (current.status !== 'resolved') throw new BadRequestException('This decision is no longer active.');
-    if (!APPEALABLE_ACTIONS.has(String(active.action || ''))) throw new BadRequestException('This decision has no restriction to uplift.');
+    if (!APPEALABLE_ACTIONS.has(String(active.action || ''))) throw new BadRequestException('This decision has no restriction to revert.');
 
     let disposition: string | null = null;
     if (active.action === 'competition_suspension') {
@@ -1583,14 +1583,14 @@ export class ReportsService implements OnModuleInit {
       } as any)
       .where('id = :id AND status = :status AND uplifted = false', { id: current.id, status: 'resolved' })
       .execute();
-    if (!claim.affected) throw new BadRequestException('This decision is no longer active or has already been uplifted.');
+    if (!claim.affected) throw new BadRequestException('This decision is no longer active or has already been reverted.');
 
     try {
       await this.reputation.revertDecision(
         current.reportedUsername,
         current.id,
         active.action === 'reputation_downgrade' ? (active.previousLevel || null) : null,
-        `Uplifted decision on ${this.reportCode(current.id)}: ${reason}`,
+        `Reverted decision on ${this.reportCode(current.id)}: ${reason}`,
         user.username,
       );
       if (active.action === 'competition_suspension' && disposition === 'reopen') {
@@ -1645,10 +1645,10 @@ export class ReportsService implements OnModuleInit {
     if (report.appealStatus === 'submitted') report.appealStatus = 'resolved';
     await this.reports.save(report);
 
-    await this.recordStatus({ ...report, status: current.status }, reopenAs, user.username, `Previous action uplifted: ${reason}`);
+    await this.recordStatus({ ...report, status: current.status }, reopenAs, user.username, `Previous action reverted: ${reason}`);
     // A submitted decision closes the room; only a reviewer's Discuss reopens it.
     await this.lockDiscussionForDecision(report.id, user, 'A decision was recorded. The discussion is now read-only.');
-    await this.audit(report.id, 'ACTION_UPLIFTED', user.username, `${active.action} uplifted. ${reason}`, {
+    await this.audit(report.id, 'ACTION_UPLIFTED', user.username, `${active.action} reverted. ${reason}`, {
       disposition,
       previousFinding: active.finding || null,
       previousAction: active.action || null,
@@ -1664,12 +1664,12 @@ export class ReportsService implements OnModuleInit {
 
   /** A Community Moderator reverses the current decision and reopens the report (existing Uplift). */
   async uplift(id: string, dto: { reason: string; competitionDisposition?: string }, user: any) {
-    if (!this.isModerator(user)) throw new ForbiddenException('Only a Community Moderator can uplift an action.');
+    if (!this.isModerator(user)) throw new ForbiddenException('Only a Community Moderator can revert an action.');
     const reason = String(dto?.reason || '').trim();
-    if (reason.length < 15) throw new BadRequestException('Give a reason of at least 15 characters to uplift an action.');
+    if (reason.length < 15) throw new BadRequestException('Give a reason of at least 15 characters to revert an action.');
     const report = await this.reports.findOne({ where: { id } });
     if (!report) throw new NotFoundException('Report not found.');
-    if (report.queue !== 'moderator') throw new BadRequestException('Only decisions against an organiser can be uplifted.');
+    if (report.queue !== 'moderator') throw new BadRequestException('Only decisions against an organiser can be reverted.');
     const appealPending = report.appealStatus === 'submitted';
     await this.revertOrganiserDecision(report, reason, user, 'new', dto.competitionDisposition);
     if (appealPending) {
@@ -1679,8 +1679,8 @@ export class ReportsService implements OnModuleInit {
       report.appealDecidedAt = new Date();
       await this.reports.save(report);
     }
-    await this.notifyUser(report.reportedUsername, 'Decision Uplifted',
-      `The Community Moderator has uplifted the previous decision for report ${this.reportCode(report.id)}. The restrictions associated with that decision have been removed, and the report has been reopened for review.`,
+    await this.notifyUser(report.reportedUsername, 'Decision Reverted',
+      `The Community Moderator has reverted the previous decision for report ${this.reportCode(report.id)}. The restrictions associated with that decision have been removed, and the report has been reopened for review.`,
       { reportId: report.id, compId: report.competitionId, link: '/pages/my-reports.html' });
     return this.get(id, user);
   }
@@ -1793,8 +1793,8 @@ export class ReportsService implements OnModuleInit {
       previousAction: active.action || null,
       reportedUsername: report.reportedUsername,
     });
-    await this.notifyUser(report.reportedUsername, 'Decision Uplifted',
-      `The Community Moderator has uplifted the previous decision for report ${code}. The restrictions associated with that decision have been removed, and the report has been reopened for review. Reason: ${reason}`,
+    await this.notifyUser(report.reportedUsername, 'Decision Reverted',
+      `The Community Moderator has reverted the previous decision for report ${code}. The restrictions associated with that decision have been removed, and the report has been reopened for review. Reason: ${reason}`,
       { reportId: report.id, compId: report.competitionId, link: '/pages/my-reports.html' });
     await this.notifyUser(report.reporterUsername, 'Decision reverted on appeal',
       `The decision on your report ${code} was reverted on appeal. The original report was reopened as New.`,

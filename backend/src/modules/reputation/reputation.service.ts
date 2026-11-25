@@ -127,6 +127,32 @@ export class ReputationService implements OnModuleInit {
     return Math.min(REPUTATION_LEVEL_LIMITS[level], globalMax);
   }
 
+  /**
+   * History with reverted decisions taken out. When a Community Moderator
+   * reverts a decision, the transition that decision caused and the restoring
+   * transition both disappear, so "times entered" counts match what actually
+   * stands. The raw rows stay in the table as the audit trail.
+   * Input and output are newest first.
+   */
+  private effectiveHistory(rows: OrganiserReputationHistoryEntity[]) {
+    const isRevert = (row: OrganiserReputationHistoryEntity) =>
+      row.policy === 'decision_reverted' || row.policy === 'decision_uplifted';
+    const kept: OrganiserReputationHistoryEntity[] = [];
+    const ascending = [...rows].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    for (const row of ascending) {
+      if (isRevert(row)) {
+        if (row.reportId) {
+          for (let i = kept.length - 1; i >= 0; i -= 1) {
+            if (kept[i].reportId === row.reportId) kept.splice(i, 1);
+          }
+        }
+        continue;
+      }
+      kept.push(row);
+    }
+    return kept.reverse();
+  }
+
   /** Full organiser reputation profile, including history and sanctions. */
   async getProfile(username: string) {
     const profile = await this.getOrCreate(username);
@@ -176,11 +202,12 @@ export class ReputationService implements OnModuleInit {
   async getOrganiserOverview(username: string) {
     const profile = await this.getOrCreate(username);
     const globalMax = await this.getGlobalMax();
-    const [levelHistory, sanctionRows, reportRows] = await Promise.all([
+    const [rawHistory, sanctionRows, reportRows] = await Promise.all([
       this.history.find({ where: { username }, order: { createdAt: 'DESC' } }),
       this.sanctions.find({ where: { username }, order: { createdAt: 'DESC' } }),
       this.dataSource.getRepository(ReportEntity).find({ where: { reportedUsername: username } }),
     ]);
+    const levelHistory = this.effectiveHistory(rawHistory);
 
     const levelCounts: Record<ReputationLevel, number> = { blue: 0, green: 0, orange: 0, red: 0 };
     levelHistory.forEach((row) => {
@@ -230,7 +257,9 @@ export class ReputationService implements OnModuleInit {
   async getPublicOrganiserOverview(username: string) {
     const profile = await this.getOrCreate(username);
     const globalMax = await this.getGlobalMax();
-    const levelHistory = await this.history.find({ where: { username }, order: { createdAt: 'DESC' } });
+    const levelHistory = this.effectiveHistory(
+      await this.history.find({ where: { username }, order: { createdAt: 'DESC' } }),
+    );
 
     const levelCounts: Record<ReputationLevel, number> = { blue: 0, green: 0, orange: 0, red: 0 };
     levelHistory.forEach((row) => {
@@ -706,7 +735,7 @@ export class ReputationService implements OnModuleInit {
         profile.level = restoreLevel;
         await this.reputation.save(profile);
         await this.history.save(
-          this.history.create({ username, fromLevel: previous, toLevel: restoreLevel, reason, policy: 'decision_uplifted', reportId, reviewer }),
+          this.history.create({ username, fromLevel: previous, toLevel: restoreLevel, reason, policy: 'decision_reverted', reportId, reviewer }),
         );
       }
     }

@@ -262,7 +262,7 @@ every 15–20 seconds while visible.
 | Wrong result entered | The organiser can edit it until the competition ends. The winner can't change once the next round has been played. |
 | Ending with fixtures still to play | The organiser gives a reason; a finance moderator approves or rejects. If approved, every player is refunded, 10% of the deposited prize pool is kept as a penalty, the rest goes back to the organiser, and their trust score drops. |
 | Cancelling | Allowed directly only before the start. |
-| Report against an organiser | A Community Moderator can choose **End competition & refund players** (same refunds and penalty; cannot be uplifted). |
+| Report against an organiser | A Community Moderator can choose **End competition & refund players** (same refunds and penalty; cannot be reverted). |
 | Competition finished | Final placings, prizes and players appear as a podium on the competition and team pages. |
 
 ---
