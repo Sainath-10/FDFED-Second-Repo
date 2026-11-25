@@ -21,7 +21,7 @@ const day = (offset) => {
 test('registration must close before the competition starts', async () => {
   const { validateSchedule } = await loadForm();
   const errors = validateSchedule({ regOpen: day(0), regClose: day(10), start: day(5), end: day(12) });
-  assert.match(errors.regClose, /before the start date/);
+  assert.match(errors.regClose, /at least one day before the competition starts/);
 });
 
 test('registration cannot close after the competition ends, or open after it', async () => {
@@ -30,19 +30,21 @@ test('registration cannot close after the competition ends, or open after it', a
   assert.ok(validateSchedule({ regOpen: day(20), regClose: day(21), start: day(5), end: day(8) }).regOpen);
 });
 
-test('the end must be at least one day after the start; same-day registration windows are allowed', async () => {
+test('every date is at least one day after the one before it', async () => {
   const { validateSchedule, scheduleToIso } = await loadForm();
-  assert.match(validateSchedule({ regOpen: day(1), regClose: day(1), start: day(3), end: day(3) }).end, /at least one day after it starts/);
-  assert.deepEqual(validateSchedule({ regOpen: day(1), regClose: day(1), start: day(3), end: day(4) }), {});
-  const iso = scheduleToIso({ regOpen: day(1), regClose: day(1), start: day(3), end: day(3) });
-  assert.ok(new Date(iso.endDate) > new Date(iso.startDate), 'the end is 23:59:59 on the start day');
-  assert.ok(new Date(iso.registrationCloseAt) > new Date(iso.registrationOpenAt), 'registration closes at the end of its day');
+  assert.deepEqual(validateSchedule({ regOpen: day(0), regClose: day(1), start: day(2), end: day(3) }), {}, 'one-day gaps are enough');
+  assert.match(validateSchedule({ regOpen: day(1), regClose: day(1), start: day(3), end: day(4) }).regClose, /at least one day after it opens/);
+  assert.match(validateSchedule({ regOpen: day(1), regClose: day(3), start: day(3), end: day(4) }).regClose, /at least one day before the competition starts/);
+  assert.match(validateSchedule({ regOpen: day(1), regClose: day(2), start: day(3), end: day(3) }).end, /at least one day after it starts/);
+  const iso = scheduleToIso({ regOpen: day(0), regClose: day(1), start: day(2), end: day(3) });
+  assert.ok(new Date(iso.registrationCloseAt) < new Date(iso.startDate), 'registration closes before play starts');
 });
 
-test('registration closing on the start day closes when play starts', async () => {
-  const { scheduleToIso } = await loadForm();
-  const iso = scheduleToIso({ regOpen: day(1), regClose: day(3), start: day(3), end: day(4) });
-  assert.equal(iso.registrationCloseAt, iso.startDate);
+test('on edit, an unchanged pair of older same-day dates is not re-checked', async () => {
+  const { validateSchedule } = await loadForm();
+  const legacy = { regOpen: day(1), regClose: day(3), start: day(3), end: day(6) };
+  assert.deepEqual(validateSchedule(legacy, { changed: ['end'] }), {});
+  assert.ok(validateSchedule(legacy, { changed: ['regClose'] }).regClose);
 });
 
 test('past dates are rejected', async () => {

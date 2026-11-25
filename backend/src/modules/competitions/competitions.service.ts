@@ -648,7 +648,9 @@ export class CompetitionsService {
         endDate: changed(dateChange.endDate, comp.endDate) ? dateChange.endDate : null,
         registrationCloseAt: changed(dateChange.registrationCloseAt, comp.registrationCloseAt) ? dateChange.registrationCloseAt : null,
       });
-      const dateErrors = [...validateDateWindow(merged), ...future];
+      const changedDates = (['registrationOpenAt', 'registrationCloseAt', 'startDate', 'endDate'] as const)
+        .filter((k) => changed(dateChange[k], comp[k]));
+      const dateErrors = [...validateDateWindow(merged, [...changedDates]), ...future];
       if (dateErrors.length) {
         throw new BadRequestException(dateErrors.map((e) => e.message).join(' '));
       }

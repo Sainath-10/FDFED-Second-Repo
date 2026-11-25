@@ -41,27 +41,37 @@ function validDate(d: Date | null | undefined): d is Date {
 }
 
 /**
- * Validates the order of the registration window and competition dates:
- * registration open <= registration close <= start <= end. The end may fall on
- * the start day because the form saves the end date as 23:59:59 (one-day events).
+ * Validates the order of the registration window and competition dates. Each
+ * step falls on a later calendar day than the one before it:
+ *   registration opens < registration closes < start < end.
+ * The form saves opening and start days at 00:00 and closing and end days at
+ * 23:59:59, so "a later day" means: close/end at least 24 hours after the
+ * open/start before it, and the start strictly after registration closes
+ * (this holds in every timezone).
+ *
+ * `changed` (on edit) lists the fields being changed; a rule is then checked
+ * only when one of its two dates changes, so an older competition saved with
+ * same-day dates can still have, say, just its end date moved.
  */
-export function validateDateWindow(w: DateWindow): ValidationError[] {
+export function validateDateWindow(w: DateWindow, changed?: Array<keyof DateWindow>): ValidationError[] {
   const errors: ValidationError[] = [];
   const { registrationOpenAt, registrationCloseAt, startDate, endDate } = w;
+  const touches = (...fields: Array<keyof DateWindow>) => !changed || fields.some((f) => changed.includes(f));
 
-  if (validDate(registrationOpenAt) && validDate(registrationCloseAt) && registrationCloseAt.getTime() < registrationOpenAt.getTime()) {
-    errors.push({ field: 'registrationCloseAt', message: 'Registration must close on or after the day it opens.' });
+  if (validDate(registrationOpenAt) && validDate(registrationCloseAt) && touches('registrationOpenAt', 'registrationCloseAt')
+    && registrationCloseAt.getTime() - registrationOpenAt.getTime() < 86_400_000) {
+    errors.push({ field: 'registrationCloseAt', message: 'Registration must close at least one day after it opens.' });
   }
-  if (validDate(registrationCloseAt) && validDate(startDate) && registrationCloseAt.getTime() > startDate.getTime()) {
-    errors.push({ field: 'registrationCloseAt', message: 'Registration must close before the competition starts.' });
+  if (validDate(registrationCloseAt) && validDate(startDate) && touches('registrationCloseAt', 'startDate')
+    && registrationCloseAt.getTime() >= startDate.getTime()) {
+    errors.push({ field: 'registrationCloseAt', message: 'Registration must close at least one day before the competition starts.' });
   }
-  if (validDate(registrationOpenAt) && validDate(startDate) && registrationOpenAt.getTime() > startDate.getTime()) {
+  if (validDate(registrationOpenAt) && validDate(startDate) && touches('registrationOpenAt', 'startDate')
+    && registrationOpenAt.getTime() >= startDate.getTime()) {
     errors.push({ field: 'registrationOpenAt', message: 'Registration must open before the competition starts.' });
   }
-  // The end day must be at least one day after the start day. The start is
-  // stored at 00:00 and the end at 23:59:59, so a gap under 24 hours means the
-  // same calendar day (this holds in every timezone).
-  if (validDate(startDate) && validDate(endDate) && endDate.getTime() - startDate.getTime() < 86_400_000) {
+  if (validDate(startDate) && validDate(endDate) && touches('startDate', 'endDate')
+    && endDate.getTime() - startDate.getTime() < 86_400_000) {
     errors.push({ field: 'endDate', message: 'The competition must end at least one day after it starts.' });
   }
   return errors;

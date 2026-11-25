@@ -164,7 +164,15 @@ async function competitionRuleTests() {
     assert.match(validateDateWindow({ startDate: end, endDate: start }).map((e) => e.message).join(' '), /at least one day after it starts/i);
 
     // registration must close before the competition starts
-    assert.match(validateDateWindow({ registrationCloseAt: end, startDate: start }).map((e) => e.message).join(' '), /close before the competition starts/i);
+    assert.match(validateDateWindow({ registrationCloseAt: end, startDate: start }).map((e) => e.message).join(' '), /at least one day before the competition starts/i);
+
+    // one-day gaps: registration cannot close on the day it opens or on the start day
+    const at = (d: string, t: string) => new Date(`${d}T${t}`);
+    assert.match(validateDateWindow({ registrationOpenAt: at('2026-02-01', '00:00:00'), registrationCloseAt: at('2026-02-01', '23:59:59') }).map((e) => e.message).join(' '), /at least one day after it opens/i);
+    assert.deepEqual(validateDateWindow({ registrationOpenAt: at('2026-02-01', '00:00:00'), registrationCloseAt: at('2026-02-02', '23:59:59'), startDate: at('2026-02-03', '00:00:00'), endDate: at('2026-02-04', '23:59:59') }), []);
+    assert.match(validateDateWindow({ registrationCloseAt: at('2026-02-03', '00:00:00'), startDate: at('2026-02-03', '00:00:00') }).map((e) => e.message).join(' '), /at least one day before the competition starts/i);
+    // on edit, only rules touching a changed date apply
+    assert.deepEqual(validateDateWindow({ registrationCloseAt: at('2026-02-03', '00:00:00'), startDate: at('2026-02-03', '00:00:00'), endDate: at('2026-02-06', '23:59:59') }, ['endDate']), []);
 
     // the end must be at least one day after the start: the same day is rejected, the next day is fine
     assert.match(validateDateWindow({ startDate: start, endDate: new Date(start.getTime() + 12 * 3600_000) }).map((e) => e.message).join(' '), /at least one day after it starts/i);
@@ -174,7 +182,7 @@ async function competitionRuleTests() {
     assert.match(validateDateWindow({
       registrationOpenAt: new Date('2026-02-01T10:00:00Z'),
       registrationCloseAt: new Date('2026-01-01T10:00:00Z'),
-    }).map((e) => e.message).join(' '), /Registration must close on or after/i);
+    }).map((e) => e.message).join(' '), /Registration must close at least one day after it opens/i);
   });
 
   await test('registration closure does not count as competition start', () => {

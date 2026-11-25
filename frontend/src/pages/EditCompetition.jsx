@@ -242,7 +242,7 @@ export default function EditCompetition() {
         <div className="ui-card">
           <h2 className="ui-card-title">Dates</h2>
           {field('Registration opens', errors.regOpen, <input className="form-input" type="date" value={form.regOpen} onChange={set('regOpen')} disabled={regOpenLocked} />)}
-          {field('Registration closes', errors.regClose, <input className="form-input" type="date" value={form.regClose} onChange={set('regClose')} disabled={datesLocked} />, 'Registration closes at the end of this day, or when play starts if it is the start day.')}
+          {field('Registration closes', errors.regClose, <input className="form-input" type="date" value={form.regClose} onChange={set('regClose')} disabled={datesLocked} />, 'At least one day after it opens, and at least one day before the start.')}
           {field('Starts', errors.start, <input className="form-input" type="date" value={form.start} onChange={set('start')} disabled={datesLocked} />)}
           {field('Ends', errors.end, <input className="form-input" type="date" value={form.end} onChange={set('end')} disabled={endLocked} />, 'The end day is included. It must be at least one day after the start.')}
 

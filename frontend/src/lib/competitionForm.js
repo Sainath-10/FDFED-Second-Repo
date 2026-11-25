@@ -2,13 +2,14 @@
  * NEXUS ESPORTS — competition form rules
  *
  * One set of rules for the Create and Edit forms, matching the backend
- * (competition.rules.ts): registration open ≤ registration close ≤ start ≤ end,
- * no past dates, whole-rupee amounts, and descending prizes.
+ * (competition.rules.ts): each date falls on a later day than the one before
+ * it (registration opens < registration closes < start < end), no past dates,
+ * whole-rupee amounts, and descending prizes.
  *
  * Dates come from <input type="date"> as YYYY-MM-DD in the organizer's time zone.
  * The start is saved as 00:00 and the end as 23:59:59. A competition must end
- * at least one day after it starts. Registration closes at the end of
- * its day — or when the competition starts, if that is the same day.
+ * at least one day after it starts. Registration closes at the end of its day,
+ * which must be at least one day after it opens and before the start day.
  */
 
 export const GAMES = [
@@ -48,6 +49,8 @@ export function toDateInput(value) {
 export const todayInput = () => toDateInput(new Date());
 /** The calendar day after a YYYY-MM-DD date (for the earliest allowed end date). */
 export const nextDay = (value) => { const d = new Date(`${value}T00:00:00`); d.setDate(d.getDate() + 1); return toDateInput(d); };
+/** The calendar day before a YYYY-MM-DD date (for the latest allowed closing date). */
+export const previousDay = (value) => { const d = new Date(`${value}T00:00:00`); d.setDate(d.getDate() - 1); return toDateInput(d); };
 
 /** Input value for `days` from today (local time). */
 export function daysFromToday(days) {
@@ -109,10 +112,13 @@ export function validateSchedule({ regOpen, regClose, start, end }, { changed = 
   if (start && checks('start') && start <= today) errors.start = 'The competition must start after today.';
   if (end && checks('end') && end < today) errors.end = 'The end date cannot be in the past.';
 
-  if (regOpen && regClose && regClose < regOpen) errors.regClose = 'Registration must close on or after the day it opens.';
-  if (regClose && start && regClose > start) errors.regClose = 'Registration must close on or before the start date.';
-  if (regOpen && start && regOpen > start) errors.regOpen = 'Registration must open before the competition starts.';
-  if (start && end && end <= start) errors.end = 'The competition must end at least one day after it starts.';
+  // A one-day gap between every step. On edit a rule applies only when one of
+  // its two dates changes (older competitions may have same-day dates).
+  const touches = (...fields) => !changed || fields.some((f) => changed.includes(f));
+  if (regOpen && regClose && touches('regOpen', 'regClose') && regClose <= regOpen) errors.regClose = 'Registration must close at least one day after it opens.';
+  if (regClose && start && touches('regClose', 'start') && regClose >= start) errors.regClose = 'Registration must close at least one day before the competition starts.';
+  if (regOpen && start && touches('regOpen', 'start') && regOpen >= start) errors.regOpen = 'Registration must open before the competition starts.';
+  if (start && end && touches('start', 'end') && end <= start) errors.end = 'The competition must end at least one day after it starts.';
 
   if (start) {
     const limit = new Date();
