@@ -101,7 +101,14 @@ export const SUPPORTED_GAMES = [
 ];
 export const SUPPORTED_FORMATS = ['Single Elimination', 'Round Robin'];
 export const COMPETITION_TYPES = ['tournament', 'league'];
+/** Every fee type a stored competition can have ('per_team' only on older competitions). */
 export const FEE_TYPES = ['free', 'per_team', 'per_player'];
+/**
+ * What an organiser can pick for a new competition: Free or Paid. Paid means
+ * every player, the captain included, pays the entry fee themselves, which is
+ * stored as 'per_player'. The captain-pays-for-the-team option was removed.
+ */
+export const CREATABLE_FEE_TYPES = ['free', 'paid', 'per_player'];
 export const MAX_TEAMS_LIMIT = 256;
 export const MAX_PLAYERS_LIMIT = 20;
 export const MAX_NAME_LENGTH = 100;

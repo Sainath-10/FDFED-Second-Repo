@@ -9,6 +9,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import CreateCompetitionLink from '../components/CreateCompetitionLink.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { AuditAPI, CompetitionsAPI } from '../services/api.js';
 import ActivityTimeline from '../components/ActivityTimeline.jsx';
@@ -137,7 +138,7 @@ export default function MyActivity() {
             <h1 className="act-page-title">Your activity</h1>
             <p className="act-page-subtitle">Competitions you organize and the teams you are on.</p>
           </div>
-          <Link to="/pages/create-competition.html" className="btn-create">+ Create competition</Link>
+          <CreateCompetitionLink to="/pages/create-competition.html" className="btn-create">+ Create competition</CreateCompetitionLink>
         </div>
       </div>
 
@@ -185,7 +186,9 @@ export default function MyActivity() {
             <EmptyState
               title="Nothing here yet"
               message={s.key === 'organized' ? 'Competitions you create appear here.' : 'Join or create a team from the Competitions page.'}
-              action={<Link className="btn-table-secondary" to={s.key === 'organized' ? '/pages/create-competition.html' : '/pages/competitions.html'}>{s.key === 'organized' ? 'Create a competition' : 'Browse competitions'}</Link>}
+              action={s.key === 'organized'
+                ? <CreateCompetitionLink className="btn-table-secondary" to="/pages/create-competition.html">Create a competition</CreateCompetitionLink>
+                : <Link className="btn-table-secondary" to="/pages/competitions.html">Browse competitions</Link>}
             />
           ) : (
             <div className="act-comp-grid">{s.items.map(card)}</div>

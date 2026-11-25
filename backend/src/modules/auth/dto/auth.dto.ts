@@ -148,15 +148,6 @@ export class ModerationReasonDto {
   reason?: string;
 }
 
-export class PasswordResetRequestDto {
-  @ApiProperty({ description: 'Username or email of the account that needs a reset' })
-  @Transform(trim)
-  @IsString()
-  @MinLength(3)
-  @MaxLength(254)
-  emailOrUsername: string;
-}
-
 export class LoginResponseDto {
   @ApiProperty()
   user: {

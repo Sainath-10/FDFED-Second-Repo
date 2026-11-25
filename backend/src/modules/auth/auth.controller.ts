@@ -24,7 +24,6 @@ import {
   AddAdminDto,
   RevokeAdminDto,
   ModerationReasonDto,
-  PasswordResetRequestDto,
 } from './dto/auth.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/decorators/roles.guard';
@@ -52,13 +51,6 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
   async login(@Body() dto: LoginDto): Promise<LoginResponseDto> {
     return this.authService.login(dto);
-  }
-
-  @Post('password-reset-request')
-  @HttpCode(200)
-  @ApiOperation({ summary: 'Forgot password: notify administrators to issue a temporary password' })
-  async requestPasswordReset(@Body() dto: PasswordResetRequestDto) {
-    return this.authService.requestPasswordReset(dto.emailOrUsername);
   }
 
   @Get('me')
@@ -153,16 +145,6 @@ export class AuthController {
   @ApiOperation({ summary: 'Issue a warning to a user (Admin only)' })
   async warnUser(@Param('id') id: string, @Body() body: ModerationReasonDto, @Request() req: any) {
     return this.authService.warnUser(id, req.user, body?.reason);
-  }
-
-  @Post('users/:id/reset-password')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN)
-  @ApiBearerAuth()
-  @HttpCode(200)
-  @ApiOperation({ summary: 'Issue a one-time temporary password (Admin only)' })
-  async resetPassword(@Param('id') id: string, @Request() req: any) {
-    return this.authService.resetPassword(id, req.user);
   }
 
   @Post('logout')

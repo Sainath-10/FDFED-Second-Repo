@@ -33,7 +33,7 @@ export default function RevokeAdmin() {
   async function onSubmit(event) {
     event.preventDefault();
     setError('');
-    if (!username.trim() || reason.trim().length < 5) { setError('Choose an administrator and give a reason (at least 5 characters).'); return; }
+    if (!username.trim() || reason.trim().length < 5) { setError('Choose a mod and give a reason (at least 5 characters).'); return; }
     setSubmitting(true);
     const res = await AuthAPI.revokeAdmin(username.trim(), reason.trim());
     setSubmitting(false);
@@ -44,8 +44,8 @@ export default function RevokeAdmin() {
 
   return (
     <main className="main-content">
-      <Link to="/pages/super-admin/admins.html" className="back-btn-alt">← Back to admins</Link>
-      <PageHeader title="Revoke administrator" subtitle="The account becomes a normal player account. You cannot revoke yourself." />
+      <Link to="/pages/super-admin/admins.html" className="back-btn-alt">← Back to mods</Link>
+      <PageHeader title="Revoke mod" subtitle="The account becomes a normal player account. You cannot revoke yourself." />
       <form className="ui-card" style={{ maxWidth: 640 }} onSubmit={onSubmit}>
         <div className="ui-field">
           <label htmlFor="revoke-user">Administrator *</label>

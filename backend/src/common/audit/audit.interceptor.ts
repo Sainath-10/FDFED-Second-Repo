@@ -35,7 +35,6 @@ const outcome = (ok: string, failed: string) => ({ body }: Ctx) => (String(body?
 
 const RULES: Record<string, Rule> = {
   // ── Account
-  'POST /auth/password-reset-request': { action: 'PASSWORD_RESET_REQUESTED', entity: 'user', details: () => 'Password reset requested from the sign-in page.' },
 
   // ── Competition organisers and approval
   'POST /competitions/:id/organizers': { action: 'ORGANIZER_INVITED', entity: 'competition', idIsCompetition: true, details: ({ body }) => `Co-organizer invitation sent to @${body?.username || body?.organizerUsername || 'a user'}.` },

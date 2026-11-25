@@ -6,7 +6,7 @@
  */
 
 export const ACTIONABLE = [
-  'team-join-request', 'team-invite', 'co-organizer-invite', 'team-join-payment', 'password-reset-request',
+  'team-join-request', 'team-invite', 'co-organizer-invite', 'team-join-payment',
   'large-prize-request', 'early-end-request',
 ];
 
@@ -25,7 +25,6 @@ export const ORGANIZER_TYPES = [
 export function linkOf(item) {
   const m = item?.meta || {};
   if (m.link) return { to: m.link, label: 'Open' };
-  if (item.type === 'password-reset-request') return { to: '/pages/super-admin/users.html', label: 'Open Users' };
   if (m.disputeId) return { to: '/pages/my-reports.html', label: 'View reports' };
   if (m.reportId) return { to: '/pages/my-reports.html', label: 'View reports' };
   if (ORGANIZER_TYPES.includes(item.type) && m.compId) return { to: `/pages/competition-payment.html?id=${encodeURIComponent(m.compId)}`, label: 'Open payments and escrow' };

@@ -222,18 +222,8 @@ export const AuthAPI = {
     return makeRequest(`/auth/users/${encodeURIComponent(idOrUsername)}/warn`, { method: 'PATCH', body: JSON.stringify(reason ? { reason } : {}) });
   },
 
-  /** Admin issues a one-time password; the response holds it once. */
-  async resetPassword(idOrUsername) {
-    return makeRequest(`/auth/users/${encodeURIComponent(idOrUsername)}/reset-password`, { method: 'POST' });
-  },
-
-  /** Forgot Password: notifies administrators. Same answer whether or not the account exists. */
-  async requestPasswordReset(emailOrUsername) {
-    return makeRequest('/auth/password-reset-request', { method: 'POST', body: JSON.stringify({ emailOrUsername }) });
-  },
-
-  async addAdmin(username, adminType, email) {
-    return makeRequest('/auth/add-admin', { method: 'POST', body: JSON.stringify({ username, adminType, ...(email ? { email } : {}) }) });
+  async addAdmin(username, adminType) {
+    return makeRequest('/auth/add-admin', { method: 'POST', body: JSON.stringify({ username, adminType }) });
   },
 
   async revokeAdmin(username, reason) {

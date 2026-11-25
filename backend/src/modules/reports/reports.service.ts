@@ -27,6 +27,7 @@ import { CompetitionRepository } from '../competitions/repositories/competition.
 import { UserRepository } from '../auth/repositories/user.repository';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditLogService } from '../../common/audit/audit.service';
+import { notifyIfEndUnblocked } from '../../common/competition-end';
 import { ReputationService } from '../reputation/reputation.service';
 import { LifecycleService } from '../payments/lifecycle.service';
 import {
@@ -657,6 +658,7 @@ export class ReportsService implements OnModuleInit {
 
     await this.lockDiscussionForDecision(id, user, 'The report was discarded. The discussion is now read-only.');
     await this.audit(id, 'REPORT_DISCARDED', user.username, `Discarded: ${dto.reason}. ${dto.note || ''}`.trim(), { reason: dto.reason });
+    if (report.queue === 'moderator') await this.notifyOrganiserIfEndUnblocked(report.competitionId);
     await this.notifyUser(
       report.reporterUsername,
       'Report discarded',
@@ -664,6 +666,11 @@ export class ReportsService implements OnModuleInit {
       { reportId: report.id, compId: report.competitionId },
     );
     return this.get(id, user);
+  }
+
+  /** When the last open report against an organiser is closed, tell them they can end the competition. */
+  private async notifyOrganiserIfEndUnblocked(competitionId: string) {
+    await notifyIfEndUnblocked(this.dataSource.manager, competitionId, (n) => this.notifications.create(n as any)).catch(() => false);
   }
 
   // ─── Case discussions ──────────────────────────────────────────────────────
@@ -1303,6 +1310,7 @@ export class ReportsService implements OnModuleInit {
     await this.reports.save(report);
     await this.recordStatus({ ...report, status: 'new' }, 'resolved', user.username, `Finding: ${dto.finding}; action: ${dto.action}.`);
     await this.lockDiscussionForDecision(id, user, 'A decision was recorded. The discussion is now read-only.');
+    await this.notifyOrganiserIfEndUnblocked(report.competitionId);
     await this.audit(id, 'REPORT_DECIDED', user.username, `Organiser decision: ${dto.finding} / ${dto.action}.`, {
       finding: dto.finding,
       action: dto.action,

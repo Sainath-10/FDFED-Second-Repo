@@ -59,7 +59,7 @@ const ADMIN_NAV = {
 const SUPER_ADMIN_NAV = [
   { id: 'dashboard', label: 'Dashboard', to: '/pages/super-admin/super-dashboard.html', icon: HomeIcon, end: true },
   { id: 'users', label: 'Users', to: '/pages/super-admin/users.html', icon: UsersIcon },
-  { id: 'admins', label: 'Admins', to: '/pages/super-admin/admins.html', icon: ShieldIcon },
+  { id: 'admins', label: 'Mods', to: '/pages/super-admin/admins.html', icon: ShieldIcon },
   { id: 'revenue', label: 'Revenue', to: '/pages/admin/revenue-transactions.html', icon: TrophyIcon },
   { id: 'activity', label: 'Activity', to: '/pages/admin/admin-activity.html', icon: CheckCircleIcon },
   ALERTS,

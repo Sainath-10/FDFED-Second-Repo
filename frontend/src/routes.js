@@ -107,7 +107,7 @@ export const PROTECTED_ROUTES = [
  // Super admin
   route('/pages/super-admin/super-dashboard.html', 'Super admin dashboard', 'super-admin', SUPER_ADMIN_ROLES),
   route('/pages/super-admin/users.html', 'Users', 'super-admin', SUPER_ADMIN_ROLES),
-  route('/pages/super-admin/admins.html', 'Admins', 'super-admin', SUPER_ADMIN_ROLES),
+  route('/pages/super-admin/admins.html', 'Mods', 'super-admin', SUPER_ADMIN_ROLES),
   route('/pages/super-admin/add-admin.html', 'Add admin', 'super-admin', SUPER_ADMIN_ROLES),
   route('/pages/super-admin/revoke-admin.html', 'Revoke admin', 'super-admin', SUPER_ADMIN_ROLES),
   route('/pages/super-admin/profile.html', 'Profile', 'super-admin', SUPER_ADMIN_ROLES),

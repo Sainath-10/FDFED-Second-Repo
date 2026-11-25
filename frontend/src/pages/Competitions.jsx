@@ -6,6 +6,7 @@
  */
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import CreateCompetitionLink from '../components/CreateCompetitionLink.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import CompCard from '../components/CompCard.jsx';
 import { EmptyState, ErrorState, LoadingState } from '../components/ui.jsx';
@@ -43,10 +44,10 @@ export default function Competitions() {
           <h1>Competitions</h1>
           <p>Browse and register for active tournaments across all games.</p>
         </div>
-        <Link to={session ? '/pages/create-competition.html' : '/pages/login.html?redirect=/pages/create-competition.html'} className="create-comp-btn">
+        <CreateCompetitionLink to={session ? '/pages/create-competition.html' : '/pages/login.html?redirect=/pages/create-competition.html'} className="create-comp-btn">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="8" y1="2" x2="8" y2="14" /><line x1="2" y1="8" x2="14" y2="8" /></svg>
           Create competition
-        </Link>
+        </CreateCompetitionLink>
       </div>
 
       <div className="comps-filters">

@@ -168,21 +168,23 @@ async function run() {
   await rejects(() => service.end(comp.id, org), /Exactly one completed final/);
   table(Match).splice(table(Match).indexOf(fake), 1);
 
+  // A finance hold placed before the end keeps the payout for finance to review
+  // (without one, ending pays the winners straight away — see settleScenario).
+  await rejects(() => service.hold(comp.id, playingFinance, true, 'Self-serving hold'), /Conflict of interest/);
+  await service.hold(comp.id, finance, true, 'Checking a complaint');
   await service.end(comp.id, org);
   assert.equal(comp.paymentStatus, 'COMPLETED');
-  assert(table(Mail).some(m => m.username === 'p4' && m.template === 'tournament-completed' && /raise a dispute before/.test(m.body)));
+  assert(table(Mail).some(m => m.username === 'p4' && m.template === 'tournament-completed' && /once a finance moderator has reviewed/.test(m.body)));
   await rejects(() => service.cancel(comp.id, org, 'Changed my mind'), /Only a finance moderator/);
   await rejects(() => service.removeTeam(bravo.id, org, 'banned', 'Lost the final'), /Results are final/);
 
-  // Settlement is finance-only, neutral, waits for the dispute window and respects holds.
+  // Manual settlement is finance-only, neutral, respects holds and waits for the dispute window.
   await rejects(() => service.settle(comp.id, org), /Finance moderator access/);
+  await rejects(() => service.settle(comp.id, finance), /finance holds/);
+  await service.hold(comp.id, finance, false, 'Complaint cleared');
   await rejects(() => service.settle(comp.id, finance), /Players can dispute the results until/);
   await service.mockCloseDisputeWindow(comp.id, finance);
   await rejects(() => service.settle(comp.id, playingFinance), /Conflict of interest: you play/);
-  await rejects(() => service.hold(comp.id, playingFinance, true, 'Self-serving hold'), /Conflict of interest/);
-  await service.hold(comp.id, finance, true, 'Checking a complaint');
-  await rejects(() => service.settle(comp.id, finance), /finance holds/);
-  await service.hold(comp.id, finance, false, 'Complaint cleared');
   await service.settle(comp.id, finance);
   assert.equal(comp.paymentStatus, 'PRIZE_RELEASED');
   assert.equal(escrow.balanceMinor, 0);
@@ -231,9 +233,9 @@ async function run() {
     await service.prize(c.id, org);
     c.startDate = new Date(Date.now() - 1000);
     for (const match of playMatches(teams)) await insert(Match, { competitionId: c.id, status: 'completed', ...match });
+    // Every fixture played and nothing disputed: ending pays the winners automatically.
     await service.end(c.id, org);
-    await service.mockCloseDisputeWindow(c.id, finance);
-    await service.settle(c.id, finance);
+    assert.equal(c.paymentStatus, 'PRIZE_RELEASED');
     assert.equal(table(Escrow).find(e => e.competitionId === c.id).balanceMinor, 0);
     return { c, payouts: tx({ competitionId: c.id, type: 'PAYOUT' }).map(t => [t.userUsername, t.amountMinor]).sort(), returned: tx({ competitionId: c.id, type: 'PRIZE_RETURN' }).map(t => t.amountMinor) };
   };

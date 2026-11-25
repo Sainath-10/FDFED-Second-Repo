@@ -1,5 +1,5 @@
 import { IsString, IsDateString, IsEnum, IsOptional, MinLength, MaxLength, IsArray, IsNumber, IsBoolean, ValidateNested, IsInt, Min, Max, IsIn, ArrayMaxSize, IsEmail, Matches } from 'class-validator';
-import { SUPPORTED_GAMES, SUPPORTED_FORMATS, COMPETITION_TYPES, FEE_TYPES, MAX_TEAMS_LIMIT, MAX_PLAYERS_LIMIT, MAX_PRIZE_POOL, MAX_NAME_LENGTH, MAX_DESCRIPTION_LENGTH } from '../../../common/validation/competition.rules';
+import { SUPPORTED_GAMES, SUPPORTED_FORMATS, COMPETITION_TYPES, CREATABLE_FEE_TYPES, MAX_TEAMS_LIMIT, MAX_PLAYERS_LIMIT, MAX_PRIZE_POOL, MAX_NAME_LENGTH, MAX_DESCRIPTION_LENGTH } from '../../../common/validation/competition.rules';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -185,8 +185,8 @@ export class CreateCompetitionDto {
   @IsOptional()
   badgeClass?: string;
 
-  @ApiProperty({ required: false })
-  @IsIn(FEE_TYPES, { message: `feeType must be one of: ${FEE_TYPES.join(', ')}` })
+  @ApiProperty({ required: false, enum: CREATABLE_FEE_TYPES, description: "'paid' means every player pays the entry fee (stored as per_player)." })
+  @IsIn(CREATABLE_FEE_TYPES, { message: 'The entry fee must be Free or Paid.' })
   @IsOptional()
   feeType?: string;
 

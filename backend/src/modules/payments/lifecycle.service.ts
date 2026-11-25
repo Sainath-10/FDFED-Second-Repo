@@ -15,6 +15,7 @@ import { NotificationEntity as Notification } from '../../entities/notification.
 import { AdminActivityLogEntity as Audit } from '../../entities/admin-activity-log.entity';
 import { RevenueTransactionEntity as Revenue } from '../../entities/revenue-transaction.entity';
 import { UserRole, DisputeStatus } from '../../common/interfaces';
+import { organiserEndBlockers } from '../../common/competition-end';
 import { TERMINAL_PAYMENT_STATES, TRUST_PENALTY_CANCEL, TRUST_PENALTY_FRAUD, mailSubject, prizeDeadline, allocatePrizes, standingsGroups, DEFAULT_MIN_ORGANIZER_TRUST } from './payment.rules';
 import { CompetitionRemovalEntity } from '../../entities/competition-removal.entity';
 import { isEligiblePlayerAccount } from '../../common/validation/player-eligibility';
@@ -132,19 +133,28 @@ export class LifecycleService implements OnModuleInit, OnModuleDestroy {
     if (owner) { owner.organizerTrustScore = Math.max(0, Number(owner.organizerTrustScore ?? 100) - points); await m.save(owner); }
   }
 
+  /** Registration payments recorded for one payer key: the first uses `key`, re-joins after a refund `key#2`, `key#3`… */
+  private async registrationsFor(m: EntityManager, c: Competition, key: string) {
+    const rows = await m.find(Transaction, { where: { competitionId: c.id, type: 'REGISTRATION' } });
+    return rows.filter(tx => tx.subjectKey === key || tx.subjectKey.startsWith(`${key}#`));
+  }
+
   private async fee(m: EntityManager, c: Competition, team: Team, username: string, key: string, amount: number) {
-    const prior = await m.findOneBy(Transaction, { competitionId: c.id, type: 'REGISTRATION', subjectKey: key });
-    if (prior) {
-      if (prior.status !== 'ESCROWED') throw new BadRequestException('This registration was already settled.');
-      return;
-    }
-    await this.entry(m, c, 'REGISTRATION', key, username, amount, 'IN', team.id);
+    const prior = await this.registrationsFor(m, c, key);
+    // Already paid and still held in escrow: never charge twice.
+    if (prior.some(tx => tx.status === 'ESCROWED')) return;
+    // Paid out with the competition: it cannot be paid again.
+    if (prior.some(tx => tx.status !== 'REFUNDED')) throw new BadRequestException('This registration was already settled.');
+    // Every earlier payment was refunded (the player left and is re-joining):
+    // record a new payment under the next key, so the refunded one stays in the ledger.
+    const paymentKey = prior.length ? `${key}#${prior.length + 1}` : key;
+    await this.entry(m, c, 'REGISTRATION', paymentKey, username, amount, 'IN', team.id);
     const e = await this.escrow(m, c);
     e.registrationsMinor += amount; e.balanceMinor += amount;
     await m.save(e);
-    await this.notify(m, c, username, 'registration-confirmed', key,
+    await this.notify(m, c, username, 'registration-confirmed', paymentKey,
       `Your registration for team ${team.name} is confirmed.\nAmount paid: ${inr(amount)} (held in escrow, not paid to the organizer).\n\nRefund policy: if the organizer cancels or abandons the competition, your registration fee is refunded in full.`);
-    await this.notify(m, c, c.createdBy, 'new-team-joined', key,
+    await this.notify(m, c, c.createdBy, 'new-team-joined', paymentKey,
       `@${username} registered with team ${team.name}. Registration fees stay in escrow until the competition is settled.`);
   }
 
@@ -277,7 +287,8 @@ export class LifecycleService implements OnModuleInit, OnModuleDestroy {
       const started = +new Date(c.startDate) <= Date.now();
       if (started && !afterStart) throw new BadRequestException('The competition has started: rosters are locked.');
       if (!started) {
-        for (const tx of await m.find(Transaction, { where: { competitionId: c.id, type: 'REGISTRATION', teamId, subjectKey: member } })) {
+        // Includes a fee paid again after re-joining (key `member#n`); refund() skips anything already refunded.
+        for (const tx of (await this.registrationsFor(m, c, member)).filter(t => t.teamId === teamId)) {
           await this.refund(m, c, tx, `You left team ${team.name}: ${reason}`, 'registration-refunded');
         }
       } else {
@@ -682,18 +693,43 @@ export class LifecycleService implements OnModuleInit, OnModuleDestroy {
       if (!soloWinner && (!fixtures.length || fixtures.some(x => !['completed', 'bye'].includes(x.status)))) {
         throw new BadRequestException('Some fixtures are still to be played. To end the competition early, give a reason: a finance moderator reviews it, players are refunded, and you forfeit 10% of the prize pool.');
       }
+      // An organiser with unresolved disputes against them cannot end (and so
+      // cannot pay out) until a moderator has resolved every one of them.
+      const blockers = await organiserEndBlockers(m, c.id);
+      if (blockers.total > 0) {
+        throw new BadRequestException(
+          `There ${blockers.total === 1 ? 'is 1 unresolved dispute' : `are ${blockers.total} unresolved disputes`} against you in this competition. `
+          + 'You can end it once they are resolved; you will be notified when that happens.',
+        );
+      }
       await this.rankGroups(m, c);
       c.status = 'completed'; c.paymentStatus = 'COMPLETED'; c.endedAt = new Date();
       await m.save(c);
-      const until = this.disputeWindowEndsAt(c);
       const teams = await m.find(Team, { where: { competitionId: id } });
-      await this.notify(m, c, c.createdBy, 'tournament-completed', '',
-        `You ended "${c.name}". Players can dispute the results until ${until.toUTCString()}.\nAfter that, a finance moderator reviews the results and releases the prizes and your registration revenue. Until then, all money stays in escrow.`);
-      for (const name of new Set(teams.filter(activeTeam).flatMap(t => t.memberUsernames))) {
-        await this.notify(m, c, name, 'tournament-completed', '',
-          `Results for "${c.name}" are final.\n\nIf you believe a result is wrong, raise a dispute before ${until.toUTCString()}. Prize payouts are released by a finance moderator only after this window closes and every dispute is resolved.`);
+      const players = new Set(teams.filter(activeTeam).flatMap(t => t.memberUsernames));
+
+      // All fixtures are over and nothing is disputed: pay the winners now.
+      const held = await this.payoutBlocker(m, c);
+      if (!held) {
+        await this.release(m, c, user.username, 'Competition ended with every fixture complete and no open dispute: prizes released automatically.');
+        await this.notify(m, c, c.createdBy, 'tournament-completed', '',
+          `You ended "${c.name}". Every fixture was complete and nothing was disputed, so the prizes were paid to the winners automatically and your registration revenue was released.`);
+        for (const name of players) {
+          await this.notify(m, c, name, 'tournament-completed', '',
+            `Results for "${c.name}" are final and the prizes have been paid out. Prize winners receive a separate payout notice.`);
+        }
+        return c;
       }
-      await this.audit(m, c, user.username, 'SETTLEMENT_REQUESTED', 'Results completed; dispute window opened.');
+
+      // Something needs a human first (a finance hold, an open player dispute,
+      // or a result finance must check): the money stays in escrow.
+      await this.notify(m, c, c.createdBy, 'tournament-completed', '',
+        `You ended "${c.name}". The prizes could not be paid out automatically: ${held}\nA finance moderator will review it and release the prizes and your registration revenue. Until then, all money stays in escrow.`);
+      for (const name of players) {
+        await this.notify(m, c, name, 'tournament-completed', '',
+          `Results for "${c.name}" are final. The prizes will be paid once a finance moderator has reviewed the competition.`);
+      }
+      await this.audit(m, c, user.username, 'SETTLEMENT_REQUESTED', `Results completed; payout needs finance review: ${held}`);
       return c;
     });
   }
@@ -708,6 +744,42 @@ export class LifecycleService implements OnModuleInit, OnModuleDestroy {
       if (until && Date.now() < +until) throw new BadRequestException(`Players can dispute the results until ${until.toUTCString()}. Settle after the dispute window closes.`);
       const disputes = await m.find(Dispute, { where: { competitionId: id } });
       if (disputes.some(d => d.status !== DisputeStatus.RESOLVED)) throw new BadRequestException('Resolve all disputes before releasing funds.');
+      return this.release(m, c, user.username, 'Reviewed results and released mock escrow.');
+    });
+  }
+
+  /**
+   * Why an ended competition cannot be paid out automatically, or null when it
+   * can. Mirrors every check release() makes, so an automatic payout never
+   * fails halfway; anything flagged here is left for a finance moderator.
+   */
+  private async payoutBlocker(m: EntityManager, c: Competition): Promise<string | null> {
+    if (c.financeHold) return 'a finance moderator has placed a hold on this competition.';
+    if (!c.prizePoolPaid) return 'the prize pool has not been deposited.';
+    const disputes = await m.find(Dispute, { where: { competitionId: c.id } });
+    if (disputes.some(d => d.status !== DisputeStatus.RESOLVED)) return 'a dispute about this competition is still open.';
+    try {
+      const { groups, teams } = await this.rankGroups(m, c);
+      const e = await this.escrow(m, c);
+      const distribution = c.prizeDistributionMinor?.length ? c.prizeDistributionMinor : [e.prizeMinor];
+      if (distribution.reduce((a, b) => a + b, 0) !== e.prizeMinor) return 'the prize split does not match the deposited prize pool.';
+      const organizers = new Set([c.createdBy, ...(c.organizers || [])]);
+      const teamById = new Map(teams.map(t => [t.id, t]));
+      for (const { teamId } of allocatePrizes(distribution, groups).allocations) {
+        const team = teamById.get(teamId);
+        if (!team || !activeTeam(team)) return 'a prize-winning team is no longer active.';
+        if ((team.memberUsernames?.length ? team.memberUsernames : [team.leaderId]).some(name => organizers.has(name))) return 'a prize-winning team includes an organiser of this competition.';
+      }
+    } catch (err) {
+      return (err as Error).message;
+    }
+    return null;
+  }
+
+  /** Pays the winners and releases the organiser's registration revenue (one transaction with the caller). */
+  private async release(m: EntityManager, c: Competition, actor: string, note: string) {
+    const id = c.id;
+    {
       const { groups, teams } = await this.rankGroups(m, c);
       const organizers = new Set([c.createdBy, ...(c.organizers || [])]);
       const teamById = new Map(teams.map(t => [t.id, t]));
@@ -756,9 +828,9 @@ export class LifecycleService implements OnModuleInit, OnModuleDestroy {
       await m.save(c);
       await this.notify(m, c, c.createdBy, 'organizer-revenue-released', '',
         `Registration revenue of ${inr(revenue)} from ${registrations.length} registration(s) has been released to you in full (mock).\nThe platform fee was collected separately at publication.${unawarded > 0 ? `\n\n${inr(unawarded)} of the prize pool was for places no team could fill, so it has been returned to you.` : ''}`);
-      await this.audit(m, c, user.username, 'ESCROW_RELEASED', 'Reviewed results and released mock escrow.');
+      await this.audit(m, c, actor, 'ESCROW_RELEASED', note);
       return e;
-    });
+    }
   }
 
   /**

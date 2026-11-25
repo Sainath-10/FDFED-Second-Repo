@@ -300,54 +300,6 @@ export class AuthService {
     return { ...result, username: target.username };
   }
 
-  /**
-   * Super Admin / Admin sets a new one-time password for an account after a
-   * reset request. The password is returned once to the staff member, who
-   * passes it to the user through a trusted channel.
-   */
-  async resetPassword(usernameOrId: string, actor: any) {
-    const target = await this.moderationTarget(usernameOrId, actor);
-    const temporaryPassword = generateTemporaryPassword();
-    await this.userRepository.updatePassword(target.id, await bcrypt.hash(temporaryPassword, 10));
-    await this.auditLog.record('PASSWORD_RESET', {
-      actor: actor?.username,
-      entityType: 'user',
-      entityId: target.id,
-      details: `Temporary password issued for @${target.username}.`,
-    });
-    return { username: target.username, temporaryPassword };
-  }
-
-  /**
-   * Forgot Password: there is no email service, so the request goes to the
-   * administrators, who issue a temporary password. The response is the same
-   * whether or not the account exists.
-   */
-  async requestPasswordReset(emailOrUsername: string) {
-    const user = await this.userRepository.findByEmailOrUsername(emailOrUsername);
-    if (user && !user.banned) {
-      const admins = (await this.userRepository.findAll()).filter(
-        (u) => !u.banned && isSuperAdmin(u),
-      );
-      await Promise.all(
-        admins.map((admin) =>
-          this.notificationsService.create({
-            toUsername: admin.username,
-            type: 'password-reset-request',
-            status: 'pending',
-            title: 'Password reset requested',
-            body: `@${user.username} asked for a password reset. Open Users, choose the account and select Reset password.`,
-            meta: { username: user.username },
-          }).catch(() => {}),
-        ),
-      );
-    }
-    return {
-      message:
-        'If an account matches, an administrator has been notified and will contact you with a temporary password.',
-    };
-  }
-
   async updateProfile(id: string, updates: UpdateProfileDto) {
     const clean: Partial<{ bio: string; profilePicUrl: string }> = {};
     if (updates.bio !== undefined) clean.bio = updates.bio.trim();

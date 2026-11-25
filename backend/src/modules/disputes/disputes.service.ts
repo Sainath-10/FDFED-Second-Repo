@@ -1,4 +1,6 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Optional } from '@nestjs/common';
+import { DataSource } from 'typeorm';
+import { notifyIfEndUnblocked } from '../../common/competition-end';
 import { ConfigService } from '@nestjs/config';
 import { isUUID } from 'class-validator';
 import { DisputeRepository } from './repositories/dispute.repository';
@@ -32,6 +34,7 @@ export class DisputesService {
     private notificationsService: NotificationsService,
     private auditLog: AuditLogService,
     private config: ConfigService,
+    @Optional() private dataSource?: DataSource,
   ) {}
 
   private organizersOf(comp: any): string[] {
@@ -260,6 +263,10 @@ export class DisputesService {
       metadata: { status: updated.status, banApplied: !!updated.banApplied },
     });
     await this.notifyReporter(updated, dto.resolutionNotes);
+    // The last dispute against the organiser is resolved: tell them they can end the competition.
+    if (updated.targetType === DisputeTargetType.ORGANIZER && this.dataSource) {
+      await notifyIfEndUnblocked(this.dataSource.manager, updated.competitionId, (n) => this.notificationsService.create(n)).catch(() => false);
+    }
     return updated;
   }
 

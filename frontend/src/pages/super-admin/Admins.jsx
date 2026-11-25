@@ -22,7 +22,7 @@ export default function Admins() {
 
   const load = useCallback(async () => {
     const res = await AuthAPI.getAllUsers();
-    if (!res.ok) { setError(res.error || 'Unable to load administrators.'); return; }
+    if (!res.ok) { setError(res.error || 'Unable to load mods.'); return; }
     setError('');
     setRows((res.data || []).filter((u) => STAFF.includes(typeOf(u))).sort((a, b) => labelOf(typeOf(a)).localeCompare(labelOf(typeOf(b))) || a.username.localeCompare(b.username)));
   }, []);
@@ -36,15 +36,15 @@ export default function Admins() {
   return (
     <main className="main-content">
       <PageHeader
-        title="Administrators"
+        title="Mods"
         subtitle="Every staff account on the platform."
         actions={<>
           <Link className="btn-cancel" to="/pages/super-admin/revoke-admin.html">Revoke access</Link>
-          <Link className="btn-primary" to="/pages/super-admin/add-admin.html">+ Add administrator</Link>
+          <Link className="btn-primary" to="/pages/super-admin/add-admin.html">+ Add mod</Link>
         </>}
       />
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
-        <input type="search" className="form-input" style={{ maxWidth: 340 }} aria-label="Search administrators" placeholder="Search…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <input type="search" className="form-input" style={{ maxWidth: 340 }} aria-label="Search mods" placeholder="Search…" value={query} onChange={(e) => setQuery(e.target.value)} />
         <select className="form-input" style={{ maxWidth: 220 }} aria-label="Filter by role" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
           <option value="all">All roles</option>
           {ADMIN_ROLE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -52,8 +52,8 @@ export default function Admins() {
       </div>
 
       {error && <ErrorState message={error} onRetry={load} />}
-      {!error && rows === null && <LoadingState label="Loading administrators…" />}
-      {!error && rows && visible.length === 0 && <EmptyState title="No administrators match" />}
+      {!error && rows === null && <LoadingState label="Loading mods…" />}
+      {!error && rows && visible.length === 0 && <EmptyState title="No mods match" />}
       {!error && rows && visible.length > 0 && (
         <div className="ui-table-wrap">
           <table className="ui-table">

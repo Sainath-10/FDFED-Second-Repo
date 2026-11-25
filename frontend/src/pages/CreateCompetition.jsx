@@ -20,15 +20,15 @@ import { competitionBanner } from '../lib/assets.js';
 import { ConfirmDialog, Notice, formatINR } from '../components/ui.jsx';
 import { showToast } from '../lib/toast.js';
 import '../styles/pages/create-competition.css';
+import { creationBan } from '../components/CreateCompetitionLink.jsx';
 
-const BLOCKING_SANCTIONS = ['creation_restriction', 'one_month_ban', 'lifetime_ban', 'competition_suspension'];
 
+/** Same ban wording as the Create Competition pop-up (for anyone who opens this page directly). */
 function creationBlock(profile) {
-  if (!profile) return '';
-  if (profile.lifetimeBan) return 'Your account is permanently banned from organizing competitions.';
-  if (profile.bannedUntil && new Date(profile.bannedUntil) > new Date()) return `You cannot organize competitions until ${new Date(profile.bannedUntil).toLocaleDateString('en-IN')}.`;
-  const active = (profile.activeSanctions || []).find((s) => BLOCKING_SANCTIONS.includes(s.type));
-  return active ? `An active restriction blocks new competitions: ${active.reason}` : '';
+  const ban = creationBan(profile);
+  if (!ban) return '';
+  const until = ban.until ? ` You can create competitions again after ${new Date(ban.until).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}.` : '';
+  return `${ban.message}${until}${ban.reason ? ` Reason: ${ban.reason}` : ''}`;
 }
 
 /** Declared at module scope so inputs keep focus between renders. */
@@ -269,12 +269,11 @@ export default function CreateCompetition() {
               <Field id="max-players" label={`Players per team (1–${MAX_PLAYERS}) *`} error={err('maxPlayers')}><input className="form-input" type="number" id="max-players" min="1" max={MAX_PLAYERS} step="1" value={form.maxPlayers} onChange={set('maxPlayers')} /></Field>
             </div>
             <div className="form-row">
-              <Field id="fee-type" label="Entry fee *" error={err('feeType')}>
+              <Field id="fee-type" label="Entry fee *" error={err('feeType')} help={form.feeType === 'per_player' ? 'Every player pays the entry fee, the team captain included.' : ''}>
                 <select className="form-select" id="fee-type" value={form.feeType} onChange={set('feeType')}>
                   <option value="" disabled>Choose an entry fee option</option>
                   <option value="free">Free</option>
-                  <option value="per_team">Per team (captain pays)</option>
-                  <option value="per_player">Per player (each player pays)</option>
+                  <option value="per_player">Paid</option>
                 </select>
               </Field>
               {form.feeType && form.feeType !== 'free' && (

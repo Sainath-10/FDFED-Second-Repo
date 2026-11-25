@@ -5,7 +5,7 @@
  * type and description lock once registration closes; dates lock once play
  * starts; capacity can only grow. The danger zone:
  *  - before the start: cancel (every player refunded);
- *  - after the start, every fixture played: end (opens the dispute window);
+ *  - after the start, every fixture played and no open dispute against the organiser: end (prizes are paid out automatically);
  *  - after the start, fixtures still to play: request an early end with a reason.
  *    A finance moderator reviews it; if approved, players are refunded and the
  *    organiser forfeits 10% of the prize pool.
@@ -160,7 +160,9 @@ export default function EditCompetition() {
     const res = await CompetitionsAPI.end(comp.id);
     if (!res.ok) { showToast(res.error || 'Unable to end the competition.', 'error'); return; }
     setConfirmEnd(false);
-    showToast('Competition ended. Players can raise disputes before finance releases prizes.');
+    showToast(res.data?.paymentStatus === 'PRIZE_RELEASED'
+      ? 'Competition ended. The prizes were paid to the winners automatically.'
+      : 'Competition ended. A finance moderator will review it before the prizes are paid.');
     navigate(`/pages/competition-detail.html?id=${encodeURIComponent(comp.id)}`);
   }
 
@@ -285,7 +287,7 @@ export default function EditCompetition() {
               <div className="ui-row-meta">
                 {!started ? 'Available once the competition has started.'
                   : soloWinner ? `Only one team registered: ending declares ${(comp.activeTeams || [])[0]?.name || 'it'} the solo winner. The other places stay empty.`
-                  : fixturesDone ? 'Every fixture is complete. Ending opens the dispute window; finance then releases the prizes.'
+                  : fixturesDone ? 'Every fixture is complete. Ending pays the prizes to the winners automatically. You cannot end while a dispute against you is unresolved.'
                     : `${remaining} fixture${remaining === 1 ? ' is' : 's are'} still to be played. Ending now needs a reason and a finance moderator's approval: players are refunded and you forfeit ${penaltyPercent}% of the prize pool${prizeAmount ? ` (${formatINR(Math.round(prizeAmount * penaltyPercent) / 100)})` : ''}.`}
               </div>
             </div>
@@ -314,7 +316,7 @@ export default function EditCompetition() {
         open={confirmEnd}
         tone="primary"
         title="End competition"
-        message="End this competition now? Results become final and players get a window to raise disputes before prizes are released."
+        message="End this competition now? Results become final and the prize pool is paid to the winners straight away."
         confirmLabel="End competition"
         onConfirm={endCompetition}
         onClose={() => setConfirmEnd(false)}

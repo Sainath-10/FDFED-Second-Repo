@@ -36,6 +36,7 @@ import {
   LARGE_PRIZE_POOL,
   isUnpublished,
 } from '../../common/validation/competition.rules';
+import { organiserEndBlockers } from '../../common/competition-end';
 
 @Injectable()
 export class CompetitionsService {
@@ -138,7 +139,9 @@ export class CompetitionsService {
     const { prizes: _prizeDistribution, contactDetails: _contact, ...competitionExtras } = extras as any;
 
     // §2.2 — minimum entry fee ₹10 where a fee applies; a free competition charges nothing.
-    const feeType = extras.feeType || 'free';
+    // Free or Paid only: on a paid competition every player pays the fee themselves.
+    if (extras.feeType === 'per_team') throw new BadRequestException('The entry fee must be Free or Paid; every player pays their own fee.');
+    const feeType = extras.feeType === 'paid' ? 'per_player' : (extras.feeType || 'free');
     if (feeType === 'free' && Number(extras.entryFeeAmount || 0) !== 0) {
       throw new BadRequestException('A free competition cannot have an entry fee.');
     }
@@ -757,6 +760,11 @@ export class CompetitionsService {
     }
     if (!isCompetitionStarted(comp as any)) {
       throw new BadRequestException('You can end the competition only after the tournament has started.');
+    }
+    // (Test doubles of the repository have no manager; production always does.)
+    const blockers = this.teamRepository.manager ? await organiserEndBlockers(this.teamRepository.manager, id) : { total: 0 };
+    if (blockers.total > 0) {
+      throw new BadRequestException(`There ${blockers.total === 1 ? 'is 1 unresolved dispute' : `are ${blockers.total} unresolved disputes`} against you in this competition. You can end it once they are resolved; you will be notified when that happens.`);
     }
 
     const updated = await this.competitionRepository.update(id, { status: 'completed' } as any);

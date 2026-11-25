@@ -5,6 +5,7 @@
  * platform totals, open competitions, competitions in progress and games.
  */
 import { Link, useNavigate } from 'react-router-dom';
+import CreateCompetitionLink from '../components/CreateCompetitionLink.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import CompCard from '../components/CompCard.jsx';
 import { EmptyState, formatINR } from '../components/ui.jsx';
@@ -110,7 +111,7 @@ export default function Index() {
         <div className="comps-home-grid" id="home-comps-grid">
           {featured.map((comp) => <CompCard key={comp.id} comp={comp} session={session} />)}
         </div>
-        {!loading && featured.length === 0 && <EmptyState title="No open competitions yet" message="Create the first one." action={<Link className="btn-primary" to={session ? '/pages/create-competition.html' : '/pages/signup.html'}>Create a competition</Link>} />}
+        {!loading && featured.length === 0 && <EmptyState title="No open competitions yet" message="Create the first one." action={<CreateCompetitionLink className="btn-primary" to={session ? '/pages/create-competition.html' : '/pages/signup.html'}>Create a competition</CreateCompetitionLink>} />}
       </section>
 
       <section className="home-section dark">
