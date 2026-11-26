@@ -56,7 +56,7 @@ export default function TeamRoster() {
 
   return (
     <main className="main-content">
-      <TeamHeader t={t} active="roster" />
+      <TeamHeader active="roster" />
 
       {isEnded && <CompetitionResults competitionId={comp.id} highlightTeamId={team.id} compact />}
       {isEnded && <Notice tone="warning">This competition has ended. The roster is final.</Notice>}

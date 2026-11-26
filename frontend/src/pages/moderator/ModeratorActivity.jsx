@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext.jsx';
+import { useSelector } from 'react-redux';
 import { ReportsAPI as LocalReportsAPI } from '../../services/api.js';
 import useReportSync from '../../hooks/useReportSync.js';
 import { UpliftModal } from '../../components/ReportActionModals.jsx';
@@ -49,7 +49,7 @@ const FILTERS = [
 
 export default function ModeratorActivity() {
   const [params] = useSearchParams();
-  const { session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
   const targetUsername = (params.get('admin') || session?.username || '').trim();
   const displayName = targetUsername || 'Community Moderator';
 

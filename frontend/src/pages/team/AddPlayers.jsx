@@ -8,7 +8,9 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useDispatch } from 'react-redux';
 import { useTeamContext } from '../../hooks/useTeamContext.js';
+import { setPendingJoinRequests } from '../../store/teamSlice.js';
 import { TeamsAPI } from '../../services/api.js';
 import TeamHeader, { TeamAvatar } from '../../components/TeamHeader.jsx';
 import UsernameSearch from '../../components/UsernameSearch.jsx';
@@ -18,10 +20,10 @@ import { showToast } from '../../lib/toast.js';
 
 export default function AddPlayers() {
   const t = useTeamContext();
+  const dispatch = useDispatch();
   const [text, setText] = useState('');
   const [suggested, setSuggested] = useState([]);
   const [invites, setInvites] = useState([]);
-  const [requests, setRequests] = useState([]);
   const [version, setVersion] = useState(0);
   const [sendingTo, setSendingTo] = useState('');
   const teamId = t.team?.id;
@@ -37,8 +39,10 @@ export default function AddPlayers() {
     if (!teamId || !t.canManage) return;
     TeamsAPI.getAvailablePlayers(teamId, '').then((res) => setSuggested(res.ok && Array.isArray(res.data) ? res.data.slice(0, 8) : []));
     TeamsAPI.getTeamInvites(teamId).then((res) => { if (res.ok && Array.isArray(res.data)) setInvites(res.data); });
-    TeamsAPI.getJoinRequests(teamId).then((res) => { if (res.ok && Array.isArray(res.data)) setRequests(res.data); });
-  }, [teamId, t.canManage, version]);
+    TeamsAPI.getJoinRequests(teamId).then((res) => {
+      if (res.ok && Array.isArray(res.data)) dispatch(setPendingJoinRequests(res.data.filter((r) => r.status === 'pending').length));
+    });
+  }, [teamId, t.canManage, version, dispatch]);
 
   const gate = teamGate(t, { captainOnly: true, title: 'Add players' });
   if (gate) return gate;
@@ -47,7 +51,7 @@ export default function AddPlayers() {
   const maxPlayers = comp.maxPlayersPerTeam || 5;
   const isFull = members.length >= maxPlayers;
   const pendingInvites = invites.filter((i) => i.status === 'pending');
-  const pendingRequests = requests.filter((r) => r.status === 'pending').length;
+  const pendingRequests = t.pendingJoinRequests;
   const perPlayerFee = comp.feeType === 'per_player' && Number(comp.entryFeeAmount) > 0;
   const blocked = rosterLocked || isFull;
 
@@ -65,7 +69,7 @@ export default function AddPlayers() {
 
   return (
     <main className="main-content">
-      <TeamHeader t={t} active="add-players" joinRequestCount={pendingRequests} />
+      <TeamHeader active="add-players" />
 
       {isEnded && <Notice tone="warning">This competition has ended, so no more players can be invited.</Notice>}
       {!isEnded && isStarted && <Notice tone="info">The competition has started, so the roster is locked.</Notice>}

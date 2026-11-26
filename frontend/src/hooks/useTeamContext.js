@@ -7,10 +7,17 @@
  *   2. the viewer's own active team in the competition in the URL (?compId=…), else
  *   3. the viewer's most recent active team (captains first).
  * The viewer's role (captain / player) is read from the server roster.
+ *
+ * The loaded team is kept in the Redux store (store/teamSlice.js):
+ *   useTeamContext() → used by each team PAGE: loads the team into the store
+ *                      and returns everything the page needs.
+ *   useTeamView()    → used by TeamHeader / TeamTabs: only reads the store,
+ *                      so the page no longer has to pass the team down as props.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useEffect, useMemo, useState } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
 import { CompetitionsAPI, ReportsAPI, TeamsAPI } from '../services/api.js';
+import { teamFailed, teamLoaded } from '../store/teamSlice.js';
 
 const normalize = (value) => String(value || '').trim().toLowerCase();
 const INACTIVE = ['rejected', 'banned', 'disbanded'];
@@ -42,21 +49,76 @@ function toTeam(row) {
   return { ...row, dbId: row.id, leader, createdBy: leader, members };
 }
 
+/** Nothing loaded yet for this team: what the pages see while it loads. */
+const EMPTY = { key: '', team: null, comp: null, removal: null, error: '', pendingJoinRequests: 0 };
+
+/**
+ * Turns the raw store data (state.team) into the values the team pages use:
+ * the mapped team, the viewer's permissions and the competition's stage.
+ */
+function buildTeamView(data, session, loading, queryCompId = null, queryTeamId = null) {
+  const mapped = toTeam(data.team);
+  const comp = data.comp;
+  const me = normalize(session?.username);
+  const sessionRole = normalize(session?.role);
+  const isStaff = ['super_admin', 'super-admin'].includes(sessionRole);
+  const active = !!mapped && !INACTIVE.includes(normalize(mapped.status));
+  const isMember = !!mapped && mapped.members.some((m) => normalize(m.username) === me);
+  const isLeader = active && isMember && normalize(mapped.leader) === me;
+  const isEnded = isCompetitionEnded(comp);
+  const isStarted = hasCompetitionStarted(comp);
+  const context = mapped ? { compId: mapped.competitionId, teamId: mapped.id } : (queryCompId ? { compId: queryCompId } : null);
+
+  return {
+    ctx: mapped && comp ? { session, comp, team: mapped, context } : null,
+    loading,
+    error: data.error,
+    session,
+    comp,
+    team: mapped,
+    members: mapped ? mapped.members : [],
+    canManage: isStaff || isLeader,
+    isLeader,
+    isMember,
+    isTeamPlayer: active && isMember && !isLeader,
+    canChat: active && isMember,
+    chatTeamId: mapped ? mapped.id : null,
+    checkingPermission: loading,
+    isRemoved: !!data.removal?.removed,
+    removalReason: data.removal?.reason || '',
+    isEnded,
+    isStarted,
+    rosterLocked: isEnded || isStarted,
+    compId: mapped?.competitionId || queryCompId || null,
+    teamId: mapped?.id || queryTeamId || null,
+    teamName: mapped?.name || '',
+    context,
+    pendingJoinRequests: data.pendingJoinRequests,
+  };
+}
+
+/** Read-only view of the team in the store, for components inside a team page. */
+export function useTeamView() {
+  const session = useSelector((state) => state.auth.session);
+  const data = useSelector((state) => state.team);
+  return useMemo(() => buildTeamView(data, session, false), [data, session]);
+}
+
+/** Loads the team for the current URL into the store and returns it. Call it once per team page. */
 export function useTeamContext() {
-  const { session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
+  const stored = useSelector((state) => state.team);
+  const dispatch = useDispatch();
+
   const query = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
   const queryTeamId = query.get('teamId');
   const queryCompId = query.get('compId') || query.get('id');
+  const username = String(session?.username || '');
+  // Which team this page wants. If the store holds a different one, we are still loading.
+  const key = `${queryTeamId || ''}|${queryCompId || ''}|${username}`;
 
   const [version, setVersion] = useState(0);
-  const [team, setTeam] = useState(null);
-  const [comp, setComp] = useState(null);
-  const [removal, setRemoval] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  const refresh = useCallback(() => setVersion((v) => v + 1), []);
-  const username = String(session?.username || '');
+  const refresh = () => setVersion((v) => v + 1);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,7 +144,9 @@ export function useTeamContext() {
       try {
         const row = await resolveTeam();
         if (cancelled) return;
-        setTeam(row);
+        let comp = null;
+        let removal = null;
+        let error = '';
         const compId = row?.competitionId || queryCompId;
         if (compId) {
           const [compRes, removalRes] = await Promise.all([
@@ -90,17 +154,13 @@ export function useTeamContext() {
             username ? ReportsAPI.removalStatus(compId) : Promise.resolve(null),
           ]);
           if (cancelled) return;
-          setComp(compRes.ok ? compRes.data : null);
-          setRemoval(removalRes && removalRes.ok ? removalRes.data : null);
-          if (!compRes.ok && compRes.status === 403) setError(compRes.error || '');
-        } else {
-          setComp(null);
+          comp = compRes.ok ? compRes.data : null;
+          removal = removalRes && removalRes.ok ? removalRes.data : null;
+          if (row && !compRes.ok && compRes.status === 403) error = compRes.error || '';
         }
-        setError((prev) => (row ? prev : ''));
+        dispatch(teamLoaded({ key, team: row, comp, removal, error }));
       } catch (err) {
-        if (!cancelled) { setTeam(null); setError(err.message || 'Unable to load this team.'); }
-      } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) dispatch(teamFailed({ key, error: err.message || 'Unable to load this team.' }));
       }
     }
     load();
@@ -108,47 +168,14 @@ export function useTeamContext() {
     const timer = window.setInterval(load, 15000);
     window.addEventListener('focus', load);
     return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener('focus', load); };
-  }, [queryTeamId, queryCompId, username, version]);
+  }, [key, queryTeamId, queryCompId, username, version, dispatch]);
 
-  const mapped = useMemo(() => toTeam(team), [team]);
-  const me = normalize(username);
-  const sessionRole = normalize(session?.role);
-  const isStaff = ['super_admin', 'super-admin'].includes(sessionRole);
-  const active = !!mapped && !INACTIVE.includes(normalize(mapped.status));
-  const isMember = !!mapped && mapped.members.some((m) => normalize(m.username) === me);
-  const isLeader = active && isMember && normalize(mapped.leader) === me;
-  const isEnded = isCompetitionEnded(comp);
-  const isStarted = hasCompetitionStarted(comp);
-  const context = mapped ? { compId: mapped.competitionId, teamId: mapped.id } : (queryCompId ? { compId: queryCompId } : null);
-
-  const ctx = mapped && comp ? { session, comp, team: mapped, context } : null;
-
-  return {
-    ctx,
-    refresh,
-    loading,
-    error,
-    session,
-    comp,
-    team: mapped,
-    members: mapped ? mapped.members : [],
-    canManage: isStaff || isLeader,
-    isLeader,
-    isMember,
-    isTeamPlayer: active && isMember && !isLeader,
-    canChat: active && isMember,
-    chatTeamId: mapped ? mapped.id : null,
-    checkingPermission: loading,
-    isRemoved: !!removal?.removed,
-    removalReason: removal?.reason || '',
-    isEnded,
-    isStarted,
-    rosterLocked: isEnded || isStarted,
-    compId: mapped?.competitionId || queryCompId || null,
-    teamId: mapped?.id || queryTeamId || null,
-    teamName: mapped?.name || '',
-    context,
-  };
+  const isCurrent = stored.key === key;
+  const view = useMemo(
+    () => buildTeamView(isCurrent ? stored : EMPTY, session, !isCurrent, queryCompId, queryTeamId),
+    [isCurrent, stored, session, queryCompId, queryTeamId],
+  );
+  return { ...view, refresh };
 }
 
 export default useTeamContext;

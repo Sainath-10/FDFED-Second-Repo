@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useSelector } from 'react-redux';
 import { ReportsAPI, TeamsAPI } from '../services/api.js';
 import { isOrganizerOf, useCompetition } from '../services/competitions.js';
 import useJoinCodeGate from '../hooks/useJoinCodeGate.jsx';
@@ -23,7 +23,7 @@ const lower = (v) => String(v || '').toLowerCase();
 export default function JoinTeams() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const { session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
   const id = params.get('id') || params.get('compId') || '';
   // An invite link (…&teamId=) opens straight to that one team.
   const invitedTeamId = params.get('teamId');

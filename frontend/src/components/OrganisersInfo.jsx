@@ -7,6 +7,7 @@
  * notes, report descriptions and evidence are never included.
  */
 import { useEffect, useState } from 'react';
+import { useSelector } from 'react-redux';
 import { ReputationAPI } from '../services/api.js';
 import { LEVEL_META, formatINR, capitalise } from '../lib/reporting.js';
 import ReputationBadge from './ReputationBadge.jsx';
@@ -21,7 +22,8 @@ const formatDay = (value) => {
   return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
-function OrganiserRow({ competitionId, username, currentUsername, onOpen }) {
+function OrganiserRow({ competitionId, username, onOpen }) {
+  const currentUsername = useSelector((state) => state.auth.session?.username || '');
   const [profile, setProfile] = useState(null);
 
   useEffect(() => {
@@ -61,7 +63,7 @@ function OrganiserRow({ competitionId, username, currentUsername, onOpen }) {
   );
 }
 
-export default function OrganisersInfo({ competitionId, organisers = [], currentUsername = '' }) {
+export default function OrganisersInfo({ competitionId, organisers = [] }) {
   const [selected, setSelected] = useState('');
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -97,7 +99,6 @@ export default function OrganisersInfo({ competitionId, organisers = [], current
             key={username}
             competitionId={competitionId}
             username={username}
-            currentUsername={currentUsername}
             onOpen={setSelected}
           />
         ))}

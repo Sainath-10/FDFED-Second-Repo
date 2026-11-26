@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useSelector } from 'react-redux';
 import { mapCompetition, isOrganizerOf } from '../services/competitions.js';
 import { copyText } from '../components/ui.jsx';
 import { showToast } from '../lib/toast.js';
@@ -55,7 +55,7 @@ function MatchCard({ match, selected, onSelect, number }) {
 export default function CompetitionDetail() {
   const [params, setParams] = useSearchParams();
   const id = params.get('id') || '';
-  const { session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
   const [revision, setRevision] = useState(0);
   const cached = null;
   const apiId = id;

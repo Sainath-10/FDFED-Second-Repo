@@ -6,7 +6,9 @@
  */
 import { useState } from 'react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext.jsx';
+import { useDispatch, useSelector } from 'react-redux';
+import * as AuthService from '../../services/auth.js';
+import { setSession } from '../../store/authSlice.js';
 import { ROLE_ROUTES, FALLBACK_PATH } from '../../routes.js';
 import AuthCard from './AuthCard.jsx';
 import { EyeIcon, EyeOffIcon } from '../../components/icons.jsx';
@@ -29,7 +31,8 @@ function safeRedirect(value) {
 }
 
 export default function Login() {
-  const { login, session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
+  const dispatch = useDispatch();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const redirect = safeRedirect(params.get('redirect'));
@@ -54,12 +57,14 @@ export default function Login() {
     setBusy(true);
     setFeedback({ text: 'Logging in...', success: true });
 
-    const result = await login({
+    const result = await AuthService.login({
       username,
       password,
       roleRoutes: ROLE_ROUTES,
       fallbackPath: FALLBACK_PATH,
     });
+    // Put the logged-in user into the Redux store.
+    if (result.ok) dispatch(setSession(result.user));
 
     setBusy(false);
 

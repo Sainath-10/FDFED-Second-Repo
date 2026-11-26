@@ -9,7 +9,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useSelector } from 'react-redux';
 import { DisputesAPI, MatchesAPI, UploadAPI } from '../services/api.js';
 import { fetchAllTeams, fetchCompetitions } from '../services/competitions.js';
 import { EmptyState, LoadingState, Notice, PageHeader } from '../components/ui.jsx';
@@ -31,7 +31,7 @@ const lower = (v) => String(v || '').toLowerCase();
 export default function SubmitReport() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const { session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
   const [loading, setLoading] = useState(true);
   const [mine, setMine] = useState([]);
   const [compId, setCompId] = useState(params.get('compId') || '');

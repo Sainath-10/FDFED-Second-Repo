@@ -8,11 +8,11 @@
  */
 import { useMemo } from 'react';
 import { Navigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useSelector } from 'react-redux';
 import { FALLBACK_PATH, ROLE_ROUTES } from '../routes.js';
 
 export default function RoleGuard({ roles, children }) {
-  const { session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
 
   const redirectTo = useMemo(() => {
     if (!roles || roles.length === 0) return null;

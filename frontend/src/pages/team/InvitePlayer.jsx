@@ -46,7 +46,7 @@ export default function InvitePlayer() {
 
   return (
     <main className="main-content">
-      <TeamHeader t={t} active="add-players" />
+      <TeamHeader active="add-players" />
       {rosterLocked && <Notice tone="info">The roster is locked because the competition has started or ended.</Notice>}
 
       <section className="td-panel" style={{ maxWidth: 560 }}>

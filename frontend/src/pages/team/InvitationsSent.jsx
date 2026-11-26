@@ -5,7 +5,9 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useDispatch } from 'react-redux';
 import { useTeamContext } from '../../hooks/useTeamContext.js';
+import { setPendingJoinRequests } from '../../store/teamSlice.js';
 import { TeamsAPI } from '../../services/api.js';
 import TeamHeader from '../../components/TeamHeader.jsx';
 import { ConfirmDialog, EmptyState, ErrorState, LoadingState, formatDate } from '../../components/ui.jsx';
@@ -17,9 +19,9 @@ const STATUS_CLASS = { accepted: 'approved', declined: 'rejected', revoked: 'rej
 
 export default function InvitationsSent() {
   const t = useTeamContext();
+  const dispatch = useDispatch();
   const [invites, setInvites] = useState(null);
   const [error, setError] = useState('');
-  const [pendingRequests, setPendingRequests] = useState(0);
   const [revoking, setRevoking] = useState(null);
   const teamId = t.team?.id;
 
@@ -27,8 +29,8 @@ export default function InvitationsSent() {
     if (!teamId) return;
     const [inv, req] = await Promise.all([TeamsAPI.getTeamInvites(teamId), TeamsAPI.getJoinRequests(teamId)]);
     if (inv.ok) { setInvites(Array.isArray(inv.data) ? inv.data : []); setError(''); } else setError(inv.error || 'Unable to load invitations.');
-    if (req.ok && Array.isArray(req.data)) setPendingRequests(req.data.filter((r) => r.status === 'pending').length);
-  }, [teamId]);
+    if (req.ok && Array.isArray(req.data)) dispatch(setPendingJoinRequests(req.data.filter((r) => r.status === 'pending').length));
+  }, [teamId, dispatch]);
 
   useEffect(() => { if (t.canManage) load(); }, [load, t.canManage]);
 
@@ -47,7 +49,7 @@ export default function InvitationsSent() {
 
   return (
     <main className="main-content">
-      <TeamHeader t={t} active="invitations" joinRequestCount={pendingRequests} />
+      <TeamHeader active="invitations" />
       <div className="td-section-head">
         <div>
           <h2 className="td-section-title">Invitations sent</h2>

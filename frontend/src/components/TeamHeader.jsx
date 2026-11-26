@@ -10,12 +10,15 @@
  *    own fee (per-player competitions) is refunded; after the start nothing is.
  *  - the captain can unregister the whole team before the start (every fee is
  *    refunded). After the start the captain stays with the team.
+ *
+ * The team itself comes from the Redux store (useTeamView), not from props.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { MatchesAPI, TeamsAPI } from '../services/api.js';
 import { normalizeFixture } from '../lib/fixtures.mjs';
 import TeamTabs from './TeamTabs.jsx';
+import { useTeamView } from '../hooks/useTeamContext.js';
 import { ReasonDialog, formatINR } from './ui.jsx';
 import { showToast } from '../lib/toast.js';
 import '../styles/pages/team/team-dashboard.css';
@@ -60,10 +63,11 @@ export function useTeamFixtures(compId, teamId, refreshKey) {
   }, [matches, teamId]);
 }
 
-export default function TeamHeader({ t, active, joinRequestCount, refreshKey }) {
+export default function TeamHeader({ active, refreshKey }) {
+  const t = useTeamView();
   const navigate = useNavigate();
   const [dialog, setDialog] = useState(null);
-  const { team, comp, members, canManage, canChat, isEnded, isStarted, isLeader, isMember, context } = t;
+  const { team, comp, members, isEnded, isStarted, isLeader, isMember } = t;
   const fixtures = useTeamFixtures(comp?.id, team?.id, refreshKey);
   if (!team || !comp) return null;
 
@@ -171,7 +175,7 @@ export default function TeamHeader({ t, active, joinRequestCount, refreshKey }) 
         </div>
       </header>
 
-      <TeamTabs active={active} context={context} canManage={canManage} canChat={canChat} isEnded={isEnded} joinRequestCount={joinRequestCount} />
+      <TeamTabs active={active} />
 
       <ReasonDialog
         open={dialog === 'leave'}

@@ -7,7 +7,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext.jsx';
+import { useSelector } from 'react-redux';
 import { AuthAPI } from '../../services/api.js';
 import { Notice, PageHeader } from '../../components/ui.jsx';
 import { showToast } from '../../lib/toast.js';
@@ -17,7 +17,7 @@ const STAFF = ['super_admin', 'finance_moderator', 'community_moderator'];
 export default function RevokeAdmin() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const { session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
   const [staff, setStaff] = useState([]);
   const [username, setUsername] = useState(params.get('username') || '');
   const [reason, setReason] = useState('');

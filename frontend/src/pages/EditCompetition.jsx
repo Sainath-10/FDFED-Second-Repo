@@ -13,7 +13,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useSelector } from 'react-redux';
 import { CompetitionsAPI, MatchesAPI, PlatformAPI } from '../services/api.js';
 import { paymentRequest, requestEarlyEnd } from '../services/payments.js';
 import { UsernameChips } from '../components/UsernameSearch.jsx';
@@ -36,7 +36,7 @@ const field = (label, error, children, help) => (
 export default function EditCompetition() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const { session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
   const id = params.get('id') || '';
   const { loading, error, data: comp, reload } = useCompetition(id);
 

@@ -9,7 +9,7 @@
  */
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useSelector } from 'react-redux';
 import { ReputationAPI } from '../services/api.js';
 import { creationBan } from '../lib/creationBan.js';
 
@@ -41,7 +41,7 @@ export function CreationBanDialog({ ban, onClose }) {
 }
 
 export default function CreateCompetitionLink({ to = '/pages/create-competition.html', className, children }) {
-  const { session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
   const navigate = useNavigate();
   const [ban, setBan] = useState(null);
   const [checking, setChecking] = useState(false);

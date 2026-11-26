@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext.jsx';
+import { useSelector } from 'react-redux';
 import { AdminAPI } from '../../services/api.js';
 import { EmptyState, ErrorState, LoadingState, PageHeader, formatDate } from '../../components/ui.jsx';
 
@@ -14,7 +14,7 @@ const label = (type) => String(type || 'ACTION').replace(/_/g, ' ').toLowerCase(
 
 export default function AdminActivity() {
   const [params] = useSearchParams();
-  const { session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
   const target = session?.role === 'finance_moderator' ? session.username : (params.get('admin') || session?.username || '');
   const [rows, setRows] = useState(null);
   const [error, setError] = useState('');

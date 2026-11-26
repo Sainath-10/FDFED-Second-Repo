@@ -15,15 +15,21 @@ const api = {
   postTeam: async (...args) => { calls.push(['post-team', ...args]); return { ok: true, data: { id: 'team-new', authorUsername: 'alice', body: args[1], createdAt: '2026-11-03T00:00:01Z' } }; },
 };
 
+// What useSelector reads: the Redux state with "alice" logged in.
+const reduxState = { auth: { session: { username: 'alice' } } };
+
 before(async () => {
   globalThis.__chatTestAPI = api;
+  globalThis.__chatTestState = reduxState;
   const bundle = await build({
     entryPoints: [path.join(__dirname, '../src/components/ChatRoom.jsx')], bundle: true, write: false, platform: 'node', format: 'cjs', jsx: 'automatic', external: ['react', 'react/jsx-runtime'],
     plugins: [{ name: 'chat-test-dependencies', setup(builder) {
       builder.onResolve({ filter: /services\/api\.js$/ }, () => ({ path: 'api', namespace: 'mock' }));
       builder.onResolve({ filter: /chat-room\.css$/ }, () => ({ path: 'style', namespace: 'mock' }));
+      builder.onResolve({ filter: /^react-redux$/ }, () => ({ path: 'redux', namespace: 'mock' }));
       builder.onLoad({ filter: /^api$/, namespace: 'mock' }, () => ({ contents: 'export const ChatAPI = globalThis.__chatTestAPI;' }));
       builder.onLoad({ filter: /^style$/, namespace: 'mock' }, () => ({ contents: '' }));
+      builder.onLoad({ filter: /^redux$/, namespace: 'mock' }, () => ({ contents: 'export const useSelector = (select) => select(globalThis.__chatTestState);' }));
     } }],
   });
   const loaded = new Module(path.join(__dirname, 'compiled-chat.cjs'), module);
@@ -35,7 +41,7 @@ before(async () => {
 test('participants can read announcements but cannot compose one', async () => {
   calls.length = 0;
   let tree;
-  await act(async () => { tree = create(React.createElement(ChatRoom, { scope: 'competition', id: 'c1', channel: 'announcements', username: 'alice', canPost: false })); });
+  await act(async () => { tree = create(React.createElement(ChatRoom, { scope: 'competition', id: 'c1', channel: 'announcements', canPost: false })); });
   assert.deepEqual(calls[0], ['list-competition', 'c1', 'announcements']);
   assert.equal(tree.root.findAllByType('form').length, 0);
   assert.match(tree.root.findByProps({ role: 'log' }).findAllByType('p')[0].children.join(''), /Tournament update/);
@@ -45,13 +51,13 @@ test('participants can read announcements but cannot compose one', async () => {
 test('general and team messages use distinct endpoints', async () => {
   calls.length = 0;
   let tree;
-  await act(async () => { tree = create(React.createElement(ChatRoom, { scope: 'competition', id: 'c1', channel: 'general', username: 'alice' })); });
+  await act(async () => { tree = create(React.createElement(ChatRoom, { scope: 'competition', id: 'c1', channel: 'general' })); });
   act(() => tree.root.findByType('textarea').props.onChange({ target: { value: ' Hello all ' } }));
   await act(async () => tree.root.findByType('form').props.onSubmit({ preventDefault() {} }));
   assert.deepEqual(calls.at(-1), ['post-competition', 'c1', 'general', 'Hello all']);
   act(() => tree.unmount());
 
-  await act(async () => { tree = create(React.createElement(ChatRoom, { scope: 'team', id: 't1', username: 'alice' })); });
+  await act(async () => { tree = create(React.createElement(ChatRoom, { scope: 'team', id: 't1' })); });
   act(() => tree.root.findByType('textarea').props.onChange({ target: { value: 'Private team message' } }));
   await act(async () => tree.root.findByType('form').props.onSubmit({ preventDefault() {} }));
   assert.deepEqual(calls.at(-1), ['post-team', 't1', 'Private team message']);
@@ -63,7 +69,7 @@ test('rate limit errors keep the draft available to retry', async () => {
   api.postCompetition = async () => ({ ok: false, status: 429, error: 'General chat limit reached. Try again in 30 seconds.' });
   let tree;
   try {
-    await act(async () => { tree = create(React.createElement(ChatRoom, { scope: 'competition', id: 'c1', channel: 'general', username: 'alice' })); });
+    await act(async () => { tree = create(React.createElement(ChatRoom, { scope: 'competition', id: 'c1', channel: 'general' })); });
     act(() => tree.root.findByType('textarea').props.onChange({ target: { value: 'Try later' } }));
     await act(async () => tree.root.findByType('form').props.onSubmit({ preventDefault() {} }));
     assert.equal(tree.root.findByType('textarea').props.value, 'Try later');

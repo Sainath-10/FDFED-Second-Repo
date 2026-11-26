@@ -14,10 +14,10 @@ import Sidebar from '../components/Sidebar.jsx';
 import SiteFooter from '../components/SiteFooter.jsx';
 import UnreadPopup from '../components/UnreadPopup.jsx';
 import UserMenu from '../components/UserMenu.jsx';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useSelector } from 'react-redux';
 
 export default function AppLayout({ children, offset = true }) {
-  const { session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
   return (
     <>
       <div id="sidebar-mount">

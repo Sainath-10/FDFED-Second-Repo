@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ReportsAPI } from '../../services/api.js';
-import { useAuth } from '../../context/AuthContext.jsx';
+import { useSelector } from 'react-redux';
 import useReportSync from '../../hooks/useReportSync.js';
 import EvidenceGallery from '../../components/EvidenceGallery.jsx';
 import { capitalise, formatDate, reportCode } from '../../lib/reporting.js';
@@ -27,7 +27,7 @@ const eventLabel = (type) => capitalise(String(type || 'event').replace(/_/g, ' 
 export default function ModeratorCaseView() {
   const [params] = useSearchParams();
   const id = params.get('id') || '';
-  const { session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
   const [tab, setTab] = useState('discussion');
   const [data, setData] = useState(null);
   const [error, setError] = useState('');

@@ -6,7 +6,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useSelector } from 'react-redux';
 import { fetchAllTeams, fetchCompetitions, hasStarted, isCancelledCompetition, isClosedCompetition } from '../services/competitions.js';
 import { paymentRequest, money } from '../services/payments.js';
 import { EmptyState, LoadingState, PageHeader } from '../components/ui.jsx';
@@ -15,7 +15,7 @@ const stateOf = (c) => (isCancelledCompetition(c) ? 'cancelled' : isClosedCompet
 const FILTERS = ['all', 'upcoming', 'ongoing', 'completed', 'cancelled'];
 
 export default function CompetitionsParticipated() {
-  const { session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
   const [rows, setRows] = useState(null);
   const [filter, setFilter] = useState('all');
 

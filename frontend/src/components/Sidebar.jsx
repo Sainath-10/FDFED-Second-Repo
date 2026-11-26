@@ -6,7 +6,7 @@
  * comes from NavLink instead of a passed-in `activePage` string.
  */
 import { NavLink } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useSelector } from 'react-redux';
 import { getSidebarNav } from '../config/nav.js';
 import { LoginIcon } from './icons.jsx';
 import logo from '../assets/f03e2b11537e425d8544ee3ca732bf73af5137c0.png';
@@ -26,7 +26,7 @@ function NavItem({ item }) {
 }
 
 export default function Sidebar() {
-  const { session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
   const { top, bottom, showLogin } = getSidebarNav(session);
 
   return (

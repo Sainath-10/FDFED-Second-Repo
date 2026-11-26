@@ -13,7 +13,7 @@ import { competitionBanner } from '../lib/assets.js';
 import { EmptyState, LoadingState, PageHeader, formatDate } from '../components/ui.jsx';
 
 export default function WatchLive() {
-  const { data, loading } = useCompetitions({ withTeams: true });
+  const { data, loading } = useCompetitions();
   const [matches, setMatches] = useState({});
   const live = data.filter((c) => !isDraft(c) && isLiveCompetition(c));
   const liveIds = live.map((c) => c.id).join(',');

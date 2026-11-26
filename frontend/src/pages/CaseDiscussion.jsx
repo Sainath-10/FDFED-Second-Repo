@@ -10,7 +10,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { ReportsAPI } from '../services/api.js';
 import { prepareEvidenceFile } from '../lib/evidence.js';
 import useReportSync from '../hooks/useReportSync.js';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useSelector } from 'react-redux';
 import { PRIORITY_META, capitalise, formatDate, reportCode } from '../lib/reporting.js';
 import { showToast } from '../lib/toast.js';
 import EvidenceGallery from '../components/EvidenceGallery.jsx';
@@ -20,7 +20,7 @@ import '../styles/pages/report-workspace.css';
 export default function CaseDiscussion() {
   const [params] = useSearchParams();
   const discussionId = params.get('discussionId') || '';
-  const { session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [body, setBody] = useState('');

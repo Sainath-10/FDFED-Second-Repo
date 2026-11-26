@@ -7,7 +7,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useSelector } from 'react-redux';
 import { DisputesAPI } from '../services/api.js';
 import { EmptyState, LoadingState, Notice, PageHeader, formatDate } from '../components/ui.jsx';
 import { DISPUTE_STATUS, canEscalate } from './Disputes.jsx';
@@ -17,7 +17,7 @@ import '../styles/pages/dispute-escalation.css';
 export default function DisputeEscalation() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const { session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
   const [rows, setRows] = useState(null);
   const [selected, setSelected] = useState(params.get('id') || '');
   const [reason, setReason] = useState('');

@@ -7,7 +7,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useSelector } from 'react-redux';
 import { PlatformAPI } from '../services/api.js';
 import { ROLE_ROUTES } from '../routes.js';
 import logo from '../assets/f03e2b11537e425d8544ee3ca732bf73af5137c0.png';
@@ -21,7 +21,7 @@ const PROFILE_FOR = {
 };
 
 export default function SiteFooter() {
-  const { session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
   const [online, setOnline] = useState(null);
 
   useEffect(() => {

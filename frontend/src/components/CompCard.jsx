@@ -6,12 +6,14 @@
  * organizer nor already on a team in it.
  */
 import { useNavigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import { competitionBanner } from '../lib/assets.js';
 import { isOrganizerOf } from '../services/competitions.js';
 
 const normalize = (value) => String(value || '').trim().toLowerCase();
 
-export default function CompCard({ comp, session }) {
+export default function CompCard({ comp }) {
+  const session = useSelector((state) => state.auth.session);
   const navigate = useNavigate();
   const { badge, badgeClass, game, name, prizePool, dates, id } = comp;
   const teams = comp.activeTeams || comp.teams || [];

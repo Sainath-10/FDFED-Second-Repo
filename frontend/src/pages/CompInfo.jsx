@@ -8,7 +8,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useSelector } from 'react-redux';
 import { ReportsAPI as LocalReportsAPI } from '../services/api.js';
 import { isCancelledCompetition, isOrganizerOf, useCompetition } from '../services/competitions.js';
 import { formatDate, formatINR, copyText, LoadingState } from '../components/ui.jsx';
@@ -108,7 +108,7 @@ function mapApiMatch(match, index) {
 export default function CompInfo() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const { session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
 
   const compId = params.get('id') || '';
   const { loading: compLoading, data: comp } = useCompetition(compId);
@@ -395,7 +395,6 @@ export default function CompInfo() {
                 <OrganisersInfo
                   competitionId={comp.id}
                   organisers={organisers}
-                  currentUsername={session ? session.username : ''}
                 />
               </div>
             </div>
@@ -563,7 +562,6 @@ export default function CompInfo() {
                     scope="competition"
                     id={backendCompId}
                     channel="announcements"
-                    username={session?.username}
                     canPost={isOwner}
                   />
                 </div>
@@ -577,7 +575,6 @@ export default function CompInfo() {
                     scope="competition"
                     id={backendCompId}
                     channel="general"
-                    username={session?.username}
                     canPost={!!session}
                   />
                 </div>

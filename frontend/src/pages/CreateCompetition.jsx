@@ -8,7 +8,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useSelector } from 'react-redux';
 import { CompetitionsAPI, PlatformAPI, ReputationAPI } from '../services/api.js';
 import { calculatePlatformFee, useRevenueConfig } from '../services/competitions.js';
 import {
@@ -53,7 +53,7 @@ const initialForm = () => ({
 });
 
 export default function CreateCompetition() {
-  const { session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
   const navigate = useNavigate();
   const revenue = useRevenueConfig();
   const [form, setForm] = useState(initialForm);

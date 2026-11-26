@@ -73,7 +73,7 @@ export default function TeamMatches() {
 
   return (
     <main className="main-content">
-      <TeamHeader t={t} active="matches" />
+      <TeamHeader active="matches" />
 
       {isEnded && <CompetitionResults competitionId={comp.id} highlightTeamId={team.id} />}
 

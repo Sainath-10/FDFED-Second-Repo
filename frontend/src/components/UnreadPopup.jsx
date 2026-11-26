@@ -7,7 +7,7 @@
  */
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useSelector } from 'react-redux';
 import { NotificationsAPI, getToken } from '../services/api.js';
 import { linkOf } from '../lib/notificationLinks.js';
 
@@ -31,7 +31,7 @@ function timeAgo(value) {
 }
 
 export default function UnreadPopup() {
-  const { session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
   const navigate = useNavigate();
   const username = session?.username || '';
   const [items, setItems] = useState([]);

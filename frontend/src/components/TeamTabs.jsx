@@ -4,8 +4,11 @@
  * The tab bar under the team header. Every member sees Roster, Matches and
  * Chat; the captain also sees the roster-management tabs until the competition
  * ends. The comp/team context travels in the query string.
+ *
+ * Permissions and the join-request badge come from the Redux store.
  */
 import { Link } from 'react-router-dom';
+import { useTeamView } from '../hooks/useTeamContext.js';
 
 const TABS = [
   { id: 'roster', label: 'Roster', file: 'team-roster.html' },
@@ -25,15 +28,8 @@ export function withTeamContext(path, context) {
   return `${path}?${p.toString()}`;
 }
 
-export default function TeamTabs({
-  active,
-  context,
-  canManage = true,
-  canChat = false,
-  isEnded = false,
-  joinRequestCount,
-  rosterTo,
-}) {
+export default function TeamTabs({ active, rosterTo }) {
+  const { context, canManage, canChat, isEnded, pendingJoinRequests: joinRequestCount } = useTeamView();
   const hideAdmin = !canManage || isEnded;
   return (
     <nav className="td-tabs" aria-label="Team pages">

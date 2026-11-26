@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import CreateCompetitionLink from '../components/CreateCompetitionLink.jsx';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useSelector } from 'react-redux';
 import { AuditAPI, CompetitionsAPI } from '../services/api.js';
 import ActivityTimeline from '../components/ActivityTimeline.jsx';
 import { fetchAllTeams, fetchCompetitions, isCancelledCompetition, mapCompetition } from '../services/competitions.js';
@@ -35,7 +35,7 @@ function organizerBadge(comp) {
 }
 
 export default function MyActivity() {
-  const { session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
   const navigate = useNavigate();
   const [state, setState] = useState({ loading: true, error: '', comps: [], teams: [], mine: [] });
   const [query, setQuery] = useState('');

@@ -8,7 +8,7 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import PaymentMailbox from '../components/PaymentMailbox.jsx';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useSelector } from 'react-redux';
 import { ConfirmAction, EscrowStats, LifecycleSteps, MockBanner, Notice, PayoutPreview, Pill, TransactionTable } from '../components/PaymentUI.jsx';
 import { paymentRequest, loadCheckout, money, rupees, formatDateTime, competitionState, TERMINAL_STATES, requestEarlyEnd } from '../services/payments.js';
 import { showToast } from '../lib/toast.js';
@@ -21,7 +21,7 @@ export default function CompetitionPayment() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const id = params.get('id');
-  const { session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
   const [ledger, setLedger] = useState(null);
   const [status, setStatus] = useState(null);
   const [error, setError] = useState('');

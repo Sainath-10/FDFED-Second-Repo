@@ -12,8 +12,11 @@
  *
  * Routes without a registry entry render RoutePlaceholder.
  */
+import { useEffect } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext.jsx';
+import * as AuthService from './services/auth.js';
+import { setSession } from './store/authSlice.js';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import RoleGuard from './components/RoleGuard.jsx';
 import RoutePlaceholder from './components/RoutePlaceholder.jsx';
@@ -54,18 +57,33 @@ function renderRoute(route) {
 }
 
 export default function App() {
+  const session = useSelector((state) => state.auth.session);
+  const dispatch = useDispatch();
+  const isLoggedIn = !!session;
+
+  // While logged in, re-read the account from the server on load and whenever the
+  // tab regains focus, so a role change or ban made elsewhere shows up straight away.
+  useEffect(() => {
+    if (!isLoggedIn) return undefined;
+    async function refresh() {
+      const fresh = await AuthService.refreshFromServer();
+      dispatch(setSession(fresh || AuthService.getSession()));
+    }
+    refresh();
+    window.addEventListener('focus', refresh);
+    return () => window.removeEventListener('focus', refresh);
+  }, [isLoggedIn, dispatch]);
+
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <ScrollToTop />
-        <Routes>
-          {ROUTES.map((route) => (
-            <Route key={route.path} path={route.path} element={renderRoute(route)} />
-          ))}
-          <Route path="/index.html" element={<Navigate to="/" replace />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </AuthProvider>
+      <ScrollToTop />
+      <Routes>
+        {ROUTES.map((route) => (
+          <Route key={route.path} path={route.path} element={renderRoute(route)} />
+        ))}
+        <Route path="/index.html" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
     </BrowserRouter>
   );
 }

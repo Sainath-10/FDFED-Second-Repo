@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useSelector } from 'react-redux';
 import { CompetitionsAPI, NotificationsAPI, TeamsAPI } from '../services/api.js';
 import PlayerFeeModal from '../components/PlayerFeeModal.jsx';
 import { ConfirmDialog, EmptyState, ErrorState, LoadingState, PageHeader, formatDate, formatINR } from '../components/ui.jsx';
@@ -35,7 +35,7 @@ function bucketOf(item) {
 }
 
 export default function Notifications() {
-  const { session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
   const username = session?.username || '';
   const [items, setItems] = useState(null);
   const [error, setError] = useState('');

@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
+import { useSelector } from 'react-redux';
 import { ChatAPI } from '../services/api.js';
 import '../styles/components/chat-room.css';
 
-export default function ChatRoom({ scope, id, channel, username, canPost = true }) {
+export default function ChatRoom({ scope, id, channel, canPost = true }) {
+  const username = useSelector((state) => state.auth.session?.username || '');
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState('');
   const [error, setError] = useState('');

@@ -6,7 +6,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useSelector } from 'react-redux';
 import { AdminAPI, ReportsAPI } from '../services/api.js';
 import AccountSettings from './AccountSettings.jsx';
 import { EmptyState, LoadingState, PageHeader, formatDate } from './ui.jsx';
@@ -15,7 +15,7 @@ const ROLE_LABEL = { admin: 'Admin', 'super-admin': 'Super Admin', finance_moder
 const label = (type) => String(type || 'ACTION').replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
 
 export default function StaffProfile() {
-  const { session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
   const moderator = session?.role === 'community_moderator';
   const [activity, setActivity] = useState(null);
 

@@ -6,7 +6,7 @@
  */
 import { Link, useNavigate } from 'react-router-dom';
 import CreateCompetitionLink from '../components/CreateCompetitionLink.jsx';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useSelector } from 'react-redux';
 import CompCard from '../components/CompCard.jsx';
 import { EmptyState, formatINR } from '../components/ui.jsx';
 import { isClosedCompetition, isDraft, isLiveCompetition, useCompetitions } from '../services/competitions.js';
@@ -21,9 +21,9 @@ const ICONS = {
 };
 
 export default function Index() {
-  const { session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
   const navigate = useNavigate();
-  const { data, loading } = useCompetitions({ withTeams: true });
+  const { data, loading } = useCompetitions();
   const joinDest = session ? '/pages/competitions.html' : '/pages/signup.html';
 
   const published = data.filter((c) => !isDraft(c));
@@ -109,7 +109,7 @@ export default function Index() {
           <Link to="/pages/competitions.html" className="view-all-btn">View All</Link>
         </div>
         <div className="comps-home-grid" id="home-comps-grid">
-          {featured.map((comp) => <CompCard key={comp.id} comp={comp} session={session} />)}
+          {featured.map((comp) => <CompCard key={comp.id} comp={comp} />)}
         </div>
         {!loading && featured.length === 0 && <EmptyState title="No open competitions yet" message="Create the first one." action={<CreateCompetitionLink className="btn-primary" to={session ? '/pages/create-competition.html' : '/pages/signup.html'}>Create a competition</CreateCompetitionLink>} />}
       </section>

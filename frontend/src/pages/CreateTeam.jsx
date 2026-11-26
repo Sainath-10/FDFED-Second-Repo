@@ -8,7 +8,7 @@
  */
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useSelector } from 'react-redux';
 import { TeamsAPI } from '../services/api.js';
 import { isOrganizerOf, useCompetition } from '../services/competitions.js';
 import useJoinCodeGate from '../hooks/useJoinCodeGate.jsx';
@@ -58,7 +58,7 @@ function CompetitionSummary({ comp }) {
 export default function CreateTeam() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const { session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
   const id = params.get('id') || params.get('compId') || '';
   const { loading, error, data: comp, reload } = useCompetition(id);
   const joinCodeGate = useJoinCodeGate(comp);

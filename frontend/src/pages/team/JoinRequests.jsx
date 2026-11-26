@@ -6,7 +6,9 @@
  * The result shown always comes from the server's answer.
  */
 import { useCallback, useEffect, useState } from 'react';
+import { useDispatch } from 'react-redux';
 import { useTeamContext } from '../../hooks/useTeamContext.js';
+import { setPendingJoinRequests } from '../../store/teamSlice.js';
 import { TeamsAPI } from '../../services/api.js';
 import TeamHeader from '../../components/TeamHeader.jsx';
 import { EmptyState, ErrorState, LoadingState, formatDate, formatINR } from '../../components/ui.jsx';
@@ -17,6 +19,7 @@ import '../../styles/pages/team/join-requests.css';
 
 export default function JoinRequests() {
   const t = useTeamContext();
+  const dispatch = useDispatch();
   const [requests, setRequests] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
@@ -25,8 +28,13 @@ export default function JoinRequests() {
   const load = useCallback(async () => {
     if (!teamId) return;
     const res = await TeamsAPI.getJoinRequests(teamId);
-    if (res.ok) { setRequests(Array.isArray(res.data) ? res.data : []); setError(''); } else setError(res.error || 'Unable to load join requests.');
-  }, [teamId]);
+    if (!res.ok) { setError(res.error || 'Unable to load join requests.'); return; }
+    const rows = Array.isArray(res.data) ? res.data : [];
+    setRequests(rows);
+    setError('');
+    // Keep the badge on the "Join requests" tab in sync.
+    dispatch(setPendingJoinRequests(rows.filter((r) => r.status === 'pending').length));
+  }, [teamId, dispatch]);
 
   useEffect(() => { if (t.canManage) load(); }, [load, t.canManage]);
   useReportSync(t.canManage ? load : null);
@@ -54,7 +62,7 @@ export default function JoinRequests() {
 
   return (
     <main className="main-content">
-      <TeamHeader t={t} active="join-requests" joinRequestCount={pending.length} />
+      <TeamHeader active="join-requests" />
       <div className="td-section-head">
         <div>
           <h2 className="td-section-title">Join requests</h2>

@@ -5,12 +5,12 @@
  * the page they wanted, so they land back on it after logging in.
  */
 import { Navigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useSelector } from 'react-redux';
 import { LOGIN_PATH } from '../routes.js';
 
 export default function ProtectedRoute({ children }) {
   const location = useLocation();
-  const { session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
   if (!session) {
     const target = `${location.pathname}${location.search}`;
     return <Navigate to={`${LOGIN_PATH}?redirect=${encodeURIComponent(target)}`} replace />;

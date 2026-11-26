@@ -3,11 +3,15 @@
  *
  * Published competitions from the backend with their real team counts.
  * Filters work on the competition's actual state, not on display badges.
+ *
+ * The list, the filter tab and the search text all live in the Redux store
+ * (state.competitions), so they are still there when you come back.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import CreateCompetitionLink from '../components/CreateCompetitionLink.jsx';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useDispatch, useSelector } from 'react-redux';
+import { setFilter, setQuery } from '../store/competitionsSlice.js';
 import CompCard from '../components/CompCard.jsx';
 import { EmptyState, ErrorState, LoadingState } from '../components/ui.jsx';
 import { hasStarted, isClosedCompetition, isDraft, isLiveCompetition, useCompetitions } from '../services/competitions.js';
@@ -23,11 +27,21 @@ const FILTERS = [
 ];
 
 export default function Competitions() {
-  const { session } = useAuth();
-  const { loading, error, data, reload } = useCompetitions({ withTeams: true });
-  const [filter, setFilter] = useState('all');
+  const session = useSelector((state) => state.auth.session);
+  const { loading, error, data, reload } = useCompetitions();
+  const filter = useSelector((state) => state.competitions.filter);
+  const query = useSelector((state) => state.competitions.query);
+  const dispatch = useDispatch();
   const [params] = useSearchParams();
-  const [query, setQuery] = useState(() => params.get('q') || '');
+
+  // Arriving from a game card on Home (?q=Valorant): search for that game.
+  useEffect(() => {
+    const q = params.get('q');
+    if (q !== null) {
+      dispatch(setQuery(q));
+      dispatch(setFilter('all'));
+    }
+  }, [params, dispatch]);
 
   const browsable = useMemo(() => data.filter((c) => !isDraft(c) && !isClosedCompetition(c)), [data]);
   const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f.id, browsable.filter(f.test).length])), [browsable]);
@@ -52,13 +66,13 @@ export default function Competitions() {
 
       <div className="comps-filters">
         {FILTERS.map((f) => (
-          <button type="button" key={f.id} className={`filter-tab${filter === f.id ? ' active' : ''}`} aria-pressed={filter === f.id} onClick={() => setFilter(f.id)}>
+          <button type="button" key={f.id} className={`filter-tab${filter === f.id ? ' active' : ''}`} aria-pressed={filter === f.id} onClick={() => dispatch(setFilter(f.id))}>
             {f.label} <span style={{ opacity: 0.6 }}>({counts[f.id] || 0})</span>
           </button>
         ))}
         <div className="comps-search">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true"><circle cx="7" cy="7" r="5" /><line x1="10.5" y1="10.5" x2="14" y2="14" /></svg>
-          <input type="search" aria-label="Search competitions" placeholder="Search competitions…" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <input type="search" aria-label="Search competitions" placeholder="Search competitions…" value={query} onChange={(e) => dispatch(setQuery(e.target.value))} />
         </div>
       </div>
 
@@ -72,7 +86,7 @@ export default function Competitions() {
       )}
 
       <div className="comps-grid">
-        {visible.map((comp) => <div key={comp.id} className="comp-card-wrapper"><CompCard comp={comp} session={session} /></div>)}
+        {visible.map((comp) => <div key={comp.id} className="comp-card-wrapper"><CompCard comp={comp} /></div>)}
       </div>
     </main>
   );

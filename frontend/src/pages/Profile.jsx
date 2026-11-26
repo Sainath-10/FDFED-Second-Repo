@@ -6,7 +6,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useSelector } from 'react-redux';
 import { MatchesAPI, ReputationAPI } from '../services/api.js';
 import { fetchAllTeams, fetchCompetitions } from '../services/competitions.js';
 import AccountSettings from '../components/AccountSettings.jsx';
@@ -23,7 +23,7 @@ const TABS = [
 const ROLE_LABEL = { participant: 'Player', regular: 'Player', team_lead: 'Team lead', admin: 'Admin', finance_moderator: 'Finance moderator', 'super-admin': 'Super Admin', community_moderator: 'Community moderator' };
 
 export default function Profile() {
-  const { session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
   const [tab, setTab] = useState('overview');
   const [data, setData] = useState(null);
   const [reputation, setReputation] = useState(null);

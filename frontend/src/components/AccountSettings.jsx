@@ -5,7 +5,9 @@
  * bio and picture, email (current password required) and password.
  */
 import { useEffect, useState } from 'react';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useDispatch, useSelector } from 'react-redux';
+import * as AuthService from '../services/auth.js';
+import { setSession } from '../store/authSlice.js';
 import { AuthAPI } from '../services/api.js';
 import { fileToAvatarDataUrl } from '../lib/imageAvatar.js';
 import { Notice } from './ui.jsx';
@@ -14,7 +16,14 @@ import { showToast } from '../lib/toast.js';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 export default function AccountSettings() {
-  const { session, refreshSession } = useAuth();
+  const session = useSelector((state) => state.auth.session);
+  const dispatch = useDispatch();
+
+  // After a save, re-read the account from the server and update the store.
+  async function refreshSession() {
+    const fresh = await AuthService.refreshFromServer();
+    dispatch(setSession(fresh || AuthService.getSession()));
+  }
   const [bio, setBio] = useState(session?.bio || '');
   const [email, setEmail] = useState(session?.email || '');
   const [emailPassword, setEmailPassword] = useState('');

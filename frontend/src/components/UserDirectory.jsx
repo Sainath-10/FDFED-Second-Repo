@@ -7,7 +7,7 @@
  * themselves or on a Super Admin; only a Super Admin can act on other staff).
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useSelector } from 'react-redux';
 import { AuthAPI } from '../services/api.js';
 import { ConfirmDialog, EmptyState, ErrorState, LoadingState, PageHeader, formatDate } from './ui.jsx';
 import { showToast } from '../lib/toast.js';
@@ -23,7 +23,7 @@ const STAFF = ['super_admin', 'finance_moderator', 'community_moderator'];
 const roleOf = (u) => (u.adminType && ROLE_LABEL[u.adminType] ? u.adminType : u.role);
 
 export default function UserDirectory({ title = 'Users', subtitle = 'Every registered account.' }) {
-  const { session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
   const [users, setUsers] = useState(null);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');

@@ -6,7 +6,9 @@
  * registration window) the same way the server enforces it.
  */
 import { useCallback, useEffect, useState } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
 import { CompetitionsAPI, RevenueAPI, TeamsAPI } from './api.js';
+import { competitionsFailed, competitionsLoaded } from '../store/competitionsSlice.js';
 
 /** Unpublished drafts: waiting for finance approval or for the platform fee. */
 export const isDraft = (c) => ['AWAITING_PLATFORM_FEE', 'AWAITING_FINANCE_APPROVAL'].includes(c?.paymentStatus);
@@ -156,24 +158,31 @@ export async function fetchAllTeams() {
   return res.ok && Array.isArray(res.data) ? res.data.map(mapTeam) : [];
 }
 
-export function useCompetitions({ withTeams = false } = {}) {
-  const [state, setState] = useState({ loading: true, error: '', data: [] });
+/**
+ * Every competition with its teams, kept in the Redux store (state.competitions)
+ * so Home, Competitions and Live now share one copy. Each page that uses it
+ * shows the stored list straight away and refreshes it in the background.
+ */
+export function useCompetitions() {
+  const dispatch = useDispatch();
+  const list = useSelector((state) => state.competitions.list);
+  const loaded = useSelector((state) => state.competitions.loaded);
+  const error = useSelector((state) => state.competitions.error);
+
   const load = useCallback(async () => {
-    const [res, teams] = await Promise.all([fetchCompetitions(), withTeams ? fetchAllTeams() : Promise.resolve(null)]);
-    if (!res.ok) { setState({ loading: false, error: res.error || 'Unable to load competitions.', data: [] }); return; }
-    let data = res.data;
-    if (teams) {
-      const byComp = new Map();
-      teams.forEach((t) => { if (!byComp.has(t.competitionId)) byComp.set(t.competitionId, []); byComp.get(t.competitionId).push(t); });
-      data = data.map((c) => {
-        const list = byComp.get(c.id) || [];
-        return { ...c, teams: list, activeTeams: list.filter(isActiveTeam) };
-      });
-    }
-    setState({ loading: false, error: '', data });
-  }, [withTeams]);
+    const [res, teams] = await Promise.all([fetchCompetitions(), fetchAllTeams()]);
+    if (!res.ok) { dispatch(competitionsFailed(res.error || 'Unable to load competitions.')); return; }
+    const byComp = new Map();
+    teams.forEach((t) => { if (!byComp.has(t.competitionId)) byComp.set(t.competitionId, []); byComp.get(t.competitionId).push(t); });
+    const data = res.data.map((c) => {
+      const teamList = byComp.get(c.id) || [];
+      return { ...c, teams: teamList, activeTeams: teamList.filter(isActiveTeam) };
+    });
+    dispatch(competitionsLoaded(data));
+  }, [dispatch]);
+
   useEffect(() => { load(); }, [load]);
-  return { ...state, reload: load };
+  return { loading: !loaded, error, data: list, reload: load };
 }
 
 export function useCompetition(id) {

@@ -11,7 +11,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ReportsAPI } from '../services/api.js';
 import { AppealModal } from '../components/ReportActionModals.jsx';
 import useReportSync from '../hooks/useReportSync.js';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useSelector } from 'react-redux';
 import ReportCard from '../components/ReportCard.jsx';
 import { STATUS_TABS } from '../lib/reporting.js';
 import { showToast } from '../lib/toast.js';
@@ -42,7 +42,7 @@ function appealState(report) {
 }
 
 export default function MyReports() {
-  const { session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
   const navigate = useNavigate();
   const [view, setView] = useState('reports');
   const [tab, setTab] = useState('all');

@@ -51,7 +51,7 @@ export default function TeamSettings() {
 
   return (
     <main className="main-content">
-      <TeamHeader t={t} active="settings" />
+      <TeamHeader active="settings" />
 
       <div className="td-two-col">
         <form className="td-panel" onSubmit={save}>

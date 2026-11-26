@@ -7,7 +7,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useSelector } from 'react-redux';
 import { CompetitionsAPI, TeamsAPI } from '../services/api.js';
 import { isClosedCompetition, isOrganizerOf, useCompetition } from '../services/competitions.js';
 import { EmptyState, ErrorState, LoadingState, Notice, PageHeader, ReasonDialog, formatDate, formatINR } from '../components/ui.jsx';
@@ -23,7 +23,7 @@ const ACTION_COPY = {
 
 export default function CompManageTeams() {
   const [params] = useSearchParams();
-  const { session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
   const id = params.get('id') || '';
   const { loading, error, data: comp, reload } = useCompetition(id);
   const [filter, setFilter] = useState('active');

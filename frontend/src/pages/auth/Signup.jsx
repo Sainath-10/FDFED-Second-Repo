@@ -11,7 +11,9 @@
  */
 import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext.jsx';
+import { useDispatch, useSelector } from 'react-redux';
+import * as AuthService from '../../services/auth.js';
+import { setSession } from '../../store/authSlice.js';
 import { ROLE_ROUTES, FALLBACK_PATH, LOGIN_PATH } from '../../routes.js';
 import { showToast } from '../../lib/toast.js';
 import AuthCard from './AuthCard.jsx';
@@ -23,7 +25,8 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const USERNAME_RE = /^[A-Za-z0-9_.-]{3,30}$/;
 
 export default function Signup() {
-  const { signup, login, session } = useAuth();
+  const session = useSelector((state) => state.auth.session);
+  const dispatch = useDispatch();
   const navigate = useNavigate();
 
   const [username, setUsername] = useState('');
@@ -64,7 +67,7 @@ export default function Signup() {
     }
 
     setBusy(true);
-    const result = await signup({ username: username.trim(), email: email.trim(), password });
+    const result = await AuthService.createAccount({ username: username.trim(), email: email.trim(), password });
     if (!result.ok) {
       setBusy(false);
       showToast(result.error || 'Unable to create account.', 'error');
@@ -73,12 +76,13 @@ export default function Signup() {
 
     showToast('Account created successfully! Logging you in...');
 
-    const loginResult = await login({
+    const loginResult = await AuthService.login({
       username: username.trim(),
       password,
       roleRoutes: ROLE_ROUTES,
       fallbackPath: FALLBACK_PATH,
     });
+    if (loginResult.ok) dispatch(setSession(loginResult.user));
     setBusy(false);
 
     if (!loginResult.ok) {
