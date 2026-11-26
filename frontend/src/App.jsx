@@ -15,13 +15,13 @@
 import { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import * as AuthService from './services/auth.js';
-import { setSession } from './store/authSlice.js';
+import { refreshSession } from './store/authSlice.js';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import RoleGuard from './components/RoleGuard.jsx';
 import RoutePlaceholder from './components/RoutePlaceholder.jsx';
 import NotFound from './components/NotFound.jsx';
 import ScrollToTop from './components/ScrollToTop.jsx';
+import Toaster from './components/Toaster.jsx';
 import AppLayout from './layouts/AppLayout.jsx';
 import AuthLayout from './layouts/AuthLayout.jsx';
 import { PAGE_COMPONENTS } from './pages/registry.js';
@@ -65,10 +65,7 @@ export default function App() {
   // tab regains focus, so a role change or ban made elsewhere shows up straight away.
   useEffect(() => {
     if (!isLoggedIn) return undefined;
-    async function refresh() {
-      const fresh = await AuthService.refreshFromServer();
-      dispatch(setSession(fresh || AuthService.getSession()));
-    }
+    const refresh = () => dispatch(refreshSession());
     refresh();
     window.addEventListener('focus', refresh);
     return () => window.removeEventListener('focus', refresh);
@@ -84,6 +81,7 @@ export default function App() {
         <Route path="/index.html" element={<Navigate to="/" replace />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
+      <Toaster />
     </BrowserRouter>
   );
 }

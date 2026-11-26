@@ -6,6 +6,8 @@
  * team limit, and the platform-wide prize-pool ceiling.
  */
 import { useCallback, useEffect, useState } from 'react';
+import { useDispatch } from 'react-redux';
+import { platformSettingsSaved } from '../../store/platformSlice.js';
 import { Link } from 'react-router-dom';
 import { AdminAPI, ReputationAPI } from '../../services/api.js';
 import { ErrorState, LoadingState, Notice, PageHeader, formatINR } from '../../components/ui.jsx';
@@ -21,6 +23,7 @@ function Stat({ label, value }) {
 }
 
 export default function SuperDashboard() {
+  const dispatch = useDispatch();
   const [stats, setStats] = useState(null);
   const [statsError, setStatsError] = useState('');
   const [settings, setSettings] = useState(null);
@@ -51,6 +54,8 @@ export default function SuperDashboard() {
     ]);
     setSaving(false);
     if (!a.ok || !b.ok) { showToast(a.error || b.error || 'Settings were not saved.', 'error'); return; }
+    // Tell the rest of the app (Create / Edit competition read these from the store).
+    dispatch(platformSettingsSaved({ allowKnockout: !!settings.allowKnockout, allowRoundRobin: !!settings.allowRoundRobin, maxTeams }));
     showToast('Platform settings saved. They apply to every new competition.');
     load();
   }

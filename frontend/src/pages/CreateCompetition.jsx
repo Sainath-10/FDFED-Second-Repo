@@ -8,9 +8,10 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useSelector } from 'react-redux';
-import { CompetitionsAPI, PlatformAPI, ReputationAPI } from '../services/api.js';
-import { calculatePlatformFee, useRevenueConfig } from '../services/competitions.js';
+import { useDispatch, useSelector } from 'react-redux';
+import { CompetitionsAPI, ReputationAPI } from '../services/api.js';
+import { calculatePlatformFee } from '../services/competitions.js';
+import { fetchPlatformSettings, fetchRevenueConfig } from '../store/platformSlice.js';
 import {
   FORMATS, GAMES, LARGE_PRIZE_POOL, MAX_ENTRY_FEE, MAX_PLAYERS, MAX_PRIZE_POOL, MIN_ENTRY_FEE,
   nextDay, previousDay, parseRupees, readBanner, scheduleToIso, todayInput, validateContact, validateDescription, validateName, validatePrizes, validateSchedule,
@@ -54,12 +55,14 @@ const initialForm = () => ({
 
 export default function CreateCompetition() {
   const session = useSelector((state) => state.auth.session);
+  const dispatch = useDispatch();
   const navigate = useNavigate();
-  const revenue = useRevenueConfig();
+  // Platform fee formula and the Super Admin's switches, from the platform slice.
+  const revenue = useSelector((state) => state.platform.revenueConfig);
+  const platform = useSelector((state) => state.platform.settings);
   const [form, setForm] = useState(initialForm);
   const [banner, setBanner] = useState('');
   const [errors, setErrors] = useState({});
-  const [platform, setPlatform] = useState({ allowKnockout: true, allowRoundRobin: true, maxTeams: 256 });
   const [reputation, setReputation] = useState(null);
   const [exceptions, setExceptions] = useState([]);
   const [exceptionReason, setExceptionReason] = useState('');
@@ -68,7 +71,8 @@ export default function CreateCompetition() {
   const [publishing, setPublishing] = useState(false);
 
   useEffect(() => {
-    PlatformAPI.settings().then((res) => { if (res.ok && res.data) setPlatform(res.data); });
+    dispatch(fetchPlatformSettings());
+    dispatch(fetchRevenueConfig({ force: true }));
     ReputationAPI.me().then((res) => { if (res.ok) setReputation(res.data); });
     loadExceptions();
   }, []);

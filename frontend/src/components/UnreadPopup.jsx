@@ -4,11 +4,16 @@
  * Right after someone signs in, shows the notifications they have not read yet
  * in a pop-up, once per sign-in (a new login shows it again; moving between
  * pages does not). Each item opens the page it is about.
+ *
+ * The notifications come from the Redux store (loaded by AppLayout). The pop-up
+ * remembers which ones were unread when it opened, and drops any that get
+ * marked read anywhere else.
  */
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useSelector } from 'react-redux';
-import { NotificationsAPI, getToken } from '../services/api.js';
+import { useDispatch, useSelector } from 'react-redux';
+import { getToken } from '../services/api.js';
+import { markAllNotificationsRead, markNotificationRead } from '../store/notificationsSlice.js';
 import { linkOf } from '../lib/notificationLinks.js';
 
 const MAX_SHOWN = 6;
@@ -34,24 +39,27 @@ export default function UnreadPopup() {
   const session = useSelector((state) => state.auth.session);
   const navigate = useNavigate();
   const username = session?.username || '';
-  const [items, setItems] = useState([]);
+  const dispatch = useDispatch();
+  const all = useSelector((state) => state.notifications.items);
+  const ready = useSelector((state) => state.notifications.loaded && state.notifications.owner === username);
+  const [shownIds, setShownIds] = useState([]);
   const [open, setOpen] = useState(false);
 
+  // Once this user's notifications are in the store, open the pop-up (once per sign-in).
   useEffect(() => {
-    let cancelled = false;
-    if (!username) { setOpen(false); return undefined; }
+    if (!username) { setOpen(false); return; }
+    if (!ready) return;
     const key = shownKey(username);
-    try { if (sessionStorage.getItem(key)) return undefined; } catch { /* storage blocked: show once per load */ }
-    NotificationsAPI.getForUser(username).then((res) => {
-      if (cancelled) return;
-      try { sessionStorage.setItem(key, '1'); } catch { /* ignore */ }
-      const unread = (res.ok && Array.isArray(res.data) ? res.data : [])
-        .filter((n) => !n.read)
-        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-      if (unread.length) { setItems(unread); setOpen(true); }
-    });
-    return () => { cancelled = true; };
-  }, [username]);
+    try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, '1'); } catch { /* storage blocked: show once per load */ }
+    const unread = all.filter((n) => !n.read).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    if (unread.length) { setShownIds(unread.map((n) => n.id)); setOpen(true); }
+    // Runs when the user / readiness changes, not on every refresh of the list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [username, ready]);
+
+  const items = all
+    .filter((n) => shownIds.includes(n.id) && !n.read)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
   useEffect(() => {
     if (!open) return undefined;
@@ -63,13 +71,13 @@ export default function UnreadPopup() {
   if (!open || !items.length) return null;
 
   async function openItem(item) {
-    NotificationsAPI.markRead(item.id);
+    dispatch(markNotificationRead(item.id));
     setOpen(false);
     navigate(linkOf(item)?.to || '/pages/notifications.html');
   }
 
   async function markAll() {
-    await NotificationsAPI.markAllRead(username);
+    await dispatch(markAllNotificationsRead(username));
     setOpen(false);
   }
 

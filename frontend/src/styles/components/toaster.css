@@ -1,0 +1,32 @@
+/* Toasts rendered from the Redux store (components/Toaster.jsx). Same look as the old imperative toast. */
+.toaster {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  pointer-events: none;
+}
+.toast {
+  font-family: 'Lato', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.5px;
+  padding: 12px 24px;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  max-width: min(420px, calc(100vw - 48px));
+  white-space: pre-line;
+  animation: toast-in 0.3s ease both;
+  transition: transform 0.3s, opacity 0.3s;
+}
+.toast-success { background: #c6ff33; color: #000; }
+.toast-error { background: #e7000b; color: #fff; }
+.toast.is-leaving { transform: translateY(20px); opacity: 0; }
+@keyframes toast-in {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}

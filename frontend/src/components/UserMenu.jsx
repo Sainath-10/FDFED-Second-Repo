@@ -8,9 +8,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import * as AuthService from '../services/auth.js';
-import { AuthAPI } from '../services/api.js';
-import { logout } from '../store/authSlice.js';
+import { logoutUser } from '../store/authSlice.js';
 import { getSidebarNav } from '../config/nav.js';
 import { LogoutIcon, ProfileIcon } from './icons.jsx';
 import '../styles/components/user-menu.css';
@@ -45,10 +43,7 @@ export default function UserMenu({ floating = false }) {
 
   function handleLogout() {
     setOpen(false);
-    // The request captures the token synchronously, so clearing right after is safe.
-    AuthAPI.recordLogout();
-    AuthService.clearSession();
-    dispatch(logout());
+    dispatch(logoutUser());
     navigate('/pages/login.html', { replace: true });
   }
 

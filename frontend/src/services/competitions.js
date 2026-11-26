@@ -6,9 +6,7 @@
  * registration window) the same way the server enforces it.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
-import { CompetitionsAPI, RevenueAPI, TeamsAPI } from './api.js';
-import { competitionsFailed, competitionsLoaded } from '../store/competitionsSlice.js';
+import { CompetitionsAPI, TeamsAPI } from './api.js';
 
 /** Unpublished drafts: waiting for finance approval or for the platform fee. */
 export const isDraft = (c) => ['AWAITING_PLATFORM_FEE', 'AWAITING_FINANCE_APPROVAL'].includes(c?.paymentStatus);
@@ -158,33 +156,6 @@ export async function fetchAllTeams() {
   return res.ok && Array.isArray(res.data) ? res.data.map(mapTeam) : [];
 }
 
-/**
- * Every competition with its teams, kept in the Redux store (state.competitions)
- * so Home, Competitions and Live now share one copy. Each page that uses it
- * shows the stored list straight away and refreshes it in the background.
- */
-export function useCompetitions() {
-  const dispatch = useDispatch();
-  const list = useSelector((state) => state.competitions.list);
-  const loaded = useSelector((state) => state.competitions.loaded);
-  const error = useSelector((state) => state.competitions.error);
-
-  const load = useCallback(async () => {
-    const [res, teams] = await Promise.all([fetchCompetitions(), fetchAllTeams()]);
-    if (!res.ok) { dispatch(competitionsFailed(res.error || 'Unable to load competitions.')); return; }
-    const byComp = new Map();
-    teams.forEach((t) => { if (!byComp.has(t.competitionId)) byComp.set(t.competitionId, []); byComp.get(t.competitionId).push(t); });
-    const data = res.data.map((c) => {
-      const teamList = byComp.get(c.id) || [];
-      return { ...c, teams: teamList, activeTeams: teamList.filter(isActiveTeam) };
-    });
-    dispatch(competitionsLoaded(data));
-  }, [dispatch]);
-
-  useEffect(() => { load(); }, [load]);
-  return { loading: !loaded, error, data: list, reload: load };
-}
-
 export function useCompetition(id) {
   const [state, setState] = useState({ loading: true, error: '', status: 0, data: null });
   const load = useCallback(async () => {
@@ -207,14 +178,6 @@ export function calculatePlatformFee(prize, config = { percentage: 7, minCost: 5
   const amount = Math.max(0, Number(prize) || 0);
   const minor = Math.max(Math.round((Number(config.minCost) || 0) * 100), Math.round(amount * (Number(config.percentage) || 0)));
   return minor / 100;
-}
-
-export function useRevenueConfig() {
-  const [config, setConfig] = useState({ percentage: 7, minCost: 50 });
-  useEffect(() => {
-    RevenueAPI.getConfig().then((res) => { if (res.ok && res.data) setConfig({ percentage: Number(res.data.percentage), minCost: Number(res.data.minCost) }); });
-  }, []);
-  return config;
 }
 
 export function competitionIdFromUrl() {

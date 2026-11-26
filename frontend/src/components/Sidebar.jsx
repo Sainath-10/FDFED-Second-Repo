@@ -8,11 +8,15 @@
 import { NavLink } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { getSidebarNav } from '../config/nav.js';
+import { selectUnreadCount } from '../store/notificationsSlice.js';
 import { LoginIcon } from './icons.jsx';
 import logo from '../assets/f03e2b11537e425d8544ee3ca732bf73af5137c0.png';
 
 function NavItem({ item }) {
   const Icon = item.icon;
+  // Unread count from the notifications slice, shown on the "Alerts" link.
+  const unread = useSelector(selectUnreadCount);
+  const badge = item.id === 'notifications' && unread > 0 ? unread : 0;
   return (
     <NavLink
       to={item.to}
@@ -21,6 +25,7 @@ function NavItem({ item }) {
     >
       <Icon />
       <span>{item.label}</span>
+      {badge > 0 && <span className="nav-badge" aria-label={`${badge} unread`}>{badge > 99 ? '99+' : badge}</span>}
     </NavLink>
   );
 }

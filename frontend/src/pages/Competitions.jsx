@@ -14,7 +14,8 @@ import { useDispatch, useSelector } from 'react-redux';
 import { setFilter, setQuery } from '../store/competitionsSlice.js';
 import CompCard from '../components/CompCard.jsx';
 import { EmptyState, ErrorState, LoadingState } from '../components/ui.jsx';
-import { hasStarted, isClosedCompetition, isDraft, isLiveCompetition, useCompetitions } from '../services/competitions.js';
+import { hasStarted, isClosedCompetition, isDraft, isLiveCompetition } from '../services/competitions.js';
+import useCompetitions from '../hooks/useCompetitions.js';
 import '../styles/pages/competitions.css';
 
 const FILTERS = [

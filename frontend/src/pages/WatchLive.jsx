@@ -8,7 +8,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { MatchesAPI } from '../services/api.js';
-import { isDraft, isLiveCompetition, useCompetitions } from '../services/competitions.js';
+import { isDraft, isLiveCompetition } from '../services/competitions.js';
+import useCompetitions from '../hooks/useCompetitions.js';
 import { competitionBanner } from '../lib/assets.js';
 import { EmptyState, LoadingState, PageHeader, formatDate } from '../components/ui.jsx';
 

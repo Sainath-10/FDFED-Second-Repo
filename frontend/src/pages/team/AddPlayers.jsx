@@ -10,7 +10,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { useTeamContext } from '../../hooks/useTeamContext.js';
-import { setPendingJoinRequests } from '../../store/teamSlice.js';
+import { fetchJoinRequestCount } from '../../store/teamSlice.js';
 import { TeamsAPI } from '../../services/api.js';
 import TeamHeader, { TeamAvatar } from '../../components/TeamHeader.jsx';
 import UsernameSearch from '../../components/UsernameSearch.jsx';
@@ -39,9 +39,7 @@ export default function AddPlayers() {
     if (!teamId || !t.canManage) return;
     TeamsAPI.getAvailablePlayers(teamId, '').then((res) => setSuggested(res.ok && Array.isArray(res.data) ? res.data.slice(0, 8) : []));
     TeamsAPI.getTeamInvites(teamId).then((res) => { if (res.ok && Array.isArray(res.data)) setInvites(res.data); });
-    TeamsAPI.getJoinRequests(teamId).then((res) => {
-      if (res.ok && Array.isArray(res.data)) dispatch(setPendingJoinRequests(res.data.filter((r) => r.status === 'pending').length));
-    });
+    dispatch(fetchJoinRequestCount(teamId));
   }, [teamId, t.canManage, version, dispatch]);
 
   const gate = teamGate(t, { captainOnly: true, title: 'Add players' });

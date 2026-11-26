@@ -13,8 +13,9 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { useSelector } from 'react-redux';
-import { CompetitionsAPI, MatchesAPI, PlatformAPI } from '../services/api.js';
+import { useDispatch, useSelector } from 'react-redux';
+import { CompetitionsAPI, MatchesAPI } from '../services/api.js';
+import { fetchPlatformSettings } from '../store/platformSlice.js';
 import { paymentRequest, requestEarlyEnd } from '../services/payments.js';
 import { UsernameChips } from '../components/UsernameSearch.jsx';
 import { hasStarted, isClosedCompetition, isOrganizerOf, useCompetition } from '../services/competitions.js';
@@ -37,6 +38,7 @@ export default function EditCompetition() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const session = useSelector((state) => state.auth.session);
+  const dispatch = useDispatch();
   const id = params.get('id') || '';
   const { loading, error, data: comp, reload } = useCompetition(id);
 
@@ -49,15 +51,13 @@ export default function EditCompetition() {
   const [fixtures, setFixtures] = useState(null);
   const [ledger, setLedger] = useState(null);
   // The Super Admin's saved team limit (the server enforces the same rule).
-  const [platformMaxTeams, setPlatformMaxTeams] = useState(MAX_TEAMS);
+  const platformMaxTeams = useSelector((state) => (Number.isInteger(state.platform.settings.maxTeams) ? state.platform.settings.maxTeams : MAX_TEAMS));
   // A competition already above a since-lowered limit may keep its current size.
   const teamLimit = Math.max(platformMaxTeams, Number(comp?.maxTeams || 0));
 
   useEffect(() => {
-    PlatformAPI.settings().then((res) => {
-      if (res.ok && Number.isInteger(res.data?.maxTeams)) setPlatformMaxTeams(res.data.maxTeams);
-    });
-  }, []);
+    dispatch(fetchPlatformSettings());
+  }, [dispatch]);
 
   useEffect(() => {
     if (!id) return;

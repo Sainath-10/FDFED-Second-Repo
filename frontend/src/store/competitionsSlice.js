@@ -14,10 +14,24 @@
  *   state.competitions.filter  → 'all' | 'upcoming' | 'league' | 'tournament'
  *   state.competitions.query   → the search text
  *
- * The API call itself is in services/competitions.js (useCompetitions), which
- * dispatches competitionsLoaded / competitionsFailed with the result.
+ * Thunk:
+ *   loadCompetitions() → fetches competitions + teams; the result lands in `list`.
+ * Pages use it through useCompetitions() in services/competitions.js.
  */
-import { createSlice } from '@reduxjs/toolkit';
+import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
+import { fetchAllTeams, fetchCompetitions, isActiveTeam } from '../services/competitions.js';
+
+export const loadCompetitions = createAsyncThunk('competitions/load', async (_, { rejectWithValue }) => {
+  const [res, teams] = await Promise.all([fetchCompetitions(), fetchAllTeams()]);
+  if (!res.ok) return rejectWithValue(res.error || 'Unable to load competitions.');
+  // Attach each competition's teams (one request for all teams instead of one per competition).
+  const byComp = new Map();
+  teams.forEach((t) => { if (!byComp.has(t.competitionId)) byComp.set(t.competitionId, []); byComp.get(t.competitionId).push(t); });
+  return res.data.map((c) => {
+    const teamList = byComp.get(c.id) || [];
+    return { ...c, teams: teamList, activeTeams: teamList.filter(isActiveTeam) };
+  });
+});
 
 const initialState = {
   list: [],
@@ -31,18 +45,6 @@ const competitionsSlice = createSlice({
   name: 'competitions',
   initialState,
   reducers: {
-    // payload = the list of competitions
-    competitionsLoaded(state, action) {
-      state.list = action.payload;
-      state.loaded = true;
-      state.error = '';
-    },
-    // payload = the error message
-    competitionsFailed(state, action) {
-      state.list = [];
-      state.loaded = true;
-      state.error = action.payload;
-    },
     // payload = the filter tab id, e.g. 'upcoming'
     setFilter(state, action) {
       state.filter = action.payload;
@@ -52,7 +54,20 @@ const competitionsSlice = createSlice({
       state.query = action.payload;
     },
   },
+  extraReducers: (builder) => {
+    builder
+      .addCase(loadCompetitions.fulfilled, (state, action) => {
+        state.list = action.payload;
+        state.loaded = true;
+        state.error = '';
+      })
+      .addCase(loadCompetitions.rejected, (state, action) => {
+        state.list = [];
+        state.loaded = true;
+        state.error = action.payload || 'Unable to load competitions.';
+      });
+  },
 });
 
-export const { competitionsLoaded, competitionsFailed, setFilter, setQuery } = competitionsSlice.actions;
+export const { setFilter, setQuery } = competitionsSlice.actions;
 export default competitionsSlice.reducer;

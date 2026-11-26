@@ -5,14 +5,21 @@
  * belong to them: accept or decline a team invitation, a join request or a
  * co-organizer invitation, and pay an entry fee after a captain accepts.
  * Each action calls the real endpoint; the result shown is the server's answer.
+ *
+ * The list, the tab and the search text live in the Redux store
+ * (state.notifications); AppLayout keeps the list fresh. Only per-click UI
+ * (which button is busy, the payment dialogs) stays in React state.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useSelector } from 'react-redux';
-import { CompetitionsAPI, NotificationsAPI, TeamsAPI } from '../services/api.js';
+import { useDispatch, useSelector } from 'react-redux';
+import { CompetitionsAPI, TeamsAPI } from '../services/api.js';
+import {
+  deleteNotification, fetchNotifications, markAllNotificationsRead, markNotificationRead,
+  setNotificationQuery, setNotificationStatus, setNotificationTab,
+} from '../store/notificationsSlice.js';
 import PlayerFeeModal from '../components/PlayerFeeModal.jsx';
 import { ConfirmDialog, EmptyState, ErrorState, LoadingState, PageHeader, formatDate, formatINR } from '../components/ui.jsx';
-import useReportSync from '../hooks/useReportSync.js';
 import { showToast } from '../lib/toast.js';
 import '../styles/pages/notifications.css';
 import { ACTIONABLE, MONEY_TYPES, linkOf } from '../lib/notificationLinks.js';
@@ -37,21 +44,19 @@ function bucketOf(item) {
 export default function Notifications() {
   const session = useSelector((state) => state.auth.session);
   const username = session?.username || '';
-  const [items, setItems] = useState(null);
-  const [error, setError] = useState('');
-  const [tab, setTab] = useState('all');
-  const [query, setQuery] = useState('');
+  const dispatch = useDispatch();
+  const ready = useSelector((state) => state.notifications.loaded && state.notifications.owner === username);
+  const storedItems = useSelector((state) => state.notifications.items);
+  const items = ready ? storedItems : null;
+  const error = useSelector((state) => state.notifications.error);
+  const tab = useSelector((state) => state.notifications.tab);
+  const query = useSelector((state) => state.notifications.query);
   const [busy, setBusy] = useState('');
   const [paying, setPaying] = useState(null);
   const [inviteFee, setInviteFee] = useState(null);
 
-  const load = useCallback(async () => {
-    if (!username) return;
-    const res = await NotificationsAPI.getForUser(username);
-    if (res.ok) { setItems(Array.isArray(res.data) ? res.data : []); setError(''); } else setError(res.error || 'Unable to load notifications.');
-  }, [username]);
-  useEffect(() => { load(); }, [load]);
-  useReportSync(load);
+  // Loading happens in AppLayout; this re-fetches after an action or on "Try again".
+  const load = useCallback(() => { if (username) dispatch(fetchNotifications(username)); }, [username, dispatch]);
 
   const counts = useMemo(() => {
     const c = { all: 0, pending: 0, approved: 0, rejected: 0, info: 0 };
@@ -67,7 +72,7 @@ export default function Notifications() {
   }, [items, tab, query]);
 
   async function finish(item, status) {
-    await NotificationsAPI.setStatus(item.id, status);
+    await dispatch(setNotificationStatus({ id: item.id, status }));
     load();
   }
 
@@ -110,16 +115,20 @@ export default function Notifications() {
   }
 
   async function markAllRead() {
-    const res = await NotificationsAPI.markAllRead(username);
-    if (!res.ok) { showToast(res.error || 'Unable to mark notifications as read.', 'error'); return; }
-    showToast('All notifications marked as read.');
-    load();
+    try {
+      await dispatch(markAllNotificationsRead(username)).unwrap();
+      showToast('All notifications marked as read.');
+    } catch (err) {
+      showToast(err || 'Unable to mark notifications as read.', 'error');
+    }
   }
 
   async function remove(item) {
-    const res = await NotificationsAPI.delete(item.id);
-    if (!res.ok) { showToast(res.error || 'Unable to delete the notification.', 'error'); return; }
-    load();
+    try {
+      await dispatch(deleteNotification(item.id)).unwrap();
+    } catch (err) {
+      showToast(err || 'Unable to delete the notification.', 'error');
+    }
   }
 
   return (
@@ -136,13 +145,13 @@ export default function Notifications() {
             <circle cx="9" cy="9" r="6" />
             <path d="M13.5 13.5L18 18" />
           </svg>
-          <input id="notif-search" type="search" aria-label="Search notifications" placeholder="Search by title, message or status…" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <input id="notif-search" type="search" aria-label="Search notifications" placeholder="Search by title, message or status…" value={query} onChange={(e) => dispatch(setNotificationQuery(e.target.value))} />
         </div>
       </div>
 
       <div className="ui-tabs">
         {TABS.map((t) => (
-          <button type="button" key={t.id} className={`ui-tab${tab === t.id ? ' active' : ''}`} onClick={() => setTab(t.id)}>{t.label}<span className="count">{counts[t.id]}</span></button>
+          <button type="button" key={t.id} className={`ui-tab${tab === t.id ? ' active' : ''}`} onClick={() => dispatch(setNotificationTab(t.id))}>{t.label}<span className="count">{counts[t.id]}</span></button>
         ))}
       </div>
 
@@ -176,7 +185,7 @@ export default function Notifications() {
                       <button type="button" className="btn-notif-reject" disabled={busy === item.id} onClick={() => decline(item)}>Decline</button>
                     </>
                   )}
-                  {link && <Link className="notif-info-link" to={link.to} onClick={() => { if (!item.read) NotificationsAPI.markRead(item.id); }}>{link.label} →</Link>}
+                  {link && <Link className="notif-info-link" to={link.to} onClick={() => { if (!item.read) dispatch(markNotificationRead(item.id)); }}>{link.label} →</Link>}
                   {!actionable && <button type="button" className="btn-table-secondary" onClick={() => remove(item)}>Delete</button>}
                 </div>
               </div>

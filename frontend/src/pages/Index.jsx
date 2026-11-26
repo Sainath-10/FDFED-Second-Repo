@@ -9,7 +9,8 @@ import CreateCompetitionLink from '../components/CreateCompetitionLink.jsx';
 import { useSelector } from 'react-redux';
 import CompCard from '../components/CompCard.jsx';
 import { EmptyState, formatINR } from '../components/ui.jsx';
-import { isClosedCompetition, isDraft, isLiveCompetition, useCompetitions } from '../services/competitions.js';
+import { isClosedCompetition, isDraft, isLiveCompetition } from '../services/competitions.js';
+import useCompetitions from '../hooks/useCompetitions.js';
 import { assetUrl, competitionBanner } from '../lib/assets.js';
 import '../styles/pages/index.css';
 

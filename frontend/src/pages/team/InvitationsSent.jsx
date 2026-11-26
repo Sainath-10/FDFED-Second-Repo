@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { useTeamContext } from '../../hooks/useTeamContext.js';
-import { setPendingJoinRequests } from '../../store/teamSlice.js';
+import { fetchJoinRequestCount } from '../../store/teamSlice.js';
 import { TeamsAPI } from '../../services/api.js';
 import TeamHeader from '../../components/TeamHeader.jsx';
 import { ConfirmDialog, EmptyState, ErrorState, LoadingState, formatDate } from '../../components/ui.jsx';
@@ -27,9 +27,9 @@ export default function InvitationsSent() {
 
   const load = useCallback(async () => {
     if (!teamId) return;
-    const [inv, req] = await Promise.all([TeamsAPI.getTeamInvites(teamId), TeamsAPI.getJoinRequests(teamId)]);
+    dispatch(fetchJoinRequestCount(teamId));
+    const inv = await TeamsAPI.getTeamInvites(teamId);
     if (inv.ok) { setInvites(Array.isArray(inv.data) ? inv.data : []); setError(''); } else setError(inv.error || 'Unable to load invitations.');
-    if (req.ok && Array.isArray(req.data)) dispatch(setPendingJoinRequests(req.data.filter((r) => r.status === 'pending').length));
   }, [teamId, dispatch]);
 
   useEffect(() => { if (t.canManage) load(); }, [load, t.canManage]);

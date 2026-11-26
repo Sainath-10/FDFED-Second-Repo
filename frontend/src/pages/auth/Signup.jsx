@@ -12,8 +12,7 @@
 import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import * as AuthService from '../../services/auth.js';
-import { setSession } from '../../store/authSlice.js';
+import { loginUser, signupUser } from '../../store/authSlice.js';
 import { ROLE_ROUTES, FALLBACK_PATH, LOGIN_PATH } from '../../routes.js';
 import { showToast } from '../../lib/toast.js';
 import AuthCard from './AuthCard.jsx';
@@ -35,7 +34,8 @@ export default function Signup() {
   const [confirm, setConfirm] = useState('');
   const [showPwd, setShowPwd] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [busy, setBusy] = useState(false);
+  // Sign-up / login in progress, from the auth slice (set by the thunks).
+  const busy = useSelector((state) => state.auth.status === 'loading');
 
   if (session && !busy) return <Navigate to={ROLE_ROUTES[session.role] || FALLBACK_PATH} replace />;
 
@@ -66,27 +66,26 @@ export default function Signup() {
       return;
     }
 
-    setBusy(true);
-    const result = await AuthService.createAccount({ username: username.trim(), email: email.trim(), password });
-    if (!result.ok) {
-      setBusy(false);
-      showToast(result.error || 'Unable to create account.', 'error');
+    const errorText = (err) => (typeof err === 'string' ? err : err?.message);
+    try {
+      await dispatch(signupUser({ username: username.trim(), email: email.trim(), password })).unwrap();
+    } catch (err) {
+      showToast(errorText(err) || 'Unable to create account.', 'error');
       return;
     }
 
     showToast('Account created successfully! Logging you in...');
 
-    const loginResult = await AuthService.login({
-      username: username.trim(),
-      password,
-      roleRoutes: ROLE_ROUTES,
-      fallbackPath: FALLBACK_PATH,
-    });
-    if (loginResult.ok) dispatch(setSession(loginResult.user));
-    setBusy(false);
-
-    if (!loginResult.ok) {
-      showToast(loginResult.error || 'Signup succeeded but login failed. Please log in.', 'error');
+    let loginResult;
+    try {
+      loginResult = await dispatch(loginUser({
+        username: username.trim(),
+        password,
+        roleRoutes: ROLE_ROUTES,
+        fallbackPath: FALLBACK_PATH,
+      })).unwrap();
+    } catch (err) {
+      showToast(errorText(err) || 'Signup succeeded but login failed. Please log in.', 'error');
       navigate(LOGIN_PATH);
       return;
     }

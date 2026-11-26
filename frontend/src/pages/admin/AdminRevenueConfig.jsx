@@ -5,46 +5,56 @@
  * they publish. Saved on the server and applied to every new competition.
  */
 import { useEffect, useState } from 'react';
-import { AdminAPI, RevenueAPI } from '../../services/api.js';
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchRevenueConfig, saveRevenueConfig } from '../../store/platformSlice.js';
 import { calculatePlatformFee } from '../../services/competitions.js';
 import { LoadingState, Notice, PageHeader, formatDate, formatINR } from '../../components/ui.jsx';
 import { showToast } from '../../lib/toast.js';
 
 export default function AdminRevenueConfig() {
-  const [config, setConfig] = useState(null);
+  const dispatch = useDispatch();
+  // The saved configuration lives in the platform slice (shared with Create competition).
+  const loaded = useSelector((state) => state.platform.revenueLoaded);
+  const config = useSelector((state) => (state.platform.revenueLoaded ? state.platform.revenueConfig : null));
+  const loadError = useSelector((state) => state.platform.revenueError);
+  // The form fields stay local React state: they are only "drafts" until saved.
   const [percentage, setPercentage] = useState('');
   const [minCost, setMinCost] = useState('');
-  const [error, setError] = useState('');
+  const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
+  const error = formError || (!config ? loadError : '');
 
-  async function load() {
-    const res = await RevenueAPI.getConfig();
-    if (!res.ok) { setError(res.error || 'Unable to load the configuration.'); return; }
-    setConfig(res.data);
-    setPercentage(String(res.data.percentage));
-    setMinCost(String(res.data.minCost));
-  }
-  useEffect(() => { load(); }, []);
+  // Always fetch fresh on this page (force skips the "already loaded" check).
+  useEffect(() => { dispatch(fetchRevenueConfig({ force: true })); }, [dispatch]);
+  // Whenever the stored config changes (loaded or saved), show it in the form.
+  useEffect(() => {
+    if (!config) return;
+    setPercentage(String(config.percentage));
+    setMinCost(String(config.minCost));
+  }, [config]);
 
   async function submit(event) {
     event.preventDefault();
-    setError('');
+    setFormError('');
     const pct = Number(percentage);
     const cost = Number(minCost);
-    if (!Number.isFinite(pct) || pct < 0 || pct >= 15) { setError('The percentage must be at least 0 and below 15.'); return; }
-    if (!Number.isFinite(cost) || cost < 0 || cost >= 100) { setError('The minimum fee must be at least ₹0 and below ₹100.'); return; }
+    if (!Number.isFinite(pct) || pct < 0 || pct >= 15) { setFormError('The percentage must be at least 0 and below 15.'); return; }
+    if (!Number.isFinite(cost) || cost < 0 || cost >= 100) { setFormError('The minimum fee must be at least ₹0 and below ₹100.'); return; }
     setSaving(true);
-    const res = await RevenueAPI.saveConfig({ percentage: pct, minCost: cost });
-    setSaving(false);
-    if (!res.ok) { setError(res.error || 'The configuration was not saved.'); return; }
-    await AdminAPI.logActivity(null, 'REVENUE_CONFIG_CHANGE', `Platform fee changed from ${config.percentage}% (min ${formatINR(config.minCost)}) to ${pct}% (min ${formatINR(cost)}).`, {
-      prevPercentage: config.percentage, newPercentage: pct, prevMinCost: config.minCost, newMinCost: cost,
-    });
+    try {
+      // The thunk saves, logs the change and updates the store.
+      await dispatch(saveRevenueConfig({ percentage: pct, minCost: cost })).unwrap();
+    } catch (err) {
+      setFormError((typeof err === 'string' ? err : err?.message) || 'The configuration was not saved.');
+      return;
+    } finally {
+      setSaving(false);
+    }
     showToast('Platform fee saved.');
-    load();
+    dispatch(fetchRevenueConfig({ force: true })); // picks up "last changed" from the server
   }
 
-  if (!config && !error) return <main className="main-content"><LoadingState label="Loading configuration…" /></main>;
+  if (!loaded && !error) return <main className="main-content"><LoadingState label="Loading configuration…" /></main>;
   const preview = { percentage: Number(percentage) || 0, minCost: Number(minCost) || 0 };
 
   return (

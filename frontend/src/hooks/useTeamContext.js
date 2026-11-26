@@ -16,8 +16,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { CompetitionsAPI, ReportsAPI, TeamsAPI } from '../services/api.js';
-import { teamFailed, teamLoaded } from '../store/teamSlice.js';
+import { fetchTeam } from '../store/teamSlice.js';
 
 const normalize = (value) => String(value || '').trim().toLowerCase();
 const INACTIVE = ['rejected', 'banned', 'disbanded'];
@@ -121,53 +120,22 @@ export function useTeamContext() {
   const refresh = () => setVersion((v) => v + 1);
 
   useEffect(() => {
-    let cancelled = false;
-    async function resolveTeam() {
-      if (queryTeamId) {
-        const res = await TeamsAPI.getById(queryTeamId);
-        if (res.ok && res.data) return res.data;
-        if (res.status === 403) throw new Error(res.error || 'You cannot open this team.');
-      }
-      const res = queryCompId ? await TeamsAPI.getByCompetition(queryCompId) : await TeamsAPI.getAll();
-      if (!res.ok || !Array.isArray(res.data)) throw new Error(res.error || 'Unable to load your teams.');
-      const me = normalize(username);
-      const mine = res.data
-        .filter((t) => !INACTIVE.includes(normalize(t.status)))
-        .filter((t) => (t.memberUsernames || []).some((m) => normalize(m) === me))
-        .sort((a, b) => {
-          const lead = Number(normalize(b.leaderId) === me) - Number(normalize(a.leaderId) === me);
-          return lead || new Date(b.createdAt) - new Date(a.createdAt);
-        });
-      return mine[0] || null;
-    }
-    async function load() {
-      try {
-        const row = await resolveTeam();
-        if (cancelled) return;
-        let comp = null;
-        let removal = null;
-        let error = '';
-        const compId = row?.competitionId || queryCompId;
-        if (compId) {
-          const [compRes, removalRes] = await Promise.all([
-            CompetitionsAPI.getById(compId),
-            username ? ReportsAPI.removalStatus(compId) : Promise.resolve(null),
-          ]);
-          if (cancelled) return;
-          comp = compRes.ok ? compRes.data : null;
-          removal = removalRes && removalRes.ok ? removalRes.data : null;
-          if (row && !compRes.ok && compRes.status === 403) error = compRes.error || '';
-        }
-        dispatch(teamLoaded({ key, team: row, comp, removal, error }));
-      } catch (err) {
-        if (!cancelled) dispatch(teamFailed({ key, error: err.message || 'Unable to load this team.' }));
-      }
-    }
+    // Each dispatch of the fetchTeam thunk returns a promise with .abort();
+    // aborting the in-flight loads on unmount stops a late answer from landing.
+    const requests = [];
+    const load = () => {
+      requests.push(dispatch(fetchTeam({ key, teamId: queryTeamId, compId: queryCompId, username })));
+      if (requests.length > 5) requests.shift();
+    };
     load();
     // Rosters change on other devices: keep this page current.
     const timer = window.setInterval(load, 15000);
     window.addEventListener('focus', load);
-    return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener('focus', load); };
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', load);
+      requests.forEach((r) => r.abort());
+    };
   }, [key, queryTeamId, queryCompId, username, version, dispatch]);
 
   const isCurrent = stored.key === key;

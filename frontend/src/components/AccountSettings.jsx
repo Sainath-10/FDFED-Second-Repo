@@ -6,8 +6,7 @@
  */
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import * as AuthService from '../services/auth.js';
-import { setSession } from '../store/authSlice.js';
+import { refreshSession as refreshSessionThunk } from '../store/authSlice.js';
 import { AuthAPI } from '../services/api.js';
 import { fileToAvatarDataUrl } from '../lib/imageAvatar.js';
 import { Notice } from './ui.jsx';
@@ -19,11 +18,8 @@ export default function AccountSettings() {
   const session = useSelector((state) => state.auth.session);
   const dispatch = useDispatch();
 
-  // After a save, re-read the account from the server and update the store.
-  async function refreshSession() {
-    const fresh = await AuthService.refreshFromServer();
-    dispatch(setSession(fresh || AuthService.getSession()));
-  }
+  // After a save, re-read the account from the server into the store.
+  const refreshSession = () => dispatch(refreshSessionThunk());
   const [bio, setBio] = useState(session?.bio || '');
   const [email, setEmail] = useState(session?.email || '');
   const [emailPassword, setEmailPassword] = useState('');

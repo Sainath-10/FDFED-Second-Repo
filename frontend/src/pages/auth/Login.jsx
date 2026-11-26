@@ -7,8 +7,7 @@
 import { useState } from 'react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import * as AuthService from '../../services/auth.js';
-import { setSession } from '../../store/authSlice.js';
+import { loginUser } from '../../store/authSlice.js';
 import { ROLE_ROUTES, FALLBACK_PATH } from '../../routes.js';
 import AuthCard from './AuthCard.jsx';
 import { EyeIcon, EyeOffIcon } from '../../components/icons.jsx';
@@ -40,7 +39,8 @@ export default function Login() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPwd, setShowPwd] = useState(false);
-  const [busy, setBusy] = useState(false);
+  // A login in progress, from the auth slice (set by the loginUser thunk).
+  const busy = useSelector((state) => state.auth.status === 'loading');
   const [feedback, setFeedback] = useState(null);
 
   if (session && !feedback) {
@@ -54,22 +54,20 @@ export default function Login() {
       return;
     }
 
-    setBusy(true);
     setFeedback({ text: 'Logging in...', success: true });
 
-    const result = await AuthService.login({
-      username,
-      password,
-      roleRoutes: ROLE_ROUTES,
-      fallbackPath: FALLBACK_PATH,
-    });
-    // Put the logged-in user into the Redux store.
-    if (result.ok) dispatch(setSession(result.user));
-
-    setBusy(false);
-
-    if (!result.ok) {
-      setFeedback({ text: result.error || 'Login failed. Please try again.', success: false });
+    // The loginUser thunk calls the API and puts the user into the store.
+    // .unwrap() gives back its result, or throws the error message.
+    let result;
+    try {
+      result = await dispatch(loginUser({
+        username,
+        password,
+        roleRoutes: ROLE_ROUTES,
+        fallbackPath: FALLBACK_PATH,
+      })).unwrap();
+    } catch (err) {
+      setFeedback({ text: (typeof err === 'string' ? err : err?.message) || 'Login failed. Please try again.', success: false });
       return;
     }
 

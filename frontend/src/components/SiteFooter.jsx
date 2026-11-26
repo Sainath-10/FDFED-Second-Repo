@@ -5,10 +5,10 @@
  * link follows the viewer's role, and the status line reflects whether the API
  * is actually reachable.
  */
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { useSelector } from 'react-redux';
-import { PlatformAPI } from '../services/api.js';
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchPlatformSettings } from '../store/platformSlice.js';
 import { ROLE_ROUTES } from '../routes.js';
 import logo from '../assets/f03e2b11537e425d8544ee3ca732bf73af5137c0.png';
 
@@ -22,15 +22,16 @@ const PROFILE_FOR = {
 
 export default function SiteFooter() {
   const session = useSelector((state) => state.auth.session);
-  const [online, setOnline] = useState(null);
+  const dispatch = useDispatch();
+  // null until the server answers, then true / false (set by the fetchPlatformSettings thunk).
+  const online = useSelector((state) => state.platform.online);
 
   useEffect(() => {
-    let alive = true;
-    const check = () => PlatformAPI.settings().then((res) => { if (alive) setOnline(res.ok); });
+    const check = () => dispatch(fetchPlatformSettings());
     check();
     const timer = window.setInterval(check, 60000);
-    return () => { alive = false; window.clearInterval(timer); };
-  }, []);
+    return () => window.clearInterval(timer);
+  }, [dispatch]);
 
   const staff = session && STAFF.includes(session.role);
   const profileHref = session ? (PROFILE_FOR[session.role] || '/pages/profile.html') : '/pages/login.html';
